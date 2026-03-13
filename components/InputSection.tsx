@@ -1,12 +1,10 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
-import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
+import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { generateGeminiTtsPreview } from '../services/geminiService';
 
-const GEMINI_STYLE_MAP = new Map<string, { id: string; name: string; category: string; prompt: string }>();
-GEMINI_STYLE_CATEGORIES.forEach(cat => cat.styles.forEach(s => GEMINI_STYLE_MAP.set(s.id, { ...s, category: cat.name })));
 
 function pcmBase64ToWavUrl(base64Pcm: string): string {
   const pcmBytes = Uint8Array.from(atob(base64Pcm), c => c.charCodeAt(0));
@@ -25,6 +23,10 @@ interface InputSectionProps {
   onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean) => void;
   onExtractCharacters?: (script: string) => void;
   step: GenerationStep;
+  activeTab: 'auto' | 'manual';
+  onTabChange: (tab: 'auto' | 'manual') => void;
+  manualScript: string;
+  onManualScriptChange: (v: string) => void;
 }
 
 // 아코디언 섹션 컴포넌트
@@ -47,10 +49,8 @@ const Section: React.FC<{ title: string; defaultOpen?: boolean; children: React.
   );
 };
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharacters, step }) => {
-  const [activeTab, setActiveTab] = useState<'auto' | 'manual'>('auto');
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange }) => {
   const [topic, setTopic] = useState('');
-  const [manualScript, setManualScript] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
   // 비주얼 스타일
@@ -66,8 +66,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
   // 이미지 설정
   const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
-  const [geminiStyleId, setGeminiStyleId] = useState<GeminiStyleId>('gemini-none');
-  const [geminiCustomStylePrompt, setGeminiCustomStylePrompt] = useState('');
   const [imageTextMode, setImageTextMode] = useState<string>('none');
 
   // 포맷
@@ -124,8 +122,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     setElVoiceId(savedVoiceId);
     setElModelId(getElevenLabsModelId());
     setImageModelId(localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) as ImageModelId || CONFIG.DEFAULT_IMAGE_MODEL);
-    setGeminiStyleId(localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE) as GeminiStyleId || 'gemini-none');
-    setGeminiCustomStylePrompt(localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE) || '');
     setImageTextMode(localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none');
     setGeminiTtsVoice(localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) as GeminiTtsVoiceId || CONFIG.DEFAULT_GEMINI_TTS_VOICE);
     const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.PROJECTS);
@@ -205,9 +201,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const changeVoiceStability = (v: number) => { setVoiceStability(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(v)); };
   const changeVoiceStyle = (v: number) => { setVoiceStyle(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(v)); };
   const selectImageModel = useCallback((id: ImageModelId) => { setImageModelId(id); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, id); }, []);
-  const selectGeminiStyle = useCallback((id: GeminiStyleId) => { setGeminiStyleId(id); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE, id); }, []);
   const selectImageTextMode = useCallback((m: string) => { setImageTextMode(m); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE, m); }, []);
-  const saveGeminiCustomStyle = useCallback((p: string) => { setGeminiCustomStylePrompt(p); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE, p); }, []);
   const selectAspectRatio = (r: '16:9' | '9:16') => { setAspectRatio(r); localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, r); };
   const changeLongformDuration = (v: number) => { setLongformDuration(v); localStorage.setItem(CONFIG.STORAGE_KEYS.LONGFORM_DURATION, String(v)); };
   const changeShortformDuration = (v: number) => { setShortformDuration(v); localStorage.setItem(CONFIG.STORAGE_KEYS.SHORTFORM_DURATION, String(v)); };
@@ -216,7 +210,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     setVisualStyleId(next);
     localStorage.setItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID, next);
   }, [visualStyleId]);
-
   const saveProject = () => {
     if (!newProjectName.trim()) return;
     const p: ProjectSettings = { id: Date.now().toString(), name: newProjectName.trim(), createdAt: Date.now(), updatedAt: Date.now(), imageModel: imageModelId, elevenLabsVoiceId: elVoiceId, elevenLabsModel: elModelId };
@@ -228,12 +221,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     setElevenLabsModelId(p.elevenLabsModel as ElevenLabsModelId); alert(`"${p.name}" 불러오기 완료`);
   };
   const deleteProject = (id: string) => { if (!confirm('삭제?')) return; const u = projects.filter(p => p.id !== id); setProjects(u); localStorage.setItem(CONFIG.STORAGE_KEYS.PROJECTS, JSON.stringify(u)); };
-
-  const selectedGeminiStyle = useMemo(() => {
-    if (geminiStyleId === 'gemini-none') return { id: 'gemini-none', name: '없음', prompt: '' };
-    if (geminiStyleId === 'gemini-custom') return { id: 'gemini-custom', name: '커스텀', prompt: geminiCustomStylePrompt };
-    return GEMINI_STYLE_MAP.get(geminiStyleId) || null;
-  }, [geminiStyleId, geminiCustomStylePrompt]);
 
   const filteredDefaultVoices = useMemo(() => !genderFilter ? ELEVENLABS_DEFAULT_VOICES : ELEVENLABS_DEFAULT_VOICES.filter(v => v.gender === genderFilter), [genderFilter]);
   const filteredApiVoices = useMemo(() => !genderFilter ? voices : voices.filter(v => v.labels?.gender?.toLowerCase() === genderFilter), [voices, genderFilter]);
@@ -354,30 +341,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 ))}
               </div>
             </div>
-
-            {/* Gemini 화풍 */}
-            {imageModelId === 'gemini-2.5-flash-image' && (
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                  화풍 {selectedGeminiStyle?.id !== 'gemini-none' && <span className="text-emerald-400 normal-case">({selectedGeminiStyle?.name})</span>}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  <button type="button" onClick={() => selectGeminiStyle('gemini-none')}
-                    className={`px-2 py-1 rounded text-[10px] font-medium ${geminiStyleId === 'gemini-none' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>없음</button>
-                  {GEMINI_STYLE_CATEGORIES.flatMap(c => c.styles).map(s => (
-                    <button key={s.id} type="button" onClick={() => selectGeminiStyle(s.id as GeminiStyleId)}
-                      className={`px-2 py-1 rounded text-[10px] font-medium ${geminiStyleId === s.id ? 'bg-emerald-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>{s.name}</button>
-                  ))}
-                  <button type="button" onClick={() => selectGeminiStyle('gemini-custom')}
-                    className={`px-2 py-1 rounded text-[10px] font-medium ${geminiStyleId === 'gemini-custom' ? 'bg-teal-500 text-white' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>✏️ 커스텀</button>
-                </div>
-                {geminiStyleId === 'gemini-custom' && (
-                  <textarea value={geminiCustomStylePrompt} onChange={(e) => saveGeminiCustomStyle(e.target.value)}
-                    placeholder="Art style description in English..."
-                    className="mt-1.5 w-full h-16 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-[10px] text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none resize-none" />
-                )}
-              </div>
-            )}
 
             {/* 참조 이미지 */}
             <div>
@@ -683,11 +646,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
           {/* 탭 선택 */}
           <div className="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
-            <button type="button" onClick={() => setActiveTab('auto')}
+            <button type="button" onClick={() => onTabChange('auto')}
               className={`flex-1 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'auto' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
               주제 자동생성
             </button>
-            <button type="button" onClick={() => setActiveTab('manual')}
+            <button type="button" onClick={() => onTabChange('manual')}
               className={`flex-1 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'manual' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
               수동 대본
             </button>
@@ -742,7 +705,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
             ) : (
               <div className="space-y-3 flex-1 flex flex-col">
                 <div className="flex-1 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden flex flex-col">
-                  <textarea value={manualScript} onChange={(e) => setManualScript(e.target.value)} disabled={isProcessing}
+                  <textarea value={manualScript} onChange={(e) => onManualScriptChange(e.target.value)} disabled={isProcessing}
                     placeholder="여기에 대본을 붙여넣거나 직접 작성하세요.
 
 예)

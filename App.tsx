@@ -25,6 +25,8 @@ const App: React.FC = () => {
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
+  const [inputActiveTab, setInputActiveTab] = useState<'auto' | 'manual'>('auto');
+  const [inputManualScript, setInputManualScript] = useState<string>('');
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
   // 참조 이미지 상태 (강도 포함)
   const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
@@ -49,6 +51,7 @@ const App: React.FC = () => {
 
   const usedTopicsRef = useRef<string[]>([]);
   const assetsRef = useRef<GeneratedAsset[]>([]);
+  const pendingScriptScenesRef = useRef<ScriptScene[]>([]); // SCRIPT_READY 후 씬 보관용
   const isAbortedRef = useRef(false);
   const isProcessingRef = useRef(false);
 
@@ -130,94 +133,15 @@ const App: React.FC = () => {
     isAbortedRef.current = true;
     isProcessingRef.current = false;
     assetsRef.current = [];
+    pendingScriptScenesRef.current = [];
     setGeneratedData([]);
+    setInputManualScript('');
+    setInputActiveTab('auto');
     setStep(GenerationStep.IDLE);
     setProgressMessage('');
     resetCost();
   };
 
-  // SCRIPT_READY 상태에서 이미지(+음성) 생성 시작
-  const handleContinueGeneration = useCallback(async (imageOnly: boolean = true) => {
-    if (isProcessingRef.current || assetsRef.current.length === 0) return;
-    isProcessingRef.current = true;
-    isAbortedRef.current = false;
-    setStep(GenerationStep.ASSETS);
-    setProgressMessage(imageOnly ? '이미지 생성 중...' : '이미지 및 음성 생성 중...');
-
-    const initialAssets = assetsRef.current;
-
-    const runAudio = async () => {
-      const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
-      if (ttsProvider === 'google') {
-        try {
-          const narrations = initialAssets.map(a => a.narration);
-          const audioList = await generateAllScenesAudio(narrations, setProgressMessage);
-          if (isAbortedRef.current) return;
-          audioList.forEach((audioData, i) => { if (audioData) updateAssetAt(i, { audioData }); });
-        } catch (e: any) { console.error('[TTS] 배치 실패:', e.message); }
-        return;
-      }
-      const TTS_DELAY = 1500;
-      for (let i = 0; i < initialAssets.length; i++) {
-        if (isAbortedRef.current) break;
-        setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
-        try {
-          const elResult = await generateAudioWithElevenLabs(assetsRef.current[i].narration);
-          if (elResult.audioData) {
-            updateAssetAt(i, { audioData: elResult.audioData, subtitleData: elResult.subtitleData, audioDuration: elResult.estimatedDuration });
-            const charCount = assetsRef.current[i].narration.length;
-            addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
-          }
-        } catch (e: any) {
-          try { const fb = await generateAudioForScene(assetsRef.current[i].narration); updateAssetAt(i, { audioData: fb }); } catch {}
-        }
-        if (i < initialAssets.length - 1) await wait(TTS_DELAY);
-      }
-    };
-
-    const runImages = async () => {
-      const MAX_RETRIES = 2;
-      const imageModel = getSelectedImageModel();
-      const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
-      for (let i = 0; i < initialAssets.length; i++) {
-        if (isAbortedRef.current) break;
-        updateAssetAt(i, { status: 'generating' });
-        let success = false;
-        for (let attempt = 0; attempt <= MAX_RETRIES && !success; attempt++) {
-          if (isAbortedRef.current) break;
-          setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 이미지 생성 중...`);
-          try {
-            if (attempt > 0) await wait(2000);
-            const img = await generateImage(assetsRef.current[i], currentReferenceImages);
-            if (img) { updateAssetAt(i, { imageData: img, status: 'completed' }); addCost('image', imagePrice, 1); success = true; }
-            else throw new Error('이미지 없음');
-          } catch (e: any) {
-            if (e.message?.includes('API key not valid') || e.status === 400) { setNeedsKey(true); break; }
-          }
-        }
-        if (!success && !isAbortedRef.current) updateAssetAt(i, { status: 'error' });
-        await wait(50);
-      }
-    };
-
-    try {
-      await Promise.all(imageOnly ? [runImages()] : [runAudio(), runImages()]);
-      if (isAbortedRef.current) return;
-      setStep(GenerationStep.COMPLETED);
-      const cost = costRef.current;
-      const costMsg = `이미지 ${cost.imageCount}장 ${formatKRW(cost.images)} + TTS ${cost.ttsCharacters}자 ${formatKRW(cost.tts)} = 총 ${formatKRW(cost.total)}`;
-      setProgressMessage(`생성 완료! ${costMsg}`);
-      try {
-        const savedProject = await saveProject(currentTopic, assetsRef.current, undefined, costRef.current);
-        refreshProjects();
-        setProgressMessage(`"${savedProject.name}" 저장됨 | ${costMsg}`);
-      } catch {}
-    } catch (error: any) {
-      if (!isAbortedRef.current) { setStep(GenerationStep.ERROR); setProgressMessage(`오류: ${error.message}`); }
-    } finally {
-      isProcessingRef.current = false;
-    }
-  }, [currentReferenceImages, currentTopic]);
 
   const handleGenerate = useCallback(async (
     topic: string,
@@ -226,10 +150,13 @@ const App: React.FC = () => {
     sceneCount: number = 0,
     imageOnly: boolean = false
   ) => {
-    if (isProcessingRef.current) return;
+    console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}, imageOnly=${imageOnly}`);
+    if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
     isProcessingRef.current = true;
     isAbortedRef.current = false;
 
+    // 이전 대본 초기화
+    setInputManualScript('');
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -287,21 +214,28 @@ const App: React.FC = () => {
       }
       if (isAbortedRef.current) return;
       
+      // 자동 주제 모드: 생성된 대본을 textarea로 전달하고 스토리보드 표시 안함
+      const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
+      console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, scenes=${scriptScenes.length}, narrations:`, scriptScenes.map(s => s.narration?.slice(0,30)));
+      if (isAutoTopic && !imageOnly) {
+        const scriptText = scriptScenes.map(s => s.narration).join('\n');
+        console.log(`[handleGenerate] SCRIPT_READY → scriptText(${scriptText.length}chars): "${scriptText.slice(0,100)}"`);
+        setInputManualScript(scriptText);
+        setInputActiveTab('manual');
+        pendingScriptScenesRef.current = scriptScenes;
+        setGeneratedData([]);
+        assetsRef.current = [];
+        setStep(GenerationStep.SCRIPT_READY);
+        setProgressMessage(`✅ 대본 완성 (${scriptScenes.length}개 씬) — 아래 대본 확인 후 "스토리보드 생성"을 눌러주세요.`);
+        isProcessingRef.current = false;
+        return;
+      }
+
       const initialAssets = scriptScenes.map(scene => ({
         ...scene, imageData: null, audioData: null, audioDuration: null, subtitleData: null, videoData: null, videoDuration: null, status: 'pending' as const
       }));
       assetsRef.current = initialAssets;
       setGeneratedData(initialAssets);
-
-      // 자동 주제 모드: 대본 완성 후 사용자가 스타일 선택 후 이미지 생성하도록 대기
-      // 수동 대본 모드 + imageOnly: 바로 이미지 생성
-      const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
-      if (isAutoTopic && !imageOnly) {
-        setStep(GenerationStep.SCRIPT_READY);
-        setProgressMessage(`대본 완성! 비주얼 스타일을 선택하고 이미지 생성을 눌러주세요. (${scriptScenes.length}개 씬)`);
-        isProcessingRef.current = false;
-        return;
-      }
 
       setStep(GenerationStep.ASSETS);
 
@@ -823,7 +757,15 @@ const App: React.FC = () => {
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
       <main className="py-8">
-        <InputSection onGenerate={handleGenerate} onExtractCharacters={handleExtractCharacters} step={step} />
+        <InputSection
+          onGenerate={handleGenerate}
+          onExtractCharacters={handleExtractCharacters}
+          step={step}
+          activeTab={inputActiveTab}
+          onTabChange={setInputActiveTab}
+          manualScript={inputManualScript}
+          onManualScriptChange={setInputManualScript}
+        />
 
         {/* 캐릭터 카드 */}
         {(isExtractingCharacters || characters.length > 0) && (
@@ -866,21 +808,9 @@ const App: React.FC = () => {
                 {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
                   <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
                 )}
-                {/* 대본 완성 후 액션 버튼 */}
+                {/* 대본 완성: 아래 대본창에서 확인 후 스토리보드 생성 버튼 안내 */}
                 {step === GenerationStep.SCRIPT_READY && (
-                  <>
-                    <button onClick={() => handleContinueGeneration(true)}
-                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-colors flex items-center gap-1.5">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                      이미지만 생성
-                    </button>
-                    <button onClick={() => handleContinueGeneration(false)}
-                      className="px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black transition-colors flex items-center gap-1.5">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      이미지+음성 생성
-                    </button>
-                    <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
-                  </>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
                 )}
                 {(step === GenerationStep.COMPLETED || step === GenerationStep.ERROR) && generatedData.length > 0 && (
                   <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
@@ -889,15 +819,17 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <ResultTable
-            data={generatedData}
-            onRegenerateImage={handleRegenerateImage}
-            onRegenerateWithPrompt={handleRegenerateWithPrompt}
-            onExportVideo={triggerVideoExport}
-            isExporting={isVideoGenerating}
-            animatingIndices={animatingIndices}
-            onGenerateAnimation={handleGenerateAnimation}
-        />
+        {generatedData.length > 0 && (
+          <ResultTable
+              data={generatedData}
+              onRegenerateImage={handleRegenerateImage}
+              onRegenerateWithPrompt={handleRegenerateWithPrompt}
+              onExportVideo={triggerVideoExport}
+              isExporting={isVideoGenerating}
+              animatingIndices={animatingIndices}
+              onGenerateAnimation={handleGenerateAnimation}
+          />
+        )}
       </main>
       )}
     </div>

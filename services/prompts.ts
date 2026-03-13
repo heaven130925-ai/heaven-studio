@@ -131,7 +131,52 @@ export const getScriptGenerationPrompt = (
   preSegmented?: boolean   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
 ) => {
   const isManual = !!sourceContext;
-  const content = sourceContext || topic;
+
+  // ─── 자동 주제 모드: 주제어로부터 대본 직접 생성 ───────────────────────
+  if (!isManual) {
+    const sceneTarget = maxScenes ? `정확히 ${maxScenes}개` : `5~10개`;
+    return `
+# Task: "${topic}" 주제로 한국어 영상 대본 생성
+
+## 지시사항
+주제 "${topic}"에 대해 시청자가 흥미롭게 볼 수 있는 영상 나레이션 대본을 직접 작성하라.
+
+## 씬 구성
+- 씬 수: ${sceneTarget}
+- 각 씬 narration: 자연스러운 한국어 나레이션 문장 1~3개 (읽기 좋은 속도)
+- 도입 → 전개 → 결말 구조로 구성
+- 같은 내용 반복 금지
+
+## 시각화
+- 각 씬의 나레이션 내용을 이미지로 시각화할 영문 프롬프트 작성
+- 주어가 사람/인격체 → STANDARD, 주어가 사물/자연/추상 → NO_CHAR
+
+## 브랜드/고유명사
+- 한국어 고유명사 → 한국어 그대로, 외국어 → 원어 그대로
+
+### JSON 출력 형식 ###
+{
+  "scenes": [{
+    "sceneNumber": 1,
+    "narration": "이 씬의 한국어 나레이션 문장",
+    "visual_keywords": "이미지에 표시할 텍스트 (없으면 빈 문자열)",
+    "analysis": {
+      "sentiment": "POSITIVE 또는 NEGATIVE 또는 NEUTRAL 중 하나",
+      "composition_type": "MICRO 또는 STANDARD 또는 MACRO 또는 NO_CHAR 중 하나"
+    },
+    "image_prompt_english": "씬을 묘사하는 영문 이미지 프롬프트"
+  }]
+}
+
+### 주의사항 ###
+- narration은 반드시 한국어로 작성
+- "나레이션"이라는 단어를 narration 값에 포함하지 말 것
+- 주제: ${topic}
+`;
+  }
+
+  // ─── 수동 대본 모드: 입력된 대본을 씬으로 분할 ───────────────────────
+  const content = sourceContext;
 
   const sceneCountRule = preSegmented
     ? `⚠️ 사전 분할 모드 (STRICT):
@@ -148,12 +193,13 @@ export const getScriptGenerationPrompt = (
     : `- 입력 문장 수 = 출력 씬 수 (전체 대본 빠짐없이 커버)`;
 
   return `
-# Task: Generate Storyboard for "${topic}"
+# Task: 대본 → 스토리보드 변환 (주제: "${topic}")
 
 ## 씬 분할 규칙
 ${sceneCountRule}
 - 같은 내용 반복 금지
-- ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (절대 "나레이션"이라고 쓰지 말 것)
+- ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (수정 금지)
+- "나레이션"이라는 단어를 절대 출력하지 말 것
 
 ## 시각화
 - 문장 의미를 그대로 이미지화
@@ -166,7 +212,7 @@ ${sceneCountRule}
 - 주어가 사람/인격체 → STANDARD
 - 주어가 사물/자연현상/추상개념 → NO_CHAR
 
-${isManual ? '[수동 대본] 원문 수정 금지, 씬 분할만' : ''}
+[수동 대본] 원문 수정 금지, 씬 분할과 시각화만 수행
 
 [입력 대본]
 ${content}

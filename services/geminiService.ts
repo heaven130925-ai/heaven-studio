@@ -529,7 +529,7 @@ export const generateScriptChunked = async (
  * - 순환 의존성 방지를 위해 직접 localStorage와 config 사용
  */
 const getSelectedGeminiStylePrompt = (): string => {
-  // 먼저 새 15가지 비주얼 스타일 확인 (VISUAL_STYLE_ID)
+  // 비주얼 스타일 빠른 선택기 우선 적용
   const visualStyleId = localStorage.getItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID);
   if (visualStyleId && visualStyleId !== 'none') {
     const found = (VISUAL_STYLES as readonly { id: string; prompt: string }[]).find(s => s.id === visualStyleId);
