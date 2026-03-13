@@ -641,12 +641,24 @@ export const generateImageForScene = async (
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
-  // Imagen 3 선택 + 참조 이미지 없을 때 → Imagen 3 사용
+  // Imagen 3 선택 + 참조 이미지 없을 때 → Imagen 3 사용 (실패 시 Gemini로 폴백)
   if (isImagen3 && !hasAnyRef) {
     const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
     const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
     console.log(`[Image Gen] Imagen 3 사용: ${selectedModel}, 비율: ${ar}`);
-    return generateImageWithImagen3(prompt, selectedModel);
+    try {
+      const result = await generateImageWithImagen3(prompt, selectedModel);
+      if (result) return result;
+    } catch (e: any) {
+      const msg = e?.message || '';
+      const isPermissionError = msg.includes('403') || msg.includes('permission') || msg.includes('billing') || msg.includes('quota') || msg.includes('not found') || msg.includes('PERMISSION_DENIED') || msg.includes('serviceDisabled');
+      if (isPermissionError) {
+        console.warn(`[Image Gen] Imagen 3 권한 없음 → Gemini 2.5 Flash로 폴백`);
+      } else {
+        throw e; // 다른 에러는 그대로 전파
+      }
+    }
+    // Gemini Flash로 폴백
   }
 
   // 참조 이미지 있거나 Gemini 선택 시 → Gemini 사용

@@ -257,11 +257,9 @@ const App: React.FC = () => {
         setProgressMessage('외부 콘텐츠 분석 중...');
         targetTopic = "Custom Analysis Topic";
       } else {
-        setProgressMessage(`트렌드 탐색 중...`);
-        const trends = await findTrendingTopics(topic, usedTopicsRef.current);
-        if (isAbortedRef.current) return;
-        targetTopic = trends[0].topic;
-        usedTopicsRef.current.push(targetTopic);
+        // 사용자가 입력한 주제를 그대로 사용 (범용 대본 생성)
+        targetTopic = topic;
+        setProgressMessage(`"${topic}" 대본 생성 중...`);
       }
 
       setProgressMessage(`대본 생성 중...`);

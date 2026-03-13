@@ -195,7 +195,7 @@ export const CONFIG = {
   // 기본 설정값들 (키 제외)
   DEFAULT_VOICE_ID: "pNInz6obpgDQGcFmaJgB",  // Adam - 기본 남성 음성
   DEFAULT_ELEVENLABS_MODEL: "eleven_multilingual_v2" as ElevenLabsModelId,
-  DEFAULT_IMAGE_MODEL: "imagen-3.0-fast-generate-001" as ImageModelId,
+  DEFAULT_IMAGE_MODEL: "gemini-2.5-flash-image" as ImageModelId,
   DEFAULT_GEMINI_TTS_VOICE: "Charon" as GeminiTtsVoiceId,
   VIDEO_WIDTH: 1280,
   VIDEO_HEIGHT: 720,
