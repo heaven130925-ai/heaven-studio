@@ -144,7 +144,8 @@ export const generateAudioWithElevenLabs = async (
 ): Promise<ElevenLabsResult> => {
 
   const savedApiKey = process.env.ELEVENLABS_API_KEY || localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY);
-  const savedVoiceId = process.env.ELEVENLABS_VOICE_ID || localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID);
+  // localStorage(UI 선택)가 env 변수보다 우선 - 사용자가 UI에서 선택한 목소리를 존중
+  const savedVoiceId = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || process.env.ELEVENLABS_VOICE_ID;
 
   const finalKey = providedApiKey || savedApiKey;
   const finalVoiceId = providedVoiceId || savedVoiceId || CONFIG.DEFAULT_VOICE_ID;
@@ -169,10 +170,11 @@ export const generateAudioWithElevenLabs = async (
         text: text,
         model_id: finalModelId,
         output_format: OUTPUT_FORMAT,
+        speed: (() => { const voiceSpeed = parseFloat(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0'); return voiceSpeed; })(),
         voice_settings: {
-          stability: 0.5,
+          stability: parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50') / 100,
           similarity_boost: 0.75,
-          style: 0.0,
+          style: parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0') / 100,
           use_speaker_boost: true
         }
       }),
@@ -261,7 +263,9 @@ export interface ElevenLabsVoice {
  * ElevenLabs에서 사용 가능한 음성 목록 가져오기
  */
 export const fetchElevenLabsVoices = async (apiKey?: string): Promise<ElevenLabsVoice[]> => {
-  const finalKey = apiKey || localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY);
+  // 환경변수 우선, 그 다음 localStorage
+  const envKey = process.env.ELEVENLABS_API_KEY;
+  const finalKey = apiKey || envKey || localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY);
 
   if (!finalKey || finalKey.length < 10) {
     console.warn("ElevenLabs API Key가 설정되지 않았습니다.");

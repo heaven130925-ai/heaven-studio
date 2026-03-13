@@ -162,7 +162,7 @@ function renderSubtitle(
   const padding = 20;
   const safeMargin = 10; // 화면 경계 안전 여백
 
-  ctx.font = `bold ${config.fontSize}px ${config.fontFamily}`;
+  ctx.font = `${config.fontWeight ?? 700} ${config.fontSize}px ${config.fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
 
@@ -178,12 +178,19 @@ function renderSubtitle(
   }
 
   const boxX = Math.max(safeMargin, (canvas.width - boxWidth) / 2);
-  let boxY = canvas.height - config.bottomMargin - boxHeight;
-
-  // 상단 경계 체크
-  if (boxY < safeMargin) {
-    boxY = safeMargin;
+  let boxY: number;
+  const position = config.position ?? 'bottom';
+  if (position === 'top') {
+    boxY = config.bottomMargin;
+  } else if (position === 'middle') {
+    boxY = (canvas.height - boxHeight) / 2;
+  } else {
+    boxY = canvas.height - config.bottomMargin - boxHeight;
   }
+
+  // 경계 체크
+  if (boxY < safeMargin) boxY = safeMargin;
+  if (boxY + boxHeight > canvas.height - safeMargin) boxY = canvas.height - safeMargin - boxHeight;
 
   // 반투명 배경 박스
   ctx.fillStyle = config.backgroundColor;
@@ -195,12 +202,16 @@ function renderSubtitle(
   lines.forEach((line, lineIndex) => {
     const textY = boxY + padding + lineIndex * lineHeight;
 
-    // 검은 외곽선
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-    ctx.lineWidth = 4;
-    ctx.strokeText(line, canvas.width / 2, textY);
+    // 테두리 (strokeWidth > 0일 때만)
+    const sw = config.strokeWidth ?? 4;
+    if (sw > 0) {
+      ctx.strokeStyle = config.strokeColor ?? 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = sw;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(line, canvas.width / 2, textY);
+    }
 
-    // 흰색 텍스트
+    // 텍스트
     ctx.fillStyle = config.textColor;
     ctx.fillText(line, canvas.width / 2, textY);
   });
@@ -435,7 +446,7 @@ export const generateVideo = async (
         const source = audioCtx.createBufferSource();
         source.buffer = scene.audioBuffer;
         source.connect(destination);
-        source.connect(audioCtx.destination);
+        // 렌더링 중 스피커 출력 음소거 (MP4에는 정상 포함)
         source.start(masterStartTime + scene.startTime);
         source.stop(masterStartTime + scene.endTime);
       }

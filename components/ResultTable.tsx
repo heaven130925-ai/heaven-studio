@@ -1,12 +1,57 @@
 
-import React, { useRef, useState } from 'react';
-import { GeneratedAsset } from '../types';
-import { downloadProjectZip } from '../utils/csvHelper';
+import React, { useRef, useState, useEffect, memo, useCallback } from 'react';
+import { GeneratedAsset, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG } from '../types';
+import { CONFIG } from '../config';
+import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
+import { exportAssetsToZip } from '../services/exportService';
+
+const FONT_OPTIONS = [
+  { label: 'Noto Sans KR', value: '"Noto Sans KR", "Malgun Gothic", sans-serif' },
+  { label: '맑은 고딕', value: '"Malgun Gothic", sans-serif' },
+  { label: '나눔고딕', value: '"Nanum Gothic", sans-serif' },
+  { label: '나눔명조', value: '"Nanum Myeongjo", serif' },
+  { label: '돋움', value: '"Dotum", sans-serif' },
+  { label: '굴림', value: '"Gulim", sans-serif' },
+  { label: '바탕', value: '"Batang", serif' },
+  { label: 'Arial', value: 'Arial, sans-serif' },
+  { label: 'Impact', value: 'Impact, "Arial Narrow", sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+];
+
+const FONT_WEIGHT_OPTIONS = [
+  { label: '가늘게', value: 300 },
+  { label: '보통', value: 400 },
+  { label: '중간', value: 500 },
+  { label: '굵게', value: 700 },
+  { label: '아주 굵게', value: 900 },
+];
+
+const FONT_SIZE_OPTIONS = [24, 32, 40, 48, 56, 64];
+
+const BG_OPTIONS = [
+  { label: '없음', value: 'rgba(0,0,0,0)' },
+  { label: '반투명', value: 'rgba(0,0,0,0.75)' },
+  { label: '불투명', value: 'rgba(0,0,0,0.95)' },
+  { label: '흰색', value: 'rgba(255,255,255,0.85)' },
+];
+
+function loadSubtitleConfig(): SubtitleConfig {
+  try {
+    const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG);
+    if (saved) return { ...DEFAULT_SUBTITLE_CONFIG, ...JSON.parse(saved) };
+  } catch {}
+  return { ...DEFAULT_SUBTITLE_CONFIG };
+}
+
+function saveSubtitleConfig(cfg: SubtitleConfig) {
+  localStorage.setItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG, JSON.stringify(cfg));
+}
 
 interface ResultTableProps {
   data: GeneratedAsset[];
   onRegenerateImage?: (index: number) => void;
+  onRegenerateWithPrompt?: (index: number, customPrompt: string) => void;
   onUpgradeImage?: (index: number) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   onGenerateAnimation?: (index: number) => void;  // 영상 변환 콜백
@@ -14,6 +59,7 @@ interface ResultTableProps {
   animatingIndices?: Set<number>;  // 현재 영상 변환 중인 인덱스들
 }
 
+// 오디오 디코딩 함수 (컴포넌트 외부로 이동하여 재생성 방지)
 async function decodeAudio(base64: string, ctx: AudioContext): Promise<AudioBuffer> {
   const binaryString = atob(base64);
   const bytes = new Uint8Array(binaryString.length);
@@ -33,7 +79,55 @@ async function decodeAudio(base64: string, ctx: AudioContext): Promise<AudioBuff
   }
 }
 
-const AudioPlayer: React.FC<{ base64: string }> = ({ base64 }) => {
+// 이미지 Lazy Loading 컴포넌트 (Intersection Observer 사용)
+const LazyImage: React.FC<{
+  src: string;
+  alt: string;
+  className?: string;
+}> = memo(({ src, alt, className }) => {
+  const imgRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' } // 100px 전에 미리 로드
+    );
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={imgRef} className="w-full h-full">
+      {isVisible ? (
+        <img
+          src={src}
+          alt={alt}
+          className={`${className} ${isLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
+          onLoad={() => setIsLoaded(true)}
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full h-full bg-slate-800 animate-pulse" />
+      )}
+    </div>
+  );
+});
+
+LazyImage.displayName = 'LazyImage';
+
+// 오디오 플레이어 메모이제이션 (props가 같으면 리렌더 방지)
+const AudioPlayer: React.FC<{ base64: string }> = memo(({ base64 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -69,25 +163,266 @@ const AudioPlayer: React.FC<{ base64: string }> = ({ base64 }) => {
       {isPlaying ? <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
     </button>
   );
+});
+
+AudioPlayer.displayName = 'AudioPlayer';
+
+// 다운로드 헬퍼 함수
+function downloadImage(base64: string, sceneNumber: number) {
+  const a = document.createElement('a');
+  a.href = `data:image/jpeg;base64,${base64}`;
+  a.download = `scene_${String(sceneNumber).padStart(2, '0')}.jpg`;
+  a.click();
 }
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onExportVideo, onGenerateAnimation, isExporting, animatingIndices }) => {
+function downloadAudio(base64: string, sceneNumber: number) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'audio/mpeg' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `scene_${String(sceneNumber).padStart(2, '0')}.mp3`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 테이블 행 컴포넌트 (개별 행 메모이제이션으로 리렌더 최소화)
+interface TableRowProps {
+  row: GeneratedAsset;
+  index: number;
+  isAnimating: boolean;
+  onRegenerateImage?: (index: number) => void;
+  onRegenerateWithPrompt?: (index: number, customPrompt: string) => void;
+  onGenerateAnimation?: (index: number) => void;
+  onOpenPreview?: (src: string) => void;
+}
+
+const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview }) => {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editPrompt, setEditPrompt] = useState(row.visualPrompt || '');
+
+  const handleApplyPrompt = () => {
+    if (editPrompt.trim()) {
+      onRegenerateWithPrompt?.(index, editPrompt.trim());
+      setIsEditOpen(false);
+    }
+  };
+
+  return (
+    <tr className="group hover:bg-slate-800/20 transition-colors">
+      <td className="py-5 px-6 align-top font-mono text-slate-600 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
+      <td className="py-5 px-6 align-top">
+        <div className="space-y-3">
+          <p className="text-slate-200 text-[11px] leading-relaxed font-medium tracking-tight">{row.narration}</p>
+          {row.analysis?.composition_type && (
+            <div className="flex flex-wrap gap-1">
+              <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${
+                row.analysis.composition_type === 'MACRO' ? 'text-brand-400 bg-brand-400/5 border-brand-400/20' :
+                row.analysis.composition_type === 'STANDARD' ? 'text-emerald-400 bg-emerald-400/5 border-emerald-400/20' :
+                'text-amber-400 bg-amber-400/5 border-amber-400/20'
+              }`}>{row.analysis.composition_type}</span>
+              {row.analysis.sentiment && (
+                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${
+                  row.analysis.sentiment === 'POSITIVE' ? 'text-green-400 bg-green-400/5 border-green-400/20' :
+                  row.analysis.sentiment === 'NEGATIVE' ? 'text-red-400 bg-red-400/5 border-red-400/20' :
+                  'text-slate-400 bg-slate-400/5 border-slate-400/20'
+                }`}>{row.analysis.sentiment}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="py-5 px-6 align-top">
+        {isEditOpen ? (
+          <div className="space-y-2">
+            <textarea
+              value={editPrompt}
+              onChange={(e) => setEditPrompt(e.target.value)}
+              className="w-full h-36 bg-slate-950 rounded-lg p-3 border border-brand-500/50 text-[9px] text-slate-300 font-mono leading-tight resize-y focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
+              placeholder="이미지 프롬프트를 수정하세요..."
+            />
+            <div className="flex gap-1.5">
+              <button
+                onClick={handleApplyPrompt}
+                className="flex-1 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                적용 후 재생성
+              </button>
+              <button
+                onClick={() => { setEditPrompt(row.visualPrompt || ''); setIsEditOpen(false); }}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-[9px] font-black uppercase tracking-wider transition-all border border-slate-700"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="relative group/prompt">
+            <div className="bg-slate-950/30 rounded-lg p-3 border border-slate-800/50 text-[9px] text-slate-600 font-mono leading-tight whitespace-pre-wrap">
+              {row.visualPrompt}
+            </div>
+            <button
+              onClick={() => { setEditPrompt(row.visualPrompt || ''); setIsEditOpen(true); }}
+              className="absolute top-1.5 right-1.5 opacity-0 group-hover/prompt:opacity-100 transition-opacity p-1.5 rounded-md bg-slate-800 hover:bg-brand-600 border border-slate-700 hover:border-brand-500 text-slate-400 hover:text-white"
+              title="프롬프트 편집"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            </button>
+          </div>
+        )}
+      </td>
+      <td className="py-5 px-6 align-top">
+        <div className="relative aspect-video w-48 mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img">
+          {row.status === 'generating' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+              <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
+              <span className="text-[7px] text-brand-500 font-black uppercase tracking-widest">렌더링 중</span>
+            </div>
+          ) : isAnimating ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-cyan-950/30">
+              <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent animate-spin rounded-full"></div>
+              <span className="text-[7px] text-cyan-400 font-black uppercase tracking-widest">영상 변환 중</span>
+            </div>
+          ) : row.status === 'error' ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-red-950/30 border-2 border-dashed border-red-800/50 m-2 rounded-lg">
+              <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span className="text-[8px] text-red-400 font-black uppercase">생성 실패</span>
+              <button
+                onClick={() => onRegenerateImage?.(index)}
+                className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                다시 생성
+              </button>
+            </div>
+          ) : row.videoData ? (
+            <>
+              <video src={row.videoData} className="w-full h-full object-cover" autoPlay loop muted playsInline />
+              <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-cyan-500/80 text-[6px] font-black text-white uppercase">영상</div>
+              <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center gap-1.5">
+                <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 재생성">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </button>
+              </div>
+            </>
+          ) : row.imageData ? (
+            <>
+              <LazyImage
+                src={`data:image/jpeg;base64,${row.imageData}`}
+                alt="Scene"
+                className="w-full h-full object-cover transition-transform group-hover/img:scale-105"
+              />
+              <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center gap-1.5">
+                <button onClick={() => onOpenPreview?.(`data:image/jpeg;base64,${row.imageData}`)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="크게 보기">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                </button>
+                <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 변환">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </button>
+                <button onClick={() => downloadImage(row.imageData!, row.sceneNumber)} className="p-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 text-emerald-400 transition-all" title="이미지 다운로드">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                </button>
+              </div>
+            </>
+          ) : <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-slate-800 m-2 rounded-lg"><span className="text-[7px] text-slate-700 font-black uppercase">대기 중</span></div>}
+        </div>
+      </td>
+      <td className="py-5 px-6 align-top text-center">
+        {row.audioData ? (
+          <div className="flex flex-col items-center gap-2">
+            <AudioPlayer base64={row.audioData} />
+            <button onClick={() => downloadAudio(row.audioData!, row.sceneNumber)} className="p-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/30 transition-all" title="음성 다운로드">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1.5 opacity-30"><div className="w-2.5 h-2.5 border-2 border-slate-700 border-t-slate-500 animate-spin rounded-full"></div><span className="text-[6px] text-slate-600 font-black uppercase">VO</span></div>
+        )}
+      </td>
+    </tr>
+  );
+});
+
+TableRow.displayName = 'TableRow';
+
+const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices }) => {
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const onOpenPreview = useCallback((src: string) => setPreviewSrc(src), []);
+  const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => loadSubtitleConfig());
+  const [showSubSettings, setShowSubSettings] = useState(false);
+
+  const updateSub = useCallback(<K extends keyof SubtitleConfig>(key: K, value: SubtitleConfig[K]) => {
+    setSubConfig((prev: SubtitleConfig) => {
+      const next = { ...prev, [key]: value };
+      saveSubtitleConfig(next);
+      return next;
+    });
+  }, []);
+
   if (data.length === 0) return null;
 
   return (
     <div className="w-full max-w-[98%] mx-auto pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {/* 이미지 미리보기 모달 */}
+      {previewSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setPreviewSrc(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <img src={previewSrc} alt="Preview" className="max-w-full max-h-[85vh] rounded-2xl shadow-2xl object-contain" />
+            <button
+              onClick={() => setPreviewSrc(null)}
+              className="absolute top-3 right-3 p-2 rounded-full bg-black/60 hover:bg-black/80 text-white transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <a
+              href={previewSrc}
+              download={`preview_${Date.now()}.jpg`}
+              className="absolute bottom-3 right-3 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black flex items-center gap-1.5 transition-all"
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              다운로드
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6 bg-slate-900/90 backdrop-blur-md p-5 rounded-3xl border border-slate-800">
         <div className="flex items-center gap-4">
           <div className="w-1 h-10 bg-brand-500 rounded-full"></div>
           <div>
-            <h2 className="text-xl font-black text-white tracking-tight">졸라맨 V10.0 마스터 스토리보드</h2>
+            <h2 className="text-xl font-black text-white tracking-tight">Heaven 1.0 마스터 스토리보드</h2>
             <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
           </div>
         </div>
         <div className="flex gap-2">
+            <button onClick={() => downloadMediaZip(data)} className="px-4 py-2.5 rounded-xl bg-violet-800 border border-violet-700 text-violet-300 font-bold text-[10px] hover:bg-violet-700 transition-all flex items-center gap-2">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              이미지+음성 내보내기
+            </button>
             <button onClick={() => downloadProjectZip(data)} className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[10px] hover:bg-slate-700 transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               전체 프로젝트 저장
+            </button>
+            <button onClick={() => exportAssetsToZip(data, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`)} className="px-4 py-2.5 rounded-xl bg-emerald-800 border border-emerald-700 text-emerald-300 font-bold text-[10px] hover:bg-emerald-700 transition-all flex items-center gap-2">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              엑셀+이미지 내보내기
             </button>
             <button onClick={async () => await downloadSrt(data, `subtitles_${Date.now()}.srt`)} className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[10px] hover:bg-slate-700 transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -101,8 +436,134 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onEx
                 {isExporting ? <div className="w-3 h-3 border-2 border-slate-500 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 O)
             </button>
+            <button onClick={() => setShowSubSettings((v: boolean) => !v)} className={`px-3 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center gap-1.5 border ${showSubSettings ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'}`} title="자막 설정">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
+              자막
+            </button>
         </div>
       </div>
+
+      {/* 자막 설정 패널 */}
+      {showSubSettings && (
+        <div className="mb-4 bg-slate-900/90 backdrop-blur-md border border-violet-500/30 rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-violet-400 font-black text-xs uppercase tracking-widest">자막 설정</span>
+            <span className="text-slate-600 text-[10px]">MP4 (자막 O) 내보낼 때 적용됩니다</span>
+          </div>
+
+          {/* 위치 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">위치</span>
+            {([
+              { id: 'top',    label: '상단' },
+              { id: 'middle', label: '중간' },
+              { id: 'bottom', label: '하단' },
+            ] as const).map(({ id, label }) => (
+              <button key={id} type="button" onClick={() => updateSub('position', id)}
+                className={`px-4 py-1.5 rounded-lg text-[11px] font-bold transition-all ${subConfig.position === id ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 폰트 크기 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">크기</span>
+            {FONT_SIZE_OPTIONS.map(size => (
+              <button key={size} type="button" onClick={() => updateSub('fontSize', size)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${subConfig.fontSize === size ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+                {size}px
+              </button>
+            ))}
+          </div>
+
+          {/* 폰트 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">폰트</span>
+            {FONT_OPTIONS.map(opt => (
+              <button key={opt.value} type="button" onClick={() => updateSub('fontFamily', opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${subConfig.fontFamily === opt.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                style={{ fontFamily: opt.value }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 굵기 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">굵기</span>
+            {FONT_WEIGHT_OPTIONS.map(opt => (
+              <button key={opt.value} type="button" onClick={() => updateSub('fontWeight', opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] transition-all ${subConfig.fontWeight === opt.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                style={{ fontWeight: opt.value }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 테두리 */}
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400 w-16 shrink-0">테두리색</span>
+              <input type="color" value={subConfig.strokeColor ?? '#000000'} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSub('strokeColor', e.target.value)}
+                className="w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer" />
+              <span className="text-[11px] text-slate-500">{subConfig.strokeColor ?? '#000000'}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400">테두리굵기</span>
+              <input type="range" min={0} max={12} step={1} value={subConfig.strokeWidth ?? 4} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSub('strokeWidth', Number(e.target.value))}
+                className="w-28 accent-violet-500" />
+              <span className="text-[11px] text-slate-500">{subConfig.strokeWidth ?? 4}px</span>
+            </div>
+          </div>
+
+          {/* 배경 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">배경</span>
+            {BG_OPTIONS.map(opt => (
+              <button key={opt.value} type="button" onClick={() => updateSub('backgroundColor', opt.value)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border ${subConfig.backgroundColor === opt.value ? 'border-violet-500 ring-1 ring-violet-500' : 'border-slate-700'}`}
+                style={{ background: opt.value === 'rgba(0,0,0,0)' ? 'repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0/10px 10px' : opt.value, color: opt.value.includes('255,255,255') ? '#000' : '#fff' }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 글자색 + 여백 */}
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400">글자색</span>
+              <input type="color" value={subConfig.textColor} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSub('textColor', e.target.value)}
+                className="w-8 h-8 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer" />
+              <span className="text-[11px] text-slate-500">{subConfig.textColor}</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-slate-400">여백</span>
+              <input type="range" min={20} max={200} value={subConfig.bottomMargin} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSub('bottomMargin', Number(e.target.value))}
+                className="w-28 accent-violet-500" />
+              <span className="text-[11px] text-slate-500">{subConfig.bottomMargin}px</span>
+            </div>
+          </div>
+
+          {/* 미리보기 */}
+          <div className="relative h-20 rounded-xl bg-white border border-slate-300 overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center opacity-30 text-slate-400 text-[10px]">미리보기</div>
+            <div
+              className="absolute left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-center whitespace-nowrap"
+              style={{
+                background: subConfig.backgroundColor,
+                color: subConfig.textColor,
+                fontFamily: subConfig.fontFamily,
+                fontSize: Math.round(subConfig.fontSize * 0.45) + 'px',
+                fontWeight: subConfig.fontWeight ?? 700,
+                WebkitTextStroke: (subConfig.strokeWidth ?? 4) > 0 ? `${Math.round((subConfig.strokeWidth ?? 4) * 0.45)}px ${subConfig.strokeColor ?? '#000'}` : undefined,
+                ...(subConfig.position === 'top' ? { top: 8 } : subConfig.position === 'middle' ? { top: '50%', transform: 'translate(-50%, -50%)' } : { bottom: 8 }),
+              }}>
+              자막이 이렇게 표시됩니다
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/20 backdrop-blur-sm">
         <div className="overflow-x-auto">
@@ -118,96 +579,16 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onEx
             </thead>
             <tbody className="divide-y divide-slate-800/40">
               {data.map((row, index) => (
-                <tr key={row.sceneNumber} className="group hover:bg-slate-800/20 transition-colors">
-                  <td className="py-5 px-6 align-top font-mono text-slate-600 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
-                  <td className="py-5 px-6 align-top">
-                    <div className="space-y-3">
-                      <p className="text-slate-200 text-[11px] leading-relaxed font-medium tracking-tight">{row.narration}</p>
-                      {row.analysis && (
-                        <div className="space-y-2">
-                            <div className="flex flex-wrap gap-1">
-                                <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${
-                                  row.analysis.composition_type === 'MACRO' ? 'text-brand-400 bg-brand-400/5 border-brand-400/20' :
-                                  row.analysis.composition_type === 'STANDARD' ? 'text-emerald-400 bg-emerald-400/5 border-emerald-400/20' :
-                                  'text-amber-400 bg-amber-400/5 border-amber-400/20'
-                                }`}>{row.analysis.composition_type} {row.analysis.camera.distance}</span>
-                                <span className="text-[7px] font-black text-red-400 bg-red-400/5 px-1.5 py-0.5 rounded border border-red-800/20 uppercase">{row.analysis.metaphor_category}</span>
-                            </div>
-                            <div className="p-2 bg-slate-950/50 rounded-lg border border-slate-800/50">
-                                <p className="text-[7px] text-slate-500 font-black uppercase mb-1">비주얼 메타포</p>
-                                <p className="text-[9px] text-slate-300 leading-tight">
-                                    <span className="text-brand-400 font-bold">{row.analysis.visual_metaphor.object}</span>: {row.analysis.visual_metaphor.interaction}
-                                </p>
-                            </div>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-5 px-6 align-top">
-                    <div className="bg-slate-950/30 rounded-lg p-3 border border-slate-800/50 text-[9px] text-slate-600 font-mono leading-tight whitespace-pre-wrap">
-                      {row.visualPrompt}
-                    </div>
-                  </td>
-                  <td className="py-5 px-6 align-top">
-                    <div className="relative aspect-video w-48 mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img">
-                      {row.status === 'generating' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
-                          <span className="text-[7px] text-brand-500 font-black uppercase tracking-widest">렌더링 중</span>
-                        </div>
-                      ) : animatingIndices?.has(index) ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-cyan-950/30">
-                          <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent animate-spin rounded-full"></div>
-                          <span className="text-[7px] text-cyan-400 font-black uppercase tracking-widest">영상 변환 중</span>
-                        </div>
-                      ) : row.status === 'error' ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-red-950/30 border-2 border-dashed border-red-800/50 m-2 rounded-lg">
-                          <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <span className="text-[8px] text-red-400 font-black uppercase">생성 실패</span>
-                          <button
-                            onClick={() => onRegenerateImage?.(index)}
-                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg"
-                          >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            다시 생성
-                          </button>
-                        </div>
-                      ) : row.videoData ? (
-                        <>
-                          <video src={row.videoData} className="w-full h-full object-cover" autoPlay loop muted playsInline />
-                          <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-cyan-500/80 text-[6px] font-black text-white uppercase">영상</div>
-                          <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center gap-1.5">
-                            <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            </button>
-                            <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 재생성">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            </button>
-                          </div>
-                        </>
-                      ) : row.imageData ? (
-                        <>
-                          <img src={`data:image/jpeg;base64,${row.imageData}`} className="w-full h-full object-cover transition-transform group-hover/img:scale-105" alt="Scene" />
-                          <div className="absolute inset-0 bg-slate-950/80 opacity-0 group-hover/img:opacity-100 transition-all flex items-center justify-center gap-1.5">
-                            <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                            </button>
-                            <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 변환">
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            </button>
-                          </div>
-                        </>
-                      ) : <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-slate-800 m-2 rounded-lg"><span className="text-[7px] text-slate-700 font-black uppercase">대기 중</span></div>}
-                    </div>
-                  </td>
-                  <td className="py-5 px-6 align-top text-center">
-                    {row.audioData ? <div className="flex justify-center"><AudioPlayer base64={row.audioData} /></div> : <div className="flex flex-col items-center gap-1.5 opacity-30"><div className="w-2.5 h-2.5 border-2 border-slate-700 border-t-slate-500 animate-spin rounded-full"></div><span className="text-[6px] text-slate-600 font-black uppercase">VO</span></div>}
-                  </td>
-                </tr>
+                <TableRow
+                  key={row.sceneNumber}
+                  row={row}
+                  index={index}
+                  isAnimating={animatingIndices?.has(index) || false}
+                  onRegenerateImage={onRegenerateImage}
+                  onRegenerateWithPrompt={onRegenerateWithPrompt}
+                  onGenerateAnimation={onGenerateAnimation}
+                  onOpenPreview={onOpenPreview}
+                />
               ))}
             </tbody>
           </table>

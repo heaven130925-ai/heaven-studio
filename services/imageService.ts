@@ -1,14 +1,13 @@
 
 /**
- * 통합 이미지 생성 서비스
- * - 선택한 모델에 따라 Gemini 또는 Flux로 라우팅
- * - Flux는 참조 이미지 미지원 → 선택한 스타일 프롬프트를 추가
+ * 이미지 생성 서비스 (Gemini 전용)
+ * - Gemini 2.5 Flash를 사용한 이미지 생성
+ * - 참조 이미지 지원 (캐릭터/스타일 분리)
  */
 
-import { CONFIG, ImageModelId, FLUX_STYLE_CATEGORIES, FluxStyleId } from '../config';
+import { CONFIG, ImageModelId, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from '../config';
 import { generateImageForScene as generateWithGemini } from './geminiService';
-import { generateImageWithFlux } from './falService';
-import { ScriptScene } from '../types';
+import { ScriptScene, ReferenceImages } from '../types';
 
 /**
  * 현재 선택된 이미지 모델 가져오기
@@ -19,105 +18,84 @@ export function getSelectedImageModel(): ImageModelId {
 }
 
 /**
- * 현재 선택된 Flux 스타일 가져오기
+ * 현재 선택된 Gemini 스타일 가져오기
  */
-export function getSelectedFluxStyle(): FluxStyleId {
-  const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.FLUX_STYLE);
-  return (saved as FluxStyleId) || 'ghibli';
+export function getSelectedGeminiStyle(): GeminiStyleId {
+  const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_STYLE);
+  return (saved as GeminiStyleId) || 'gemini-none';
 }
 
 /**
- * 캐릭터 프롬프트 가져오기
+ * 커스텀 스타일 프롬프트 가져오기 (Gemini)
  */
-function getCharacterPrompt(): string {
-  return localStorage.getItem(CONFIG.STORAGE_KEYS.FLUX_CHARACTER) || CONFIG.DEFAULT_CHARACTER_PROMPT;
+function getGeminiCustomStylePrompt(): string {
+  return localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_CUSTOM_STYLE) || '';
 }
 
 /**
- * 커스텀 스타일 프롬프트 가져오기
+ * 이미지 내 텍스트 모드 가져오기
+ * 'auto' | 'none' | 'english' | 'numbers'
  */
-function getCustomStylePrompt(): string {
-  return localStorage.getItem(CONFIG.STORAGE_KEYS.FLUX_CUSTOM_STYLE) || '';
+export function getImageTextMode(): string {
+  return localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
 }
 
 /**
- * 선택된 Flux 화풍의 프롬프트 가져오기
+ * 선택된 Gemini 화풍의 프롬프트 가져오기
+ * @returns 화풍 프롬프트 (없음이면 빈 문자열)
  */
-function getFluxStylePrompt(styleId: FluxStyleId): string | null {
+export function getGeminiStylePrompt(): string {
+  // 비주얼 스타일 빠른 선택기 우선 적용
+  const visualStyleId = localStorage.getItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID);
+  if (visualStyleId && visualStyleId !== 'none') {
+    const found = (VISUAL_STYLES as readonly { id: string; prompt: string }[]).find(s => s.id === visualStyleId);
+    if (found) return found.prompt;
+  }
+
+  const styleId = getSelectedGeminiStyle();
+
+  // 화풍 없음 선택
+  if (styleId === 'gemini-none') {
+    return '';
+  }
+
   // 커스텀 스타일인 경우
-  if (styleId === 'custom') {
-    const customPrompt = getCustomStylePrompt();
-    if (customPrompt.trim()) {
-      return customPrompt;
-    }
-    // 커스텀이지만 비어있으면 null 반환 (캐릭터만 사용)
-    return null;
+  if (styleId === 'gemini-custom') {
+    return getGeminiCustomStylePrompt().trim();
   }
 
   // 프리셋 스타일 찾기
-  for (const category of FLUX_STYLE_CATEGORIES) {
+  for (const category of GEMINI_STYLE_CATEGORIES) {
     const style = category.styles.find(s => s.id === styleId);
     if (style) {
       return style.prompt;
     }
   }
 
-  return null;
+  return '';
 }
 
 /**
- * Flux용 프롬프트 생성
- * - 캐릭터 프롬프트 + 화풍 프롬프트 + 씬 프롬프트
- */
-function createFluxPrompt(originalPrompt: string): string {
-  const styleId = getSelectedFluxStyle();
-  const characterPrompt = getCharacterPrompt();
-  const stylePrompt = getFluxStylePrompt(styleId);
-
-  console.log(`[Image Service] Flux - 캐릭터: ${characterPrompt.slice(0, 30)}...`);
-  console.log(`[Image Service] Flux - 화풍: ${styleId}${stylePrompt ? '' : ' (없음)'}`);
-
-  // 프롬프트 조합: 캐릭터 + 화풍 + 씬
-  const parts: string[] = [];
-
-  if (characterPrompt.trim()) {
-    parts.push(characterPrompt.trim());
-  }
-
-  if (stylePrompt) {
-    parts.push(`Style: ${stylePrompt.trim()}`);
-  }
-
-  parts.push(`Scene: ${originalPrompt}`);
-
-  return parts.join(' ');
-}
-
-/**
- * 통합 이미지 생성 함수
- * - 선택된 모델에 따라 적절한 서비스 호출
+ * 이미지 생성 함수 (Gemini 전용)
+ * - Gemini 서비스 호출
+ * - 참조 이미지 지원 (캐릭터/스타일)
  *
  * @param scene - 씬 데이터 (나레이션, 비주얼 프롬프트 등)
- * @param referenceImages - 참조 이미지 배열 (base64)
+ * @param referenceImages - 분리된 참조 이미지 (캐릭터/스타일)
  * @returns base64 인코딩된 이미지 또는 null
  */
 export async function generateImage(
   scene: ScriptScene,
-  referenceImages: string[]
+  referenceImages: ReferenceImages
 ): Promise<string | null> {
   const modelId = getSelectedImageModel();
-  const hasReferenceImages = referenceImages && referenceImages.length > 0;
+  const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
+  const hasStyleRef = referenceImages.style && referenceImages.style.length > 0;
 
-  console.log(`[Image Service] 모델: ${modelId}, 참조 이미지: ${hasReferenceImages ? referenceImages.length + '개' : '없음'}`);
+  console.log(`[Image Service] 모델: ${modelId}`);
+  console.log(`[Image Service] 캐릭터 참조: ${hasCharacterRef ? referenceImages.character.length + '개' : '없음'}`);
+  console.log(`[Image Service] 스타일 참조: ${hasStyleRef ? referenceImages.style.length + '개' : '없음'}`);
 
-  if (modelId === 'fal-ai/flux/schnell') {
-    // Flux.1 Schnell 사용
-    // Flux는 참조 이미지를 지원하지 않음 → 선택한 스타일 프롬프트 추가
-    const fluxPrompt = createFluxPrompt(scene.visualPrompt);
-    const result = await generateImageWithFlux(fluxPrompt);
-    return result;
-  } else {
-    // 기본: Gemini 사용 (참조 이미지 지원)
-    return await generateWithGemini(scene, referenceImages);
-  }
+  // Gemini 사용 (참조 이미지 지원)
+  return await generateWithGemini(scene, referenceImages);
 }

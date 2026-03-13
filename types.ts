@@ -1,4 +1,20 @@
 
+// 참조 이미지 타입 (캐릭터/스타일 분리 + 강도 조절)
+export interface ReferenceImages {
+  character: string[];      // 캐릭터 참조 이미지 (최대 2장) - 캐릭터 외모/스타일 참조
+  style: string[];          // 스타일 참조 이미지 (최대 2장) - 화풍/분위기 참조
+  characterStrength: number; // 캐릭터 참조 강도 (0~100, 기본 70)
+  styleStrength: number;     // 스타일 참조 강도 (0~100, 기본 70)
+}
+
+// 기본 참조 이미지 설정
+export const DEFAULT_REFERENCE_IMAGES: ReferenceImages = {
+  character: [],
+  style: [],
+  characterStrength: 70,
+  styleStrength: 70
+};
+
 export interface SceneAnalysis {
   composition_type: 'MICRO' | 'STANDARD' | 'MACRO';
   composition_explanation: string; // 구도_설명
@@ -67,11 +83,15 @@ export interface SubtitleData {
 export interface SubtitleConfig {
   wordsPerLine: number;      // 한 줄당 단어 수 (기본: 5)
   maxLines: number;          // 최대 줄 수 (기본: 2)
-  fontSize: number;          // 폰트 크기 (기본: 32)
-  fontFamily: string;        // 폰트 (기본: Noto Sans KR)
-  bottomMargin: number;      // 하단 여백 (기본: 60)
-  backgroundColor: string;   // 배경색 (기본: rgba(0,0,0,0.75))
-  textColor: string;         // 텍스트 색상 (기본: #FFFFFF)
+  fontSize: number;          // 폰트 크기 (기본: 40)
+  fontFamily: string;        // 폰트
+  fontWeight: number;        // 굵기 (100~900)
+  bottomMargin: number;      // 상하 여백
+  backgroundColor: string;   // 배경색
+  textColor: string;         // 텍스트 색상
+  strokeColor: string;       // 테두리 색상
+  strokeWidth: number;       // 테두리 굵기 (0 = 없음)
+  position: 'top' | 'middle' | 'bottom';  // 자막 위치
 }
 
 // 기본 자막 설정
@@ -80,9 +100,13 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   maxLines: 1,
   fontSize: 40,
   fontFamily: '"Noto Sans KR", "Malgun Gothic", sans-serif',
+  fontWeight: 700,
   bottomMargin: 80,
   backgroundColor: 'rgba(0, 0, 0, 0.75)',
-  textColor: '#FFFFFF'
+  textColor: '#FFFFFF',
+  strokeColor: '#000000',
+  strokeWidth: 4,
+  position: 'bottom'
 };
 
 export interface GeneratedAsset extends ScriptScene {
@@ -123,9 +147,6 @@ export interface ProjectSettings {
 
   // 이미지 모델 설정
   imageModel: string;
-  fluxStyle: string;
-  fluxCustomStyle: string;
-  fluxCharacter: string;
 
   // TTS 설정
   elevenLabsVoiceId: string;
@@ -142,8 +163,6 @@ export interface SavedProject {
   // 설정
   settings: {
     imageModel: string;
-    fluxStyle: string;
-    fluxCharacter: string;
     elevenLabsModel: string;
   };
 

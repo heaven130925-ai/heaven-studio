@@ -3,14 +3,14 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import InputSection from './components/InputSection';
 import ResultTable from './components/ResultTable';
-import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown } from './types';
-import { generateScript, findTrendingTopics, generateAudioForScene, generateMotionPrompt } from './services/geminiService';
+import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt, extractCharactersFromScript, generateCharacterImage, CharacterInfo } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
 import { generateVideoFromImage, getFalApiKey } from './services/falService';
-import { saveProject, getSavedProjects, deleteProject } from './services/projectService';
+import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
@@ -26,7 +26,8 @@ const App: React.FC = () => {
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
-  const [currentReferenceImages, setCurrentReferenceImages] = useState<string[]>([]);
+  // 참조 이미지 상태 (강도 포함)
+  const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const [needsKey, setNeedsKey] = useState(false);
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
 
@@ -37,6 +38,10 @@ const App: React.FC = () => {
 
   // 비용 추적
   const [currentCost, setCurrentCost] = useState<CostBreakdown | null>(null);
+
+  // 캐릭터 추출 상태
+  const [characters, setCharacters] = useState<CharacterInfo[]>([]);
+  const [isExtractingCharacters, setIsExtractingCharacters] = useState(false);
   const costRef = useRef<CostBreakdown>({
     images: 0, tts: 0, videos: 0, total: 0,
     imageCount: 0, ttsCharacters: 0, videoCount: 0
@@ -58,14 +63,19 @@ const App: React.FC = () => {
 
   useEffect(() => {
     checkApiKeyStatus();
-    // 저장된 프로젝트 로드
-    setSavedProjects(getSavedProjects());
+    // localStorage → IndexedDB 마이그레이션 및 프로젝트 로드
+    (async () => {
+      await migrateFromLocalStorage(); // 기존 데이터 이전
+      const projects = await getSavedProjects();
+      setSavedProjects(projects);
+    })();
     return () => { isAbortedRef.current = true; };
   }, [checkApiKeyStatus]);
 
   // 프로젝트 목록 새로고침
-  const refreshProjects = useCallback(() => {
-    setSavedProjects(getSavedProjects());
+  const refreshProjects = useCallback(async () => {
+    const projects = await getSavedProjects();
+    setSavedProjects(projects);
   }, []);
 
   const handleOpenKeySelector = async () => {
@@ -115,10 +125,23 @@ const App: React.FC = () => {
     setStep(GenerationStep.COMPLETED);
   };
 
+  const handleReset = () => {
+    if (!window.confirm('생성된 결과물을 모두 초기화하시겠습니까?')) return;
+    isAbortedRef.current = true;
+    isProcessingRef.current = false;
+    assetsRef.current = [];
+    setGeneratedData([]);
+    setStep(GenerationStep.IDLE);
+    setProgressMessage('');
+    resetCost();
+  };
+
   const handleGenerate = useCallback(async (
     topic: string,
-    refImgs: string[],
-    sourceText: string | null
+    refImgs: ReferenceImages,
+    sourceText: string | null,
+    sceneCount: number = 0,
+    imageOnly: boolean = false
   ) => {
     if (isProcessingRef.current) return;
     isProcessingRef.current = true;
@@ -139,6 +162,10 @@ const App: React.FC = () => {
       setCurrentTopic(topic); // 저장용 토픽 기록
       resetCost(); // 비용 초기화
 
+      // 참조 이미지 존재 여부 계산
+      const hasRefImages = (refImgs.character?.length || 0) + (refImgs.style?.length || 0) > 0;
+      console.log(`[App] 참조 이미지 - 캐릭터: ${refImgs.character?.length || 0}개, 스타일: ${refImgs.style?.length || 0}개`);
+
       let targetTopic = topic;
 
       if (topic === "Manual Script Input" && sourceText) {
@@ -155,7 +182,28 @@ const App: React.FC = () => {
       }
 
       setProgressMessage(`스토리보드 및 메타포 생성 중...`);
-      const scriptScenes = await generateScript(targetTopic, refImgs.length > 0, sourceText);
+
+      // 긴 대본(3000자 초과) 감지 시 청크 분할 처리
+      const inputLength = sourceText?.length || 0;
+      const CHUNK_THRESHOLD = 3000; // 3000자 초과 시 청크 분할
+
+      let scriptScenes: ScriptScene[];
+      if (inputLength > CHUNK_THRESHOLD) {
+        // 긴 대본: 청크 분할 처리 (10,000자 이상 대응)
+        console.log(`[App] 긴 대본 감지: ${inputLength.toLocaleString()}자 → 청크 분할 처리`);
+        setProgressMessage(`긴 대본(${inputLength.toLocaleString()}자) 청크 분할 처리 중...`);
+        scriptScenes = await generateScriptChunked(
+          targetTopic,
+          hasRefImages,
+          sourceText!,
+          2500, // 청크당 2500자
+          setProgressMessage, // 진행 상황 콜백
+          sceneCount || undefined
+        );
+      } else {
+        // 일반 대본: 기존 방식
+        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
+      }
       if (isAbortedRef.current) return;
       
       const initialAssets = scriptScenes.map(scene => ({
@@ -166,31 +214,82 @@ const App: React.FC = () => {
       setStep(GenerationStep.ASSETS);
 
       const runAudio = async () => {
+          const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
+
+          if (ttsProvider === 'google') {
+            // ── Google TTS: 전체 씬을 한 세션에서 생성 (목소리 일관성) ──
+            try {
+              const narrations = initialAssets.map(a => a.narration);
+              const audioList = await generateAllScenesAudio(narrations, setProgressMessage);
+              if (isAbortedRef.current) return;
+              audioList.forEach((audioData, i) => {
+                if (audioData) {
+                  updateAssetAt(i, { audioData });
+                  console.log(`[TTS] 씬 ${i + 1} Google TTS 배치 완료`);
+                } else {
+                  updateAssetAt(i, { audioData: null });
+                }
+              });
+            } catch (e: any) {
+              console.error('[TTS] Google TTS 배치 실패:', e.message);
+            }
+            return;
+          }
+
+          // ── ElevenLabs: 씬별 생성 ──
+          const TTS_DELAY = 1500;
+          const MAX_TTS_RETRIES = 2;
+
           for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) break;
-              try {
-                  // ElevenLabs에서 오디오 + 자막 타임스탬프 동시 획득
-                  const elResult = await generateAudioWithElevenLabs(
-                    assetsRef.current[i].narration
-                  );
-                  if (isAbortedRef.current) break;
 
-                  if (elResult.audioData) {
-                    // ElevenLabs 성공: 오디오 + 자막 + 길이 데이터 저장
-                    updateAssetAt(i, {
-                      audioData: elResult.audioData,
-                      subtitleData: elResult.subtitleData,
-                      audioDuration: elResult.estimatedDuration
-                    });
-                    // TTS 비용 추가
-                    const charCount = assetsRef.current[i].narration.length;
-                    addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
-                  } else {
-                    // ElevenLabs 실패 시 Gemini 폴백 (자막 없음)
-                    const fallbackAudio = await generateAudioForScene(assetsRef.current[i].narration);
-                    updateAssetAt(i, { audioData: fallbackAudio });
+              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+              let success = false;
+
+              for (let attempt = 0; attempt <= MAX_TTS_RETRIES && !success; attempt++) {
+                  if (isAbortedRef.current) break;
+                  try {
+                      if (attempt > 0) {
+                          console.log(`[TTS] 씬 ${i + 1} 재시도 중... (${attempt}/${MAX_TTS_RETRIES})`);
+                          await wait(3000);
+                      }
+                      const elResult = await generateAudioWithElevenLabs(assetsRef.current[i].narration);
+                      if (isAbortedRef.current) break;
+                      if (elResult.audioData) {
+                          updateAssetAt(i, {
+                            audioData: elResult.audioData,
+                            subtitleData: elResult.subtitleData,
+                            audioDuration: elResult.estimatedDuration
+                          });
+                          const charCount = assetsRef.current[i].narration.length;
+                          addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
+                          success = true;
+                          console.log(`[TTS] 씬 ${i + 1} ElevenLabs 완료`);
+                      } else {
+                          throw new Error('ElevenLabs 응답 없음');
+                      }
+                  } catch (e: any) {
+                      console.error(`[TTS] 씬 ${i + 1} 실패 (시도 ${attempt + 1}):`, e.message);
+                      if (e.message?.includes('429') || e.message?.includes('rate')) {
+                          await wait(5000);
+                      }
                   }
-              } catch (e) { console.error(e); }
+              }
+
+              // ElevenLabs 실패 시 Google TTS 폴백
+              if (!success && !isAbortedRef.current) {
+                  try {
+                      console.log(`[TTS] 씬 ${i + 1} Google TTS 폴백 시도...`);
+                      const fallbackAudio = await generateAudioForScene(assetsRef.current[i].narration);
+                      updateAssetAt(i, { audioData: fallbackAudio });
+                  } catch (fallbackError) {
+                      console.error(`[TTS] 씬 ${i + 1} Google TTS 폴백도 실패:`, fallbackError);
+                  }
+              }
+
+              if (i < initialAssets.length - 1 && !isAbortedRef.current) {
+                  await wait(TTS_DELAY);
+              }
           }
       };
 
@@ -300,9 +399,9 @@ const App: React.FC = () => {
         }
       };
 
-      setProgressMessage(`시각 에셋 및 오디오 합성 중...`);
-      // 이미지와 오디오 먼저 병렬 생성
-      await Promise.all([runAudio(), runImages()]);
+      setProgressMessage(imageOnly ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
+      // imageOnly 모드: 이미지만 생성, 아니면 병렬 생성
+      await Promise.all(imageOnly ? [runImages()] : [runAudio(), runImages()]);
 
       // 애니메이션 변환은 이제 수동으로 (이미지 호버 시 버튼 클릭)
       // 자동 변환 비활성화 - 사용자가 원하는 이미지만 선택적으로 변환 가능
@@ -334,6 +433,118 @@ const App: React.FC = () => {
     }
   }, [checkApiKeyStatus, refreshProjects]);
 
+  // 이미지 재생성 핸들러 (useCallback으로 메모이제이션)
+  const handleRegenerateImage = useCallback(async (idx: number) => {
+    if (isProcessingRef.current) return;
+
+    const MAX_RETRIES = 2;
+    updateAssetAt(idx, { status: 'generating' });
+    setProgressMessage(`씬 ${idx + 1} 이미지 재생성 중...`);
+
+    let success = false;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES && !success; attempt++) {
+      if (isAbortedRef.current) break;
+
+      try {
+        if (attempt > 0) {
+          setProgressMessage(`씬 ${idx + 1} 이미지 재생성 재시도 중... (${attempt}/${MAX_RETRIES})`);
+          await wait(2000);
+        }
+
+        const img = await generateImage(assetsRef.current[idx], currentReferenceImages);
+
+        if (img && !isAbortedRef.current) {
+          updateAssetAt(idx, { imageData: img, status: 'completed' });
+          // 이미지 비용 추가
+          const imageModel = getSelectedImageModel();
+          const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
+          addCost('image', imagePrice, 1);
+          setProgressMessage(`씬 ${idx + 1} 이미지 재생성 완료! (+${formatKRW(imagePrice)})`);
+          success = true;
+        } else if (!img) {
+          throw new Error('이미지 데이터가 비어있습니다');
+        }
+      } catch (e: any) {
+        console.error(`씬 ${idx + 1} 재생성 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1}):`, e.message);
+
+        if (e.message?.includes("API key not valid") || e.status === 400) {
+          setNeedsKey(true);
+          break;
+        }
+      }
+    }
+
+    if (!success && !isAbortedRef.current) {
+      updateAssetAt(idx, { status: 'error' });
+      setProgressMessage(`씬 ${idx + 1} 이미지 생성 실패. 다시 시도해주세요.`);
+    }
+  }, [currentReferenceImages]);
+
+  // 프롬프트 수정 후 재생성 핸들러
+  const handleRegenerateWithPrompt = useCallback(async (idx: number, customPrompt: string) => {
+    if (assetsRef.current[idx]) {
+      assetsRef.current[idx] = { ...assetsRef.current[idx], visualPrompt: customPrompt };
+      setGeneratedData([...assetsRef.current]);
+    }
+    await handleRegenerateImage(idx);
+  }, [handleRegenerateImage]);
+
+  // 애니메이션 생성 핸들러 (useCallback으로 메모이제이션)
+  const handleGenerateAnimation = useCallback(async (idx: number) => {
+    const falKey = getFalApiKey();
+    if (!falKey) {
+      alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
+      return;
+    }
+    if (animatingIndices.has(idx)) return; // 이 씬은 이미 변환 중
+    if (!assetsRef.current[idx]?.imageData) {
+      alert('이미지가 먼저 생성되어야 합니다.');
+      return;
+    }
+
+    try {
+      // Set에 현재 인덱스 추가
+      setAnimatingIndices(prev => new Set(prev).add(idx));
+      setProgressMessage(`씬 ${idx + 1} 움직임 분석 중...`);
+
+      // AI가 대본과 이미지를 분석해서 움직임 프롬프트 생성
+      const motionPrompt = await generateMotionPrompt(
+        assetsRef.current[idx].narration,
+        assetsRef.current[idx].visualPrompt
+      );
+
+      setProgressMessage(`씬 ${idx + 1} 영상 변환 중...`);
+      const videoUrl = await generateVideoFromImage(
+        assetsRef.current[idx].imageData!,
+        motionPrompt,
+        falKey
+      );
+
+      if (videoUrl) {
+        updateAssetAt(idx, {
+          videoData: videoUrl,
+          videoDuration: CONFIG.ANIMATION.VIDEO_DURATION
+        });
+        // 영상 비용 추가
+        addCost('video', PRICING.VIDEO.perVideo, 1);
+        setProgressMessage(`씬 ${idx + 1} 영상 변환 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
+      } else {
+        setProgressMessage(`씬 ${idx + 1} 영상 변환 실패`);
+      }
+    } catch (e: any) {
+      console.error('영상 변환 실패:', e);
+      setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
+    } finally {
+      // Set에서 현재 인덱스 제거
+      setAnimatingIndices(prev => {
+        const next = new Set(prev);
+        next.delete(idx);
+        return next;
+      });
+    }
+  }, [animatingIndices]);
+
   const triggerVideoExport = async (enableSubtitles: boolean = true) => {
     if (isVideoGenerating) return;
     try {
@@ -341,11 +552,18 @@ const App: React.FC = () => {
       const suffix = enableSubtitles ? 'sub' : 'nosub';
       const timestamp = Date.now();
 
+      // localStorage에서 자막 설정 읽기
+      let subtitleConfig: Partial<SubtitleConfig> = {};
+      try {
+        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG);
+        if (saved) subtitleConfig = { ...DEFAULT_SUBTITLE_CONFIG, ...JSON.parse(saved) };
+      } catch {}
+
       const result = await generateVideo(
         assetsRef.current,
         (msg) => setProgressMessage(`[Render] ${msg}`),
         isAbortedRef,
-        { enableSubtitles }
+        { enableSubtitles, subtitleConfig }
       );
 
       if (result) {
@@ -361,10 +579,43 @@ const App: React.FC = () => {
   };
 
   // 프로젝트 삭제 핸들러
-  const handleDeleteProject = (id: string) => {
-    deleteProject(id);
-    refreshProjects();
+  const handleDeleteProject = async (id: string) => {
+    await deleteProject(id);
+    await refreshProjects();
   };
+
+  // 캐릭터 추출 핸들러
+  const handleExtractCharacters = useCallback(async (script: string) => {
+    if (isExtractingCharacters) return;
+    setIsExtractingCharacters(true);
+    setCharacters([]);
+    try {
+      const extracted = await extractCharactersFromScript(script);
+      if (extracted.length === 0) {
+        alert('등장인물을 찾을 수 없습니다. 대본에 구체적인 인물이 포함되어 있는지 확인하세요.');
+        return;
+      }
+      // 플레이스홀더로 먼저 표시
+      setCharacters(extracted.map(c => ({ ...c, imageData: null })));
+      // 각 캐릭터 이미지 생성
+      for (let i = 0; i < extracted.length; i++) {
+        try {
+          const img = await generateCharacterImage(extracted[i]);
+          setCharacters(prev => {
+            const next = [...prev];
+            next[i] = { ...next[i], imageData: img };
+            return next;
+          });
+        } catch (e) {
+          console.error(`캐릭터 ${extracted[i].name} 이미지 생성 실패:`, e);
+        }
+      }
+    } catch (e: any) {
+      alert(`캐릭터 추출 실패: ${e.message}`);
+    } finally {
+      setIsExtractingCharacters(false);
+    }
+  }, [isExtractingCharacters]);
 
   // 프로젝트 불러오기 핸들러
   const handleLoadProject = (project: SavedProject) => {
@@ -376,6 +627,47 @@ const App: React.FC = () => {
     setProgressMessage(`"${project.name}" 프로젝트 불러옴`);
     setViewMode('main'); // 메인 뷰로 전환
   };
+
+  // Gemini API 키 미설정 시 셋업 화면
+  const hasGeminiKey = !!(localStorage.getItem('tubegen_gemini_key') || process.env.GEMINI_API_KEY);
+  if (!hasGeminiKey) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 space-y-6">
+          <div className="text-center">
+            <div className="text-4xl mb-3">🔑</div>
+            <h1 className="text-2xl font-black text-white">Heaven Studio</h1>
+            <p className="text-slate-400 text-sm mt-2">시작하기 전에 Gemini API 키를 입력하세요</p>
+          </div>
+          <div className="space-y-3">
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Gemini API 키 <span className="text-red-400">*필수</span></label>
+            <input
+              id="setup-gemini-key"
+              type="password"
+              placeholder="AIza..."
+              defaultValue=""
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-brand-500 focus:outline-none"
+            />
+            <p className="text-[11px] text-slate-500">
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">Google AI Studio</a>에서 무료 발급 가능합니다.
+            </p>
+          </div>
+          <button
+            className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-black rounded-xl transition-colors"
+            onClick={() => {
+              const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
+              if (!input) { alert('API 키를 입력해주세요.'); return; }
+              localStorage.setItem('tubegen_gemini_key', input);
+              window.location.reload();
+            }}
+          >
+            시작하기
+          </button>
+          <p className="text-center text-[10px] text-slate-600">키는 이 브라우저에만 저장되며 서버로 전송되지 않습니다</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -439,7 +731,38 @@ const App: React.FC = () => {
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
       <main className="py-8">
-        <InputSection onGenerate={handleGenerate} step={step} />
+        <InputSection onGenerate={handleGenerate} onExtractCharacters={handleExtractCharacters} step={step} />
+
+        {/* 캐릭터 카드 */}
+        {(isExtractingCharacters || characters.length > 0) && (
+          <div className="max-w-7xl mx-auto px-4 mb-10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-black text-slate-200 flex items-center gap-2">
+                <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                등장인물
+                {isExtractingCharacters && <span className="text-xs text-violet-400 font-normal animate-pulse">이미지 생성 중...</span>}
+              </h2>
+              <button onClick={() => setCharacters([])} className="text-[10px] text-slate-500 hover:text-red-400 transition-colors">초기화</button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {characters.map((char, i) => (
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                  <div className="aspect-square bg-slate-800 flex items-center justify-center relative">
+                    {char.imageData ? (
+                      <img src={`data:image/jpeg;base64,${char.imageData}`} alt={char.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent animate-spin rounded-full" />
+                    )}
+                  </div>
+                  <div className="p-3 flex flex-col gap-1">
+                    <p className="text-sm font-black text-white truncate">{char.name}</p>
+                    <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-3">{char.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         
         {step !== GenerationStep.IDLE && (
           <div className="max-w-7xl mx-auto px-4 text-center mb-12">
@@ -451,114 +774,21 @@ const App: React.FC = () => {
                 {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
                   <button onClick={handleAbort} className="ml-2 px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
                 )}
+                {(step === GenerationStep.COMPLETED || step === GenerationStep.ERROR) && generatedData.length > 0 && (
+                  <button onClick={handleReset} className="ml-2 px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
+                )}
              </div>
           </div>
         )}
 
-        <ResultTable 
-            data={generatedData} 
-            onRegenerateImage={async (idx) => {
-              if (isProcessingRef.current) return;
-              
-              const MAX_RETRIES = 2;
-              updateAssetAt(idx, { status: 'generating' });
-              setProgressMessage(`씬 ${idx + 1} 이미지 재생성 중...`);
-              
-              let success = false;
-              
-              for (let attempt = 0; attempt <= MAX_RETRIES && !success; attempt++) {
-                if (isAbortedRef.current) break;
-                
-                try {
-                  if (attempt > 0) {
-                    setProgressMessage(`씬 ${idx + 1} 이미지 재생성 재시도 중... (${attempt}/${MAX_RETRIES})`);
-                    await wait(2000);
-                  }
-                  
-                  const img = await generateImage(assetsRef.current[idx], currentReferenceImages);
-                  
-                  if (img && !isAbortedRef.current) {
-                    updateAssetAt(idx, { imageData: img, status: 'completed' });
-                    // 이미지 비용 추가
-                    const imageModel = getSelectedImageModel();
-                    const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
-                    addCost('image', imagePrice, 1);
-                    setProgressMessage(`씬 ${idx + 1} 이미지 재생성 완료! (+${formatKRW(imagePrice)})`);
-                    success = true;
-                  } else if (!img) {
-                    throw new Error('이미지 데이터가 비어있습니다');
-                  }
-                } catch (e: any) {
-                  console.error(`씬 ${idx + 1} 재생성 실패 (시도 ${attempt + 1}/${MAX_RETRIES + 1}):`, e.message);
-                  
-                  if (e.message?.includes("API key not valid") || e.status === 400) {
-                    setNeedsKey(true);
-                    break;
-                  }
-                }
-              }
-              
-              if (!success && !isAbortedRef.current) {
-                updateAssetAt(idx, { status: 'error' });
-                setProgressMessage(`씬 ${idx + 1} 이미지 생성 실패. 다시 시도해주세요.`);
-              }
-            }}
+        <ResultTable
+            data={generatedData}
+            onRegenerateImage={handleRegenerateImage}
+            onRegenerateWithPrompt={handleRegenerateWithPrompt}
             onExportVideo={triggerVideoExport}
             isExporting={isVideoGenerating}
             animatingIndices={animatingIndices}
-            onGenerateAnimation={async (idx) => {
-              const falKey = getFalApiKey();
-              if (!falKey) {
-                alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
-                return;
-              }
-              if (animatingIndices.has(idx)) return; // 이 씬은 이미 변환 중
-              if (!assetsRef.current[idx]?.imageData) {
-                alert('이미지가 먼저 생성되어야 합니다.');
-                return;
-              }
-
-              try {
-                // Set에 현재 인덱스 추가
-                setAnimatingIndices(prev => new Set(prev).add(idx));
-                setProgressMessage(`씬 ${idx + 1} 움직임 분석 중... (${animatingIndices.size + 1}개 진행중)`);
-
-                // AI가 대본과 이미지를 분석해서 움직임 프롬프트 생성
-                const motionPrompt = await generateMotionPrompt(
-                  assetsRef.current[idx].narration,
-                  assetsRef.current[idx].visualPrompt
-                );
-
-                setProgressMessage(`씬 ${idx + 1} 영상 변환 중...`);
-                const videoUrl = await generateVideoFromImage(
-                  assetsRef.current[idx].imageData!,
-                  motionPrompt,
-                  falKey
-                );
-
-                if (videoUrl) {
-                  updateAssetAt(idx, {
-                    videoData: videoUrl,
-                    videoDuration: CONFIG.ANIMATION.VIDEO_DURATION
-                  });
-                  // 영상 비용 추가
-                  addCost('video', PRICING.VIDEO.perVideo, 1);
-                  setProgressMessage(`씬 ${idx + 1} 영상 변환 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
-                } else {
-                  setProgressMessage(`씬 ${idx + 1} 영상 변환 실패`);
-                }
-              } catch (e: any) {
-                console.error('영상 변환 실패:', e);
-                setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
-              } finally {
-                // Set에서 현재 인덱스 제거
-                setAnimatingIndices(prev => {
-                  const next = new Set(prev);
-                  next.delete(idx);
-                  return next;
-                });
-              }
-            }}
+            onGenerateAnimation={handleGenerateAnimation}
         />
       </main>
       )}

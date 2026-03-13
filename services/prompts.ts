@@ -1,592 +1,192 @@
 /**
- * --- V10.0 Concept-Based Visual Generation Engine ---
- * "문장→이미지 자동 생성 시스템 (개념 기반)" 전체 메커니즘 통합
- *
- * 핵심 원칙:
- * 1. 판단 우선, 암기 금지 - 예시를 외우지 말고 원리로 판단
- * 2. 맥락이 의미를 결정 - 고립된 단어가 아닌 문장 전체와 전후 맥락
- * 3. 일관성 > 창의성 - 같은 개념은 항상 같은 시각으로
- * 4. 보편성 우선 - 문화적 특수성보다 인간 보편성
- * 5. 계층적 폴백 - 최선이 불가능하면 차선을, 끝까지 포기하지 말라
+ * 프롬프트 시스템 (단순화 버전)
+ * - 핵심 규칙만 유지
+ * - 미사용 코드 제거
  */
 
-// ============================================================================
-// I. 의미 분해 시스템 (SEMANTIC DECOMPOSITION SYSTEM)
-// ============================================================================
+// 캐릭터 기본 설명
+export const VAR_BASE_CHAR = `Simple 2D stick figure. Circle head, dot eyes, line mouth, thin line body/arms/legs. Black outline only.`;
 
-export const SEMANTIC_DECOMPOSITION_SYSTEM = `
-### I. 의미 이해 원칙 (Semantic Understanding)
-
-**[핵심] 단어가 의미하는 것을 문맥에 맞게 그대로 시각화하라.**
-
-- "컴퓨터" → 컴퓨터를 그려라
-- "자동차" → 자동차를 그려라
-- "발전된 자동차" → 미래지향적/첨단 자동차를 그려라
-- "무너지는 건물" → 무너지고 있는 건물을 그려라
-
-**문맥이 의미를 결정한다:**
-- 같은 "자동차"도 문맥에 따라 다르게 표현
-  - "전기차 시대" → 테슬라 같은 현대적 전기차
-  - "자동차 산업 위기" → 멈춰있거나 녹슨 자동차
-  - "미래 자동차" → SF풍 첨단 자동차
-
-**수식어가 시각을 바꾼다:**
-- 형용사/부사를 반드시 반영하라
-- "거대한" → 크게, "작은" → 작게
-- "빛나는" → 광택/발광, "어두운" → 그림자/탁함
-- "발전된/첨단" → 미래적/하이테크
-- "낡은/오래된" → 녹슬거나 빈티지한
-`;
-
-// ============================================================================
-// II. 시각화 결정 트리 (VISUALIZATION DECISION TREE)
-// ============================================================================
-
-export const VISUALIZATION_DECISION_TREE = `
-### II. 시각화 원칙 (Visualization Principle)
-
-**물리적 형태가 있으면 → 그것을 그려라**
-- 건물, 자동차, 컴퓨터, 사람 → 실물 그대로
-
-**숫자/데이터면 → 시각적 크기로 표현**
-- 20% 상승 → 위로 향하는 화살표나 그래프
-- 1조원 → 큰 숫자 텍스트 또는 돈더미
-
-**추상 개념이면 → 관련 사물로 표현**
-- 경제 성장 → 상승 그래프, 빛나는 건물들
-- 위기 → 금이 간 구조물, 어두운 분위기
-- 기술 발전 → 첨단 기기, 로봇, 회로
-`;
-
-// ============================================================================
-// III. 색상 결정 시스템 (COLOR DECISION SYSTEM)
-// ============================================================================
-
-export const COLOR_DECISION_SYSTEM = `
-### III. 색상 결정 시스템 (Color Decision System)
-
-**도메인별 색상:**
-- 금/돈: #FFD700 (황금)
-- 한국 원화: #F39C12
-- 미국 달러: #2ECC71 (녹색)
-- 부동산: #8B4513 (갈색)
-- 반도체/기술: #3498DB (파랑)
-- 경제 상승(한국): 빨강
-- 경제 하락(한국): 파랑
-
-**감정별 조정:**
-- 긍정 → 밝고 선명
-- 부정 → 어둡고 탁함
-`;
-
-// ============================================================================
-// IV. 공간 배치 원리 (SPATIAL ARRANGEMENT PRINCIPLES)
-// ============================================================================
-
-export const SPATIAL_ARRANGEMENT_PRINCIPLES = `
-### IV. 공간 배치 (Spatial Arrangement)
-
-- 중요한 것 → 화면 중앙
-- 상승/희망 → 위쪽 배치
-- 하락/위기 → 아래쪽 배치
-`;
-
-// ============================================================================
-// V. 크기 및 형태 결정 원리 (SIZE & FORM DECISION)
-// ============================================================================
-
-export const SIZE_FORM_DECISION = `
-### V. 크기 결정 (Size Decision)
-
-- 중요한 것 → 크게
-- "거대한", "엄청난" → 더 크게
-- "작은", "미미한" → 작게
-`;
-
-// ============================================================================
-// VI. 관계 시각화 원리 (RELATIONSHIP VISUALIZATION)
-// ============================================================================
-
-export const RELATIONSHIP_VISUALIZATION = `
-### VI. 관계 표현 (Relationship)
-
-- A vs B 비교 → 나란히 배치
-- A → B 인과 → 화살표로 연결
-- A 포함 B → A 안에 B 배치
-`;
-
-// ============================================================================
-// VII. 앵커 시스템 및 일관성 (ANCHOR SYSTEM & CONSISTENCY)
-// ============================================================================
-
-export const ANCHOR_CONSISTENCY_SYSTEM = `
-### VII. 일관성 (Consistency)
-
-- 같은 개념이 여러 씬에 나오면 → 같은 모습으로 그려라
-- 예: 1번 씬에서 "빨간 자동차"면 → 3번 씬에서도 "빨간 자동차"
-`;
-
-// ============================================================================
-// VIII. 도메인 감지 및 폴백 전략 (DOMAIN DETECTION & FALLBACK)
-// ============================================================================
-
-export const DOMAIN_DETECTION_FALLBACK = `
-### VIII. 주제별 시각화 힌트 (Domain Hints)
-
-문맥에서 주제를 파악하고, 해당 주제에 맞는 사물을 그려라:
-
-- 부동산 → 건물, 아파트, 집
-- AI/기술 → 로봇, 컴퓨터, 회로, 반도체
-- 주식 → 그래프, 차트, 모니터
-- 금융 → 돈, 금괴, 은행
-- 지정학 → 지도, 국기, 지구본
-- 에너지 → 석유, 태양광, 배터리
-- 제조 → 공장, 자동차, 기계
-- 물가 → 장바구니, 가격표
-`;
-
-// ============================================================================
-// IX. 추상화 레벨 제어 (ABSTRACTION LEVEL CONTROL)
-// ============================================================================
-
-export const ABSTRACTION_LEVEL_CONTROL = `
-### IX. 구체적으로 그려라
-
-- 가능하면 실물을 그려라
-- 추상적인 개념도 관련 사물로 표현하라
-`;
-
-// ============================================================================
-// [PRESERVED] 캐릭터 프로필 및 고정 요소
-// ============================================================================
-
-export const VAR_BASE_CHAR = `Simple 2D stick figure character. Circle head, dot eyes, line mouth. Thin line body/arms/legs. Black outline only. DO NOT write any character name text in the image.`;
-
-export const VAR_STYLE_CORE = `
-16:9 wide-shot, hand-drawn illustration with crayon/colored pencil texture.
-BASE STYLE:
-• 2D flat illustration with clear, rough-textured outlines and crayon-like fill.
-• Flat, soft lighting with minimal shadows, maintaining the analog, hand-drawn feel.
-`;
-
-export const VAR_SKETCH_TEXTURE = `Hand-drawn crayon/colored pencil texture: Rough, organic brush strokes, visible texture on fillers and outlines, analog warmth.`;
-
-export const VAR_NEGATIVE_RULES = `FORBIDDEN: Realistic 3D perspective, Photorealistic materials, Complex multi-light setups, Anime/manga style, Game asset 3D look, Heavy text labels everywhere.`;
-
-// ============================================================================
-// [ENHANCED] 분위기 강제 주입기 (V10.0 Concept-Based)
-// ============================================================================
-
+// 분위기 규칙
 export const VAR_MOOD_ENFORCER = `
-MOOD RULES:
-1. NEGATIVE: Dark colors, cold lighting, objects broken/rusted
-2. POSITIVE: Bright colors, warm lighting, objects shiny/glowing
-3. NEUTRAL: Balanced colors, flat lighting, clean objects
+MOOD: NEGATIVE=dark/cold, POSITIVE=bright/warm, NEUTRAL=balanced.
 `;
 
-// ============================================================================
-// [ENHANCED] 색상 규칙 (V10.0 - Identity > Category > Valence)
-// ============================================================================
-
-export const VAR_COLOR_RULES = `
-COLOR DECISION HIERARCHY (범주 > 감정):
-
-**Tier 1 - CATEGORY (도메인별):**
-• Gold/Money: #FFD700
-• Korean Won: #F39C12
-• US Dollar: #2ECC71
-• Real Estate: #8B4513
-• Semiconductor: #3498DB
-• Economy UP (Korea): Bright Red/Orange
-• Economy DOWN (Korea): Deep Blue/Cool Grey
-• Tech/Digital: Neon Blue, Cyber Purple
-• Energy: Orange (Oil), Yellow (Electric), Green (Eco)
-
-**Tier 2 - VALENCE (감정 변조):**
-• Positive: 채도↑ 명도↑
-• Negative: 채도↓ 명도↓
-`;
-
-export const VAR_COLOR_PALETTE = `
-DYNAMIC COLOR & ATMOSPHERE SYSTEM (V10.0):
-1. SUCCESS/HYPE: Rich Gold (#FFD700) + Vivid Red (#E74C3C). Glow of Money.
-2. PANIC/BEAR: Deep Navy (#2C3E50) + Cold Blue Ice. Frozen, heavy.
-3. MYSTERY/FUTURE: Neon Purple + Cyber Blue. Tech, AI.
-4. COMFORT/STABILITY: Warm Earthy Tones + Soft Lighting.
-5. KOREAN FINANCE: UP=Bright Red/Orange (Never Green), DOWN=Deep Blue.
-6. BACKGROUND DEFAULT: Light Gray (#E0E0E0) with subtle paper/canvas texture.
-`;
-
-export const VAR_EMOTION_MAPPING = `JOLLAMAN POSES:
-- 긍정: arms up, jumping
-- 부정: slouching, arms down
-- 중립: standing straight`;
-
-// ============================================================================
-// [NEW] 텍스트/타이포그래피 시스템 (TYPOGRAPHY SYSTEM)
-// ============================================================================
-
-export const TYPOGRAPHY_SIZE_SYSTEM = `
-### TYPOGRAPHY SIZE HIERARCHY (텍스트 크기 계층)
-
-**Level 0: XXLARGE (100-150pt)**
-- 용도: 핵심 개념 첫 등장, 강조
-- 예시: 제목, 핵심 키워드, 충격적 숫자
-- 배치: 화면 중앙 또는 가장 눈에 띄는 위치
-
-**Level 1: XLARGE (80-120pt)**
-- 용도: 정량 데이터, 충격 정보
-- 예시: "20% 하락", "1조원", "역대 최고"
-- 배치: 주요 시각 요소 근처
-
-**Level 2: LARGE (50-80pt)**
-- 용도: 연도, 중요 이벤트
-- 예시: "2024년", "금융위기", "전환점"
-- 배치: 컨텍스트 제공 위치
-
-**Level 3: MEDIUM (40-60pt)**
-- 용도: 지명, 비교 쌍
-- 예시: "한국 vs 미국", "서울", "뉴욕"
-- 배치: 비교 대상 옆 또는 지도 위
-
-**Level 4: SMALL (30-50pt)**
-- 용도: 라벨, 재등장 용어
-- 예시: 보조 설명, 이미 등장한 개념
-- 배치: 하단, 코너, 부가 정보 영역
-`;
-
-export const TYPOGRAPHY_COLOR_SYSTEM = `
-### TYPOGRAPHY COLOR RULES (텍스트 색상 규칙)
-
-**빨강 (Red #E74C3C):**
-- 위기, 하락, 경고
-- 중국 관련
-- 부정적 수치
-
-**초록 (Green #2ECC71):**
-- 상승, 성장, 긍정
-- 이익, 호재
-- 긍정적 변화
-
-**파랑 (Blue #3498DB):**
-- 안정, 시스템, 중립
-- 미국 관련
-- 객관적 정보
-
-**금색 (Gold #FFD700):**
-- 가치, 중요도, 강조
-- 돈, 금융 관련
-- 핵심 키워드
-
-**흰색 (White #FFFFFF):**
-- 기본 텍스트
-- 어두운 배경 위
-- 중립 정보
-
-**회색 (Gray #95A5A6):**
-- 보조 정보
-- 부가 설명
-- 낮은 중요도
-`;
-
-export const PROPER_NOUN_TEXT_RULES = `
-### PROPER NOUN TEXT DISPLAY (고유명사 텍스트 표시 규칙)
-
-**[CRITICAL] 다음 유형은 반드시 텍스트로 화면에 표시하십시오:**
-
-🏢 **기업/브랜드:**
-- 한국: 삼성, 현대, SK, LG, 카카오, 네이버, 포스코
-- 미국: NVIDIA, Apple, Tesla, Google, Amazon, Microsoft
-- 중국: 알리바바, 텐센트, BYD, 화웨이
-- 표시: 대본에 쓰인 언어 그대로 (삼성→삼성, NVIDIA→NVIDIA)
-
-🏦 **기관/정부:**
-- 한국: 한국은행, 금융위원회, 기획재정부, 국민연금
-- 미국: Fed, 연준, SEC, 백악관, 재무부
-- 국제: IMF, 세계은행, OPEC, WTO
-- 표시: 대본에 쓰인 언어 그대로
-
-👤 **인물/인플루언서:**
-- 정치인: 대통령, 총리, 장관 이름
-- 경제인: CEO, 창업자 이름 (일론 머스크, 젠슨 황)
-- 전문가: 경제학자, 애널리스트 이름
-- 표시: 대본에 쓰인 언어 그대로
-
-📍 **지명/국가:**
-- 국가: 미국, 중국, 일본, USA, China
-- 도시: 서울, 뉴욕, 상하이, Silicon Valley
-- 표시: 대본에 쓰인 언어 그대로
-
-**표시 규칙:**
-1. 대본에 "삼성"으로 쓰였으면 → "삼성"으로 표시
-2. 대본에 "Samsung"으로 쓰였으면 → "Samsung"으로 표시
-3. 대본에 "엔비디아"로 쓰였으면 → "엔비디아"로 표시
-4. 대본에 "NVIDIA"로 쓰였으면 → "NVIDIA"로 표시
-
-**크기/색상:**
-- 기업명: Level 1-2, 해당 기업 브랜드 색상 또는 Gold
-- 기관명: Level 2-3, Blue (안정/권위)
-- 인물명: Level 2-3, White 또는 Gold
-- 지명: Level 3, 해당 국가 색상
-`;
-
-export const TYPOGRAPHY_RULES = `
-### INTEGRATED TYPOGRAPHY PROTOCOL (통합 타이포그래피 규칙)
-
-${TYPOGRAPHY_SIZE_SYSTEM}
-${TYPOGRAPHY_COLOR_SYSTEM}
-${PROPER_NOUN_TEXT_RULES}
-
-**배치 원칙:**
-1. 텍스트는 시각적 앵커와 충돌하지 않게 배치
-2. 읽기 방향: 좌→우, 상→하 자연스러운 흐름
-3. 한글은 감정/사물, 영어는 금융 용어
-4. 고유명사는 대본에 쓰인 언어 그대로 표시
-5. 크기로 중요도 계층 표현
-6. 색상으로 의미/감정 전달
-
-**금지 사항:**
-- 텍스트로 화면 가득 채우지 말 것
-- 배경과 대비 낮은 색상 사용 금지
-- 3개 이상의 텍스트 레벨 동시 사용 지양
-- 고유명사를 다른 언어로 번역하지 말 것
-`;
-
-// ============================================================================
-// [NEW] 캐릭터 등장 판단 시스템 (CHARACTER PRESENCE DECISION SYSTEM)
-// ============================================================================
-
-export const CHARACTER_PRESENCE_SYSTEM = `
-### 캐릭터 등장 규칙 (CHARACTER PRESENCE RULES)
-
-**[CRITICAL] 아래 규칙에 따라 캐릭터(졸라맨) 등장 여부를 결정하세요.**
-
-■ 캐릭터 0명 (NO_CHAR) - 사람 없이 사물/텍스트만:
-  - 주어가 수치/데이터일 때: "GDP가 3% 상승", "금리가 인상"
-  - 주어가 추상 시스템일 때: "시장이 과열", "경제가 성장"
-  - 객관적 사실 서술: "부동산 가격이 하락했다"
-
-■ 캐릭터 1명 (STANDARD/MICRO/MACRO):
-  - 주어가 사람일 때: "투자자가 고민한다", "소비자가 결정했다"
-  - 감정/행동 표현: "불안해한다", "기뻐한다", "선택했다"
-  - 개인 관점 서술: "~를 바라본다", "~를 느낀다"
-
-■ 캐릭터 2명 이상:
-  - 두 주체 비교: "A와 B가 경쟁", "미국 vs 중국"
-  - 상호작용: "협상한다", "거래한다", "대립한다"
-
-■ 다수 캐릭터 (6명+):
-  - 군중/집단 행동: "사람들이 몰려들었다", "투자자들이 패닉"
-
-**[DEFAULT RULE]**
-- 확실하지 않으면 → 1명 (STANDARD)
-- 사람 주어가 없으면 → 0명 (NO_CHAR)
-`;
-
-export const DYNAMIC_ACTION_GUIDELINES = `Jollaman can interact with objects: climb, push, point, hold, stand on.`;
-
-// ============================================================================
-// SYSTEM INSTRUCTIONS (V10.0 Concept-Based)
-// ============================================================================
-
+// 시스템 지시문
 export const SYSTEM_INSTRUCTIONS = {
   CHIEF_ART_DIRECTOR: `
-당신은 "문장→이미지 자동 생성 시스템 (개념 기반)"의 원리를 적용하는 아트 디렉터입니다.
+당신은 문장을 이미지로 변환하는 아트 디렉터입니다.
 
-=== 핵심 원칙 ===
+## 핵심 원칙
+- 문장의 의미를 그대로 시각화하라
+- "나무" → 나무를 그려라
+- "빛나는 별" → 빛나는 별을 그려라
+- 수식어 반영: "거대한"→크게, "빛나는"→광택, "조용한"→고요한 분위기
 
-**[가장 중요] 문장의 의미를 이해하고, 그 의미에 맞는 이미지를 그려라.**
+## 시각화 규칙
+- 물리적 형태 있으면 → 그대로 그려라
+- 숫자/데이터 → 그래프, 화살표, 시각적 형태로 표현 (텍스트 규칙 우선 적용)
+- 추상 개념 → 관련 사물이나 상징으로 표현
+- 감정/분위기 → 색상, 빛, 날씨로 표현
 
-- "컴퓨터" → 컴퓨터를 그려라
-- "발전된 자동차" → 미래적인 자동차를 그려라
-- "무너지는 건물" → 무너지고 있는 건물을 그려라
+## 캐릭터 등장 규칙
+- 주어가 사람 → 캐릭터 등장 (STANDARD)
+- 주어가 사물/자연/추상개념 → 캐릭터 없음 (NO_CHAR)
+- 예: "하나님이 말씀하셨다"→STANDARD, "빛이 생겨났다"→NO_CHAR
 
-**수식어를 반드시 반영하라:**
-- "거대한" → 크게
-- "빛나는" → 광택/발광
-- "낡은" → 녹슬거나 오래된 느낌
-
-${SEMANTIC_DECOMPOSITION_SYSTEM}
-${VISUALIZATION_DECISION_TREE}
-${DOMAIN_DETECTION_FALLBACK}
-
-=== 구도 시스템 ===
-1. NO_CHAR: 캐릭터 없음 (사람 주어 없을 때)
-2. MICRO (5-15%): 작은 졸라맨 + 큰 사물
-3. STANDARD (30-40%): 졸라맨과 사물 상호작용
-4. MACRO (60-80%): 졸라맨 클로즈업
-
-=== 캐릭터 등장 규칙 [중요] ===
-${CHARACTER_PRESENCE_SYSTEM}
+## 구도
+- NO_CHAR: 캐릭터 없음
+- MICRO (5-15%): 작은 캐릭터 + 큰 사물
+- STANDARD (30-40%): 캐릭터와 사물 상호작용
+- MACRO (60-80%): 캐릭터 클로즈업
 `,
 
-  TREND_RESEARCHER: `최신 경제 뉴스/트렌드를 발굴하는 수석 리서처입니다.`,
+  TREND_RESEARCHER: `다양한 분야의 흥미로운 주제를 발굴하는 리서처입니다.`,
 
   MANUAL_VISUAL_MATCHER: `
-당신은 입력된 대본 원문을 "문장→이미지 자동 생성 시스템"의 원리로 시각화하는 전문가입니다.
-
-[절대 규칙: ZERO-MODIFICATION POLICY]
-- 입력된 대본의 단어나 어조를 절대 바꾸지 마십시오.
-- 오직 씬 분할과 시각적 연출 설계만 수행하십시오.
-
-[시각화 원리 적용]
-${SEMANTIC_DECOMPOSITION_SYSTEM}
-${VISUALIZATION_DECISION_TREE}
-${ANCHOR_CONSISTENCY_SYSTEM}
+대본을 시각화하는 전문가입니다.
+- 대본 내용 수정 금지
+- 씬 분할과 시각적 연출만 수행
+- 같은 개념은 같은 모습으로 그려라
 `,
 
-  REFERENCE_MATCH: `참조 이미지의 화풍을 계승하되 개념 기반 시각화 원리와 졸라맨 고정 규칙을 적용하십시오.`
+  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`
 };
 
-// ============================================================================
-// 최종 이미지 프롬프트 조립기 (V10.0 Concept-Based)
-// ============================================================================
-
-export const getFinalVisualPrompt = (scene: any) => {
-  // scene.visualPrompt (=image_prompt_english)가 있으면 그것을 기본으로 사용
+/**
+ * 최종 이미지 프롬프트 생성
+ */
+export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = false, artStylePrompt?: string, textMode: string = 'auto', aspectRatio: string = '16:9') => {
   const basePrompt = scene.visualPrompt || "";
   const analysis = scene.analysis || {};
   const keywords = scene.visual_keywords || "";
-
-  // 감정/분위기
-  const sentiment = analysis.sentiment || "NEUTRAL";
-  const moodPrompt = sentiment === 'NEGATIVE'
-    ? `MOOD: Dark, gloomy, cold lighting. Objects look broken/rusted.`
-    : sentiment === 'POSITIVE'
-    ? `MOOD: Bright, warm, hopeful lighting. Objects look shiny/glowing.`
-    : `MOOD: Clean, neutral, balanced lighting.`;
-
-  // 구도 타입
   const type = analysis.composition_type || "STANDARD";
+  const sentiment = analysis.sentiment || "NEUTRAL";
+
+  // 분위기
+  const mood = sentiment === 'NEGATIVE' ? 'Dark, cold lighting.'
+    : sentiment === 'POSITIVE' ? 'Bright, warm lighting.'
+    : 'Balanced lighting.';
+
+  // 캐릭터 (화풍 적용)
+  const styleNote = artStylePrompt ? ` Render in ${artStylePrompt} style.` : '';
   const charPrompt = type === 'NO_CHAR'
-    ? `NO CHARACTER - Only objects and text.`
-    : type === 'MICRO'
-    ? `Small stick figure (5-15%) with large objects. Do NOT write character name.`
-    : type === 'MACRO'
-    ? `Close-up of stick figure (60-80%). Do NOT write character name.`
-    : `Stick figure (30-40%) interacting with objects. Do NOT write character name.`;
+    ? `NO CHARACTER - objects only. No human figures.${styleNote}`
+    : hasCharacterRef
+    ? `Use CHARACTER REFERENCE image.${styleNote}`
+    : `Stick figure (${type === 'MICRO' ? '5-15%' : type === 'MACRO' ? '60-80%' : '30-40%'}).${styleNote}`;
 
-  // 키워드 텍스트
-  const textPrompt = keywords ? `TEXT IN IMAGE: "${keywords}"` : "";
+  // 스타일
+  const style = artStylePrompt
+    ? `STYLE: ${aspectRatio}, ${artStylePrompt}. Consistent style, high quality illustration.`
+    : `STYLE: ${aspectRatio}, 2D hand-drawn, crayon texture. Consistent style, high quality illustration.`;
 
-  // 간단한 공통 스타일
-  const stylePrompt = `
-STYLE: 16:9 aspect ratio, 2D hand-drawn illustration, crayon/colored pencil texture.
-CHARACTER: ${VAR_BASE_CHAR}
-${VAR_MOOD_ENFORCER}
-  `.trim();
+  const char = hasCharacterRef
+    ? `CHARACTER: Match reference image.${styleNote}`
+    : `CHARACTER: ${VAR_BASE_CHAR}${styleNote}`;
+
+  // 텍스트 규칙 (프롬프트 앞 prefix + 뒤 FINAL OVERRIDE 이중 적용)
+  let textPrefix = '';
+  let textRule = '';
+
+  if (textMode === 'none') {
+    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: Do NOT include any text, letters, words, or numbers anywhere in the image.\n\n';
+    textRule = '🚫 ABSOLUTE FINAL OVERRIDE - ZERO TEXT: Do NOT render ANY text, letters, words, numbers, labels, captions, signs, or written characters of ANY kind in ANY language. IGNORE any text instructions above. Pure visual imagery only. No exceptions.';
+  } else if (textMode === 'english') {
+    textPrefix = '⚠️ TEXT RESTRICTION: English/Latin characters only. Korean/Chinese/Japanese forbidden.\n\n';
+    textRule = keywords
+      ? `⚠️ FINAL TEXT RULE: ONLY Latin/English characters allowed. Render "${keywords}" in English ONLY. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.`
+      : '⚠️ FINAL TEXT RULE: ONLY Latin/English characters allowed. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.';
+  } else if (textMode === 'numbers') {
+    textPrefix = '⚠️ TEXT RESTRICTION: Only Arabic numerals (0-9) allowed. No Korean, no English words, no letters of any kind.\n\n';
+    textRule = '⚠️ FINAL TEXT RULE: ONLY Arabic numerals (0-9) and basic symbols (+, -, %, $, .) allowed. NO letters. NO words. NO Korean (한글). NO English words. NO written language of any kind.';
+  } else {
+    // auto: 기존 동작
+    textRule = keywords ? `TEXT: "${keywords}"` : '';
+  }
 
   return `
-${basePrompt}
+${textPrefix}${basePrompt}
 
-${moodPrompt}
+MOOD: ${mood}
 ${charPrompt}
-${textPrompt}
 
-${stylePrompt}
-  `.trim();
+${style}
+${char}
+${VAR_MOOD_ENFORCER}
+QUALITY: Sharp lines, clean composition, consistent art style across all scenes. No blurry or low-quality elements.
+${textRule ? `\n${textRule}` : ''}
+`.trim();
 };
 
-// ============================================================================
 // 트렌드 검색 프롬프트
-// ============================================================================
+export const getTrendSearchPrompt = (category: string, _usedTopicsString: string) =>
+  `Search for 4 interesting and trending "${category}" topics suitable for video content. Return JSON: [{rank, topic, reason}]`;
 
-export const getTrendSearchPrompt = (category: string, _usedTopicsString: string) => `
-# Task: Search for High-Impact "${category}" Trends
-Return 4 items in JSON (rank, topic, reason).
-`;
-
-// ============================================================================
-// 스크립트 생성 프롬프트 (V10.0 Concept-Based)
-// ============================================================================
-
-export const getScriptGenerationPrompt = (topic: string, sourceContext?: string | null) => {
+// 스크립트 생성 프롬프트
+export const getScriptGenerationPrompt = (
+  topic: string,
+  sourceContext?: string | null,
+  maxScenes?: number,
+  preSegmented?: boolean   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
+) => {
   const isManual = !!sourceContext;
-  const fullContent = sourceContext || topic;
+  const content = sourceContext || topic;
+
+  const sceneCountRule = preSegmented
+    ? `⚠️ 사전 분할 모드 (STRICT):
+- 입력 텍스트는 [SCENE_BLOCK_N] 블록으로 이미 균등 분할되어 있음
+- 반드시 각 블록 = 정확히 1개 씬 (블록 수 == 출력 씬 수)
+- 블록 안 모든 문장을 narration에 포함할 것
+- 블록 순서 절대 유지, 건너뛰기 금지
+- 블록 경계([SCENE_BLOCK_N] 태그)는 narration에 포함하지 말 것`
+    : maxScenes
+    ? `⚠️ 씬 수 제한: 정확히 ${maxScenes}개 씬 생성
+- 전체 대본을 ${maxScenes}개 구간으로 균등 분할 후 각 구간 = 1씬
+- 앞부분에 씬을 몰거나 뒷부분을 생략하는 것 절대 금지
+- 마지막 씬은 반드시 대본의 마지막 내용을 포함해야 함`
+    : `- 입력 문장 수 = 출력 씬 수 (전체 대본 빠짐없이 커버)`;
 
   return `
 # Task: Generate Storyboard for "${topic}"
 
-## 🚨 [최우선] 씬 분할 규칙 - 반드시 지켜라!
+## 씬 분할 규칙
+${sceneCountRule}
+- 같은 내용 반복 금지
+- ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (절대 "나레이션"이라고 쓰지 말 것)
 
-**[CRITICAL] 대본을 여러 개의 씬으로 나누어야 합니다.**
-- 1개 씬 = 1~2문장 (절대 3문장 이상 금지)
-- 대본 전체를 1개 씬으로 만들지 마라
-- 최소 5개 이상의 씬을 생성하라
+## 시각화
+- 문장 의미를 그대로 이미지화
+- 수식어 반영 ("거대한"→크게)
 
-**씬 분할 기준:**
-1. 문장마다 새로운 씬 (기본)
-2. 짧은 문장(10자 미만)만 합치기 가능
-3. 주제가 바뀌면 반드시 새 씬
-4. 새로운 사물/개념이 나오면 새 씬
+## 브랜드/고유명사
+- 한국어 고유명사 → 한국어 그대로, 외국어 고유명사 → 원어 그대로
 
-## 시각화 원칙
-- 문장의 의미를 이해하고 그에 맞는 이미지를 설계
-- "컴퓨터" → 컴퓨터 그려라
-- "발전된 자동차" → 미래적인 자동차 그려라
-- 수식어를 반드시 반영 ("거대한" → 크게, "빛나는" → 광택)
+## 캐릭터
+- 주어가 사람/인격체 → STANDARD
+- 주어가 사물/자연현상/추상개념 → NO_CHAR
 
-## 유명인·브랜드 표현 규칙
-**[중요] 시청자가 즉시 알아볼 수 있게 표현하라!**
+${isManual ? '[수동 대본] 원문 수정 금지, 씬 분할만' : ''}
 
-1. **유명 브랜드 언급 시:**
-   - 로고를 명확하게 시각화 (삼성, 애플, 테슬라, 엔비디아 등)
-   - 또는 브랜드명을 큰 텍스트로 표시
-   - 예: "삼성" → 삼성 로고 또는 "SAMSUNG" 텍스트
+[입력 대본]
+${content}
 
-2. **유명인 언급 시:**
-   - 특징적인 일러스트로 표현 (안경, 헤어스타일, 복장 등)
-   - 또는 이름을 텍스트로 표시
-   - 예: "일론 머스크" → 특징적 외모 또는 "Elon Musk" 텍스트
-
-3. **애매하면 텍스트 추가:**
-   - 인물/브랜드가 불명확할 수 있으면 이름 텍스트 병행
-
-## 텍스트 언어 규칙
-**상황에 맞는 언어를 사용하라:**
-- 한국 브랜드/인물/기관 → 한국어 ("삼성", "한국은행", "윤석열")
-- 외국 브랜드/인물/기관 → 영어 ("Tesla", "Elon Musk", "Fed")
-- 숫자/통계 → 숫자 + 한국어 단위 ("20% 상승", "1조원")
-- 전문 금융용어 → 영어도 OK ("GDP", "ETF", "AI")
-- 캐릭터 이름 → 절대 텍스트로 쓰지 마라
-
-${isManual ? `
-[수동 대본]
-- 원문 수정 금지, 씬 분할만 수행
-` : ``}
-
-## 캐릭터 등장 규칙
-- 주어가 사람이면 → 캐릭터 등장 (STANDARD)
-- 주어가 사물/데이터면 → 캐릭터 없음 (NO_CHAR)
-- 예: "GDP가 상승" → NO_CHAR, "투자자가 고민" → STANDARD
-
-[입력 데이터]
-${fullContent}
-
-### JSON SCHEMA ###
+### JSON 출력 형식 ###
 {
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "narration": "1-2문장",
-      "visual_keywords": "이미지 내 텍스트",
-      "analysis": {
-        "sentiment": "POSITIVE|NEGATIVE|NEUTRAL",
-        "composition_type": "MICRO|STANDARD|MACRO|NO_CHAR",
-        "camera": { "view": "wide|medium|close-up", "angle": "low|eye-level|high" },
-        "composition_setup": {
-          "main_element": "주요 요소",
-          "character_positioning": "위치, 크기%, 행동"
-        },
-        "visual_metaphor": {
-          "concept": "핵심 개념",
-          "object": "그려야 할 사물 (문맥에 맞게)",
-          "interaction": "캐릭터 행동"
-        }
-      },
-      "image_prompt_english": "문장의 의미를 반영한 상세 영문 이미지 프롬프트"
-    }
-  ]
+  "scenes": [{
+    "sceneNumber": 1,
+    "narration": "입력된 대본 문장을 여기에 그대로 복사",
+    "visual_keywords": "이미지에 표시할 텍스트 (없으면 빈 문자열)",
+    "analysis": {
+      "sentiment": "POSITIVE 또는 NEGATIVE 또는 NEUTRAL 중 하나",
+      "composition_type": "MICRO 또는 STANDARD 또는 MACRO 또는 NO_CHAR 중 하나"
+    },
+    "image_prompt_english": "씬을 묘사하는 영문 프롬프트"
+  }]
 }
+
+### 중요 ###
+- narration: 입력 텍스트의 각 문장을 그대로 사용할 것!
+- "나레이션"이라는 단어를 절대 출력하지 말 것
 `;
 };

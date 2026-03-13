@@ -1,7 +1,6 @@
 
 /**
  * fal.ai API 서비스
- * - Flux.1 Schnell 이미지 생성 (~$0.003/이미지)
  * - PixVerse v5.5 이미지→영상 변환 (~$0.15/영상)
  */
 
@@ -29,91 +28,14 @@ export function setFalApiKey(key: string): void {
 }
 
 /**
- * Flux.1 Schnell 이미지 생성
- * - 초고속 이미지 생성 (~1-2초)
- * - 가격: ~$0.003/이미지
- * - 참조 이미지 미지원 → imageService에서 스타일 프롬프트로 대체
- *
- * @param prompt - 이미지 생성 프롬프트 (영어, 스타일 설명 포함)
- * @param apiKey - FAL API 키 (선택)
- * @returns base64 인코딩된 이미지 또는 null
- */
-export async function generateImageWithFlux(
-  prompt: string,
-  apiKey?: string
-): Promise<string | null> {
-  const key = apiKey || getFalApiKey();
-
-  if (!key) {
-    console.warn('[FAL] API 키가 설정되지 않았습니다.');
-    return null;
-  }
-
-  try {
-    console.log(`[Flux.1 Schnell] 이미지 생성 시작: "${prompt.slice(0, 50)}..."`);
-
-    const response = await fetch('https://fal.run/fal-ai/flux/schnell', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${key}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        image_size: {
-          width: 1280,
-          height: 720
-        },
-        num_inference_steps: 4,  // Schnell은 4 스텝
-        num_images: 1,
-        enable_safety_checker: false
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Flux.1 Schnell] API 오류 (${response.status}):`, errorText);
-      throw new Error(`Flux API 오류: ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    if (result.images && result.images.length > 0) {
-      const imageUrl = result.images[0].url;
-      console.log(`[Flux.1 Schnell] 이미지 생성 완료`);
-
-      // URL에서 base64로 변환
-      const imageResponse = await fetch(imageUrl);
-      const blob = await imageResponse.blob();
-
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
-      });
-    }
-
-    return null;
-  } catch (error: any) {
-    console.error('[Flux.1 Schnell] 이미지 생성 실패:', error.message);
-    return null;
-  }
-}
-
-/**
  * base64 이미지를 URL로 변환 (fal.ai는 URL 필요)
- * 임시로 data URL 사용 - fal.ai가 지원하는지 확인 필요
  */
 function base64ToDataUrl(base64: string, mimeType: string = 'image/png'): string {
   return `data:${mimeType};base64,${base64}`;
 }
 
 /**
- * 이미지를 영상으로 변환 (LTX Video v0.9.5)
+ * 이미지를 영상으로 변환 (PixVerse v5.5)
  *
  * @param imageBase64 - base64 인코딩된 이미지
  * @param motionPrompt - 움직임을 설명하는 프롬프트

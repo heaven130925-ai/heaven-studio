@@ -65,6 +65,45 @@ export const downloadImagesAsZip = async (data: GeneratedAsset[]) => {
  * CSV와 이미지를 하나의 ZIP으로 묶어서 다운로드
  * CSV에는 이미지 파일의 경로가 포함되어 엑셀에서 매칭 가능
  */
+/**
+ * 이미지 + 음성을 하나의 ZIP으로 내보내기
+ */
+export const downloadMediaZip = async (data: GeneratedAsset[]) => {
+  const zip = new JSZip();
+  const imgFolder = zip.folder("images");
+  const audioFolder = zip.folder("audio");
+
+  let imageCount = 0;
+  let audioCount = 0;
+
+  for (const item of data) {
+    const num = item.sceneNumber.toString().padStart(3, '0');
+
+    if (item.imageData && imgFolder) {
+      imgFolder.file(`scene_${num}.jpg`, item.imageData, { base64: true });
+      imageCount++;
+    }
+
+    if (item.audioData && audioFolder) {
+      audioFolder.file(`scene_${num}.mp3`, item.audioData, { base64: true });
+      audioCount++;
+    }
+  }
+
+  if (imageCount === 0 && audioCount === 0) {
+    alert("내보낼 이미지 또는 음성이 없습니다.");
+    return;
+  }
+
+  try {
+    const blob = await zip.generateAsync({ type: "blob" });
+    saveAs(blob, `heaven_media_${Date.now()}.zip`);
+  } catch (error) {
+    console.error("Failed to generate media zip", error);
+    alert("ZIP 파일 생성 중 오류가 발생했습니다.");
+  }
+};
+
 export const downloadProjectZip = async (data: GeneratedAsset[]) => {
   const zip = new JSZip();
   const imgFolder = zip.folder("images");

@@ -8,66 +8,100 @@
 // 이미지 생성 모델 목록
 export const IMAGE_MODELS = [
   {
-    id: 'gemini-2.5-flash-image',
-    name: 'Gemini 2.5 Flash',
+    id: 'imagen-3.0-fast-generate-001',
+    name: 'Imagen 3 Fast ⭐',
     provider: 'Google',
-    pricePerImage: 0.0315,  // $0.0315/image (추정)
-    description: '고품질, 프롬프트 이해력 우수',
+    pricePerImage: 0.02,
+    description: '텍스트 규칙 정확, 고품질, 저렴 (추천)',
+    speed: '빠름'
+  },
+  {
+    id: 'imagen-3.0-generate-002',
+    name: 'Imagen 3 Standard',
+    provider: 'Google',
+    pricePerImage: 0.04,
+    description: '최고 품질, 텍스트 렌더링 최우수',
     speed: '보통'
   },
   {
-    id: 'fal-ai/flux/schnell',
-    name: 'Flux.1 Schnell',
-    provider: 'fal.ai',
-    pricePerImage: 0.003,   // $0.003/image
-    description: '초고속, 저렴한 가격',
-    speed: '매우 빠름'
+    id: 'gemini-2.5-flash-image',
+    name: 'Gemini 2.5 Flash',
+    provider: 'Google',
+    pricePerImage: 0.0315,
+    description: '참조이미지 지원, 화풍 일관성',
+    speed: '보통'
   },
 ] as const;
 
 export type ImageModelId = typeof IMAGE_MODELS[number]['id'];
 
-// Flux 스타일 카테고리
-export const FLUX_STYLE_CATEGORIES = [
+// Gemini 전용 스타일 카테고리 (3가지 핵심 화풍)
+export const GEMINI_STYLE_CATEGORIES = [
   {
-    id: 'animation',
-    name: '애니메이션',
+    id: 'main',
+    name: '메인 화풍',
     styles: [
-      { id: 'ghibli', name: '지브리', prompt: 'Studio Ghibli style, soft watercolor aesthetic, Hayao Miyazaki inspired, gentle lighting, whimsical atmosphere' },
-      { id: 'modern-anime', name: '모던 애니메', prompt: 'modern anime style, vibrant colors, detailed expressive eyes, dynamic composition, clean cel shading' },
-      { id: 'chibi', name: '치비', prompt: 'chibi style, cute super-deformed characters, oversized head, tiny body, adorable expressions, kawaii' },
-      { id: 'webtoon', name: '웹툰', prompt: 'Korean webtoon style, clean digital lines, manhwa aesthetic, soft shading, romantic atmosphere' },
-      { id: '90s-anime', name: '90년대 애니메', prompt: '90s retro anime style, classic cel animation look, nostalgic colors, VHS aesthetic' },
-      { id: 'disney', name: '디즈니', prompt: 'Disney animation style, expressive characters, smooth curves, family friendly, magical atmosphere' },
-      { id: 'pixar', name: '픽사 3D', prompt: 'Pixar 3D animation style, CGI rendered, soft ambient lighting, detailed textures, heartwarming' },
-    ]
-  },
-  {
-    id: 'illustration',
-    name: '일러스트',
-    styles: [
-      { id: 'minimalist', name: '미니멀리스트', prompt: 'minimalist illustration, simple geometric shapes, flat design, limited color palette, clean negative space' },
-      { id: 'line-art', name: '라인아트', prompt: 'clean line art illustration, black and white, precise outlines, no fill, elegant strokes' },
-      { id: 'watercolor', name: '수채화', prompt: 'watercolor illustration style, soft edges, paint bleeding effects, artistic texture, gentle colors' },
-      { id: 'flat-design', name: '플랫 디자인', prompt: 'flat design vector illustration, bold solid colors, no gradients, modern UI style, geometric shapes' },
-      { id: 'isometric', name: '아이소메트릭', prompt: 'isometric illustration, 30-degree angle, 3D perspective without vanishing point, geometric precision' },
-      { id: 'pixel-art', name: '픽셀아트', prompt: '16-bit pixel art style, retro video game aesthetic, limited palette, crisp pixels, nostalgic' },
-      { id: 'storybook', name: '동화책', prompt: 'children storybook illustration, whimsical hand-drawn style, soft colors, magical and dreamy atmosphere' },
+      {
+        id: 'gemini-crayon',
+        name: '크레용 (기본)',
+        prompt: 'Hand-drawn crayon and colored pencil illustration style, waxy texture with rough organic strokes, warm nostalgic colors, childlike charm with innocent atmosphere, visible pencil texture on outlines and fills, soft analog warmth, 2D flat composition'
+      },
+      {
+        id: 'gemini-korea-cartoon',
+        name: '한국 경제 카툰',
+        prompt: 'Korean economic cartoon style, digital illustration with clean bold black outlines, cel-shaded flat coloring, simple rounded stick figure character (white circle head, dot eyes), strong color contrasts with golden warm highlights vs cool gray tones, Korean text integration, modern webtoon infographic aesthetic, professional news graphic feel, dramatic lighting with sparkles and glow effects, 16:9 cinematic composition'
+      },
+      {
+        id: 'gemini-watercolor',
+        name: '수채화',
+        prompt: 'Soft watercolor illustration style, gentle hand-drawn aesthetic, warm color palette by default, simple stick figure with white circle head and thin black line body, organic brush strokes with paint bleeding effects, soft diffused edges, analog texture. Use cool tones only when danger or twist elements appear. Focus on visualizing the exact meaning and context of the sentence.'
+      },
+      {
+        id: 'gemini-webtoon',
+        name: '웹툰',
+        prompt: 'Korean webtoon style, clean digital line art with bold outlines, vibrant cel-shaded coloring, expressive characters with large eyes and dynamic poses, modern Korean manhwa aesthetic, strong contrast between light and shadow, speech bubble friendly composition, flat background with detailed foreground characters, 16:9 panel layout'
+      },
+      {
+        id: 'gemini-realistic',
+        name: '실사화',
+        prompt: 'Photorealistic style, high-definition photography aesthetic, natural lighting with realistic shadows, detailed textures and materials, cinematic depth of field, professional DSLR camera look, true-to-life colors and proportions, 8K resolution quality, hyperrealistic rendering'
+      },
     ]
   }
 ] as const;
 
-export type FluxStyleId = typeof FLUX_STYLE_CATEGORIES[number]['styles'][number]['id'] | 'custom';
+export type GeminiStyleId = typeof GEMINI_STYLE_CATEGORIES[number]['styles'][number]['id'] | 'gemini-custom' | 'gemini-none';
+
+// ─── 비주얼 스타일 (이미지 생성기 빠른 선택) ─────────────────────────────────
+export const VISUAL_STYLES = [
+  { id: 'cinematic',    name: '시네마틱 실사',  emoji: '🎬', bg: 'from-slate-700 to-slate-900',   prompt: 'Cinematic photorealistic style, Hollywood blockbuster film aesthetic, professional cinematography, dramatic volumetric lighting, shallow depth of field, 8K ultra-detailed, rich cinematic color grading' },
+  { id: 'kdrama',       name: 'K-드라마 실사',  emoji: '🌸', bg: 'from-pink-800 to-rose-900',     prompt: 'Korean drama photorealistic style, soft romantic lighting, clean modern Korean aesthetics, beautiful actors with natural makeup, elegant drama set design, warm golden hour lighting, Netflix Korean drama quality' },
+  { id: 'noir',         name: '누아르',         emoji: '🌑', bg: 'from-gray-800 to-black',         prompt: 'Film noir style, dramatic black and white with deep moody shadows, 1940s detective noir aesthetic, high contrast chiaroscuro lighting, rain-soaked atmospheric streets, expressionist shadows and silhouettes' },
+  { id: 'webtoon',      name: '웹툰',           emoji: '📱', bg: 'from-blue-800 to-indigo-900',   prompt: 'Korean webtoon digital illustration style, clean bold black outlines, vibrant cel-shaded flat coloring, expressive characters, modern manhwa aesthetic, bright high contrast composition' },
+  { id: 'comic-webtoon',name: '만화웹툰',       emoji: '💥', bg: 'from-orange-800 to-red-900',    prompt: 'Comic manga webtoon style, bold dynamic thick outlines, exaggerated expressive faces, speed action lines, vibrant saturated colors, halftone texture, manga-influenced Korean comic panel composition' },
+  { id: '3d-animation', name: '3D 애니메이션',  emoji: '✨', bg: 'from-cyan-800 to-blue-900',     prompt: 'Pixar Disney quality 3D CGI animation style, smooth subsurface scattering render, expressive stylized 3D characters, vibrant rich colors, cinematic 3D studio lighting, Pixar movie aesthetic' },
+  { id: 'claymation',   name: '클레이 애니',    emoji: '🧸', bg: 'from-amber-700 to-yellow-900',  prompt: 'Claymation stop-motion style, textured plasticine clay figures, handcrafted Aardman aesthetic, visible clay finger texture, warm cozy tones, tactile handmade quality, Shaun the Sheep style' },
+  { id: 'fairy-tale',   name: '동화 일러스트',  emoji: '🧚', bg: 'from-purple-800 to-pink-900',   prompt: "Whimsical fairy tale children's picture book illustration, soft watercolor gouache technique, pastel dreamy color palette, gentle rounded organic shapes, magical glowing atmosphere, storybook quality" },
+  { id: 'wool-doll',    name: '동화 양모인형',  emoji: '🪆', bg: 'from-rose-700 to-fuchsia-900',  prompt: 'Wool felt doll fairy tale style, handmade textile art aesthetic, needle felt puppet with visible soft fiber texture, cozy warm tones, artisan handcraft quality, miniature woolly characters' },
+  { id: 'diorama',      name: '디오라마',       emoji: '🏠', bg: 'from-green-800 to-teal-900',    prompt: 'Miniature diorama tabletop style, tiny handcrafted scale model world, tilt-shift photography blur effect, warm studio lighting on miniatures, detailed scale buildings and props, toy-like railway model aesthetic' },
+  { id: 'historical',   name: '사극 일러스트',  emoji: '⚔️', bg: 'from-amber-900 to-stone-900',  prompt: 'Korean historical drama illustration style, Joseon dynasty period aesthetic, traditional Korean Hanbok costumes and architecture, classical East Asian ink painting influence, elegant brushwork, rich jewel tones with gold accents' },
+  { id: 'webnovel',     name: '웹소설 시그니쳐',emoji: '📖', bg: 'from-violet-800 to-purple-900', prompt: 'Korean web novel signature cover illustration style, dramatic fantasy character portrait, flowing hair and clothing in dynamic wind, intense gaze, glowing magical light effects, rich saturated fantasy colors' },
+  { id: 'oriental-myth',name: '동양 설화',      emoji: '🐉', bg: 'from-red-800 to-orange-900',   prompt: 'Oriental mythology illustration style, East Asian ink wash painting, traditional Chinese Korean folk tale aesthetic, ink brush calligraphy elements, misty mountain landscapes, dragons and mythical creatures, gold vermillion accents' },
+  { id: 'ghibli',       name: '지브리풍',       emoji: '🌿', bg: 'from-emerald-700 to-green-900', prompt: 'Studio Ghibli inspired animation style, hand-drawn watercolor painterly backgrounds with lush organic detail, warm nostalgic atmosphere, Hayao Miyazaki aesthetic, expressive simple characters, magical realism, soft natural color palette' },
+  { id: 'stickman',     name: '스틱맨',         emoji: '🖊️', bg: 'from-slate-600 to-slate-800',  prompt: 'Simple stick figure illustration style, clean minimalist black line drawings on white background, xkcd-style stick figure characters, simple geometric shapes, hand-drawn marker whiteboard animation aesthetic' },
+] as const;
+
+export type VisualStyleId = typeof VISUAL_STYLES[number]['id'] | 'none';
 
 // 가격 정보 (USD)
 export const PRICING = {
   // 환율 (USD → KRW)
   USD_TO_KRW: 1450,
 
-  // 이미지 생성
   IMAGE: {
-    'gemini-2.5-flash-image': 0.0315,  // $0.0315/image
-    'fal-ai/flux/schnell': 0.003,       // $0.003/image
+    'imagen-3.0-fast-generate-001': 0.02,
+    'imagen-3.0-generate-002': 0.04,
+    'gemini-2.5-flash-image': 0.0315,
   },
   // TTS (ElevenLabs) - 글자당 가격
   TTS: {
@@ -102,29 +136,92 @@ export const ELEVENLABS_MODELS = [
 
 export type ElevenLabsModelId = typeof ELEVENLABS_MODELS[number]['id'];
 
+// ElevenLabs 안정적인 음성 목록 (긴 텍스트에도 에러 없음)
+// 미리듣기는 API Key를 사용해 "테스트 목소리입니다" 문구로 생성됨
+export const ELEVENLABS_DEFAULT_VOICES = [
+  // 여성 음성 (Female) - 안정성 검증된 음성만
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', gender: 'female' as const, accent: 'American', description: '⭐ 가장 안정적, 나레이션 최적화, 긴 텍스트 OK' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', gender: 'female' as const, accent: 'American', description: '부드럽고 친근함, 대화형 콘텐츠에 적합' },
+  { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', gender: 'female' as const, accent: 'British', description: '세련된 영국식, 고급스러운 나레이션' },
+  // 남성 음성 (Male) - 안정성 검증된 음성만
+  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male' as const, accent: 'American', description: '⭐ 가장 안정적, 뉴스/다큐 스타일, 긴 텍스트 OK' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', gender: 'male' as const, accent: 'American', description: '젊고 역동적, 유튜브/엔터테인먼트에 적합' },
+  { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', gender: 'male' as const, accent: 'American', description: '차분하고 신뢰감, 교육/설명 콘텐츠에 적합' },
+] as const;
+
+// 기본 음성 타입 정의
+export type ElevenLabsDefaultVoice = typeof ELEVENLABS_DEFAULT_VOICES[number];
+export type VoiceGender = 'male' | 'female';
+
+// Google Gemini TTS 음성 목록
+export const GEMINI_TTS_VOICES = [
+  // 남성 (Male)
+  { id: 'Charon',         name: 'Charon',         gender: 'male'   as const, description: '안정적, 깊고 차분한 남성 (기본값)' },
+  { id: 'Fenrir',         name: 'Fenrir',         gender: 'male'   as const, description: '강렬하고 자신감 넘치는 남성' },
+  { id: 'Orus',           name: 'Orus',           gender: 'male'   as const, description: '부드럽고 친근한 남성' },
+  { id: 'Puck',           name: 'Puck',           gender: 'male'   as const, description: '활기차고 경쾌한 남성' },
+  { id: 'Oberon',         name: 'Oberon',         gender: 'male'   as const, description: '권위있고 명확한 남성' },
+  { id: 'Iapetus',        name: 'Iapetus',        gender: 'male'   as const, description: '차분하고 신뢰감 있는 남성' },
+  { id: 'Gacrux',         name: 'Gacrux',         gender: 'male'   as const, description: '따뜻하고 풍부한 남성' },
+  { id: 'Umbriel',        name: 'Umbriel',        gender: 'male'   as const, description: '깊고 성숙한 남성' },
+  { id: 'Achernar',       name: 'Achernar',       gender: 'male'   as const, description: '밝고 에너지 넘치는 남성' },
+  { id: 'Achird',         name: 'Achird',         gender: 'male'   as const, description: '편안하고 친근한 남성' },
+  { id: 'Algenib',        name: 'Algenib',        gender: 'male'   as const, description: '명쾌하고 또렷한 남성' },
+  { id: 'Algieba',        name: 'Algieba',        gender: 'male'   as const, description: '부드럽고 세련된 남성' },
+  { id: 'Alnilam',        name: 'Alnilam',        gender: 'male'   as const, description: '단호하고 명확한 남성' },
+  { id: 'Rasalgethi',     name: 'Rasalgethi',     gender: 'male'   as const, description: '풍부하고 표현력 있는 남성' },
+  { id: 'Sadatoni',       name: 'Sadatoni',       gender: 'male'   as const, description: '차분하고 사려깊은 남성' },
+  { id: 'Zubenelgenubi',  name: 'Zubenelgenubi',  gender: 'male'   as const, description: '깊고 인상적인 남성' },
+  { id: 'Enceladus',      name: 'Enceladus',      gender: 'male'   as const, description: '젊고 역동적인 남성' },
+  // 여성 (Female)
+  { id: 'Kore',           name: 'Kore',           gender: 'female' as const, description: '부드럽고 따뜻한 여성' },
+  { id: 'Aoede',          name: 'Aoede',          gender: 'female' as const, description: '맑고 청명한 여성' },
+  { id: 'Leda',           name: 'Leda',           gender: 'female' as const, description: '우아하고 세련된 여성' },
+  { id: 'Zephyr',         name: 'Zephyr',         gender: 'female' as const, description: '상쾌하고 경쾌한 여성' },
+  { id: 'Autonoe',        name: 'Autonoe',        gender: 'female' as const, description: '자연스럽고 편안한 여성' },
+  { id: 'Callirrhoe',     name: 'Callirrhoe',     gender: 'female' as const, description: '흐르는 듯 매끄러운 여성' },
+  { id: 'Despina',        name: 'Despina',        gender: 'female' as const, description: '밝고 친근한 여성' },
+  { id: 'Erinome',        name: 'Erinome',        gender: 'female' as const, description: '차분하고 신뢰감 있는 여성' },
+  { id: 'Laomedeia',      name: 'Laomedeia',      gender: 'female' as const, description: '풍부하고 표현력 있는 여성' },
+  { id: 'Schedar',        name: 'Schedar',        gender: 'female' as const, description: '또렷하고 명확한 여성' },
+  { id: 'Sulafat',        name: 'Sulafat',        gender: 'female' as const, description: '따뜻하고 감성적인 여성' },
+  { id: 'Vindemiatrix',   name: 'Vindemiatrix',   gender: 'female' as const, description: '세련되고 전문적인 여성' },
+  { id: 'Ariel',          name: 'Ariel',          gender: 'female' as const, description: '생기있고 활발한 여성' },
+] as const;
+
+export type GeminiTtsVoiceId = typeof GEMINI_TTS_VOICES[number]['id'];
+
 export const CONFIG = {
   // 기본 설정값들 (키 제외)
-  DEFAULT_VOICE_ID: "qilwn0AtH88Ij5OirLPw",
+  DEFAULT_VOICE_ID: "pNInz6obpgDQGcFmaJgB",  // Adam - 기본 남성 음성
   DEFAULT_ELEVENLABS_MODEL: "eleven_multilingual_v2" as ElevenLabsModelId,
-  DEFAULT_IMAGE_MODEL: "gemini-2.5-flash-image" as ImageModelId,
+  DEFAULT_IMAGE_MODEL: "imagen-3.0-fast-generate-001" as ImageModelId,
+  DEFAULT_GEMINI_TTS_VOICE: "Charon" as GeminiTtsVoiceId,
   VIDEO_WIDTH: 1280,
   VIDEO_HEIGHT: 720,
 
   // 로컬 스토리지 키 이름 (내부 관리용)
   STORAGE_KEYS: {
+    GEMINI_API_KEY: 'tubegen_gemini_key',      // Gemini API 키 (사용자 직접 입력)
     ELEVENLABS_API_KEY: 'tubegen_el_key',
     ELEVENLABS_VOICE_ID: 'tubegen_el_voice',
     ELEVENLABS_MODEL: 'tubegen_el_model',
-    FAL_API_KEY: 'tubegen_fal_key',
+    FAL_API_KEY: 'tubegen_fal_key',  // PixVerse 영상 변환용
     IMAGE_MODEL: 'tubegen_image_model',
-    FLUX_STYLE: 'tubegen_flux_style',
-    FLUX_CUSTOM_STYLE: 'tubegen_flux_custom_style',
-    FLUX_CHARACTER: 'tubegen_flux_character',
-    PROJECTS: 'tubegen_projects'
+    // Gemini 전용 화풍 설정
+    GEMINI_STYLE: 'tubegen_gemini_style',
+    GEMINI_CUSTOM_STYLE: 'tubegen_gemini_custom_style',
+    IMAGE_TEXT_MODE: 'tubegen_image_text_mode',
+    SUBTITLE_CONFIG: 'tubegen_subtitle_config',
+    PROJECTS: 'tubegen_projects',
+    GEMINI_TTS_VOICE: 'tubegen_gemini_tts_voice',
+    TTS_PROVIDER: 'tubegen_tts_provider',  // 'elevenlabs' | 'google'
+    VOICE_SPEED: 'tubegen_voice_speed',          // '0.7' | '1.0' | '1.3'
+    VOICE_STABILITY: 'tubegen_voice_stability',   // '0'-'100' (ElevenLabs)
+    VOICE_STYLE: 'tubegen_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
+    ASPECT_RATIO: 'tubegen_aspect_ratio',         // '16:9' | '9:16'
+    VISUAL_STYLE_ID: 'tubegen_visual_style_id',   // VisualStyleId
   },
-
-  // 기본 캐릭터 프롬프트 (Flux용)
-  DEFAULT_CHARACTER_PROMPT: `Simple stick figure character with clear expressive eyes and subtle mouth. Minimalist black line art on clean background. The character shows gentle, understated emotions - not exaggerated. A relatable companion figure that middle-aged viewers can connect with. Calm and thoughtful presence, like a quiet friend watching alongside.`,
 
   // 애니메이션 설정
   ANIMATION: {

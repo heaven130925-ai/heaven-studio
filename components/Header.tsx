@@ -13,7 +13,7 @@ const Header: React.FC = () => {
             </svg>
           </div>
           <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-            TubeGen <span className="text-brand-500">AI</span>
+            Heaven <span className="text-brand-500">AI</span>
           </span>
         </div>
         <div className="flex items-center gap-4">
