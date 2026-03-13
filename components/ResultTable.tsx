@@ -193,13 +193,14 @@ interface TableRowProps {
   row: GeneratedAsset;
   index: number;
   isAnimating: boolean;
+  aspectRatio?: '16:9' | '9:16';
   onRegenerateImage?: (index: number) => void;
   onRegenerateWithPrompt?: (index: number, customPrompt: string) => void;
   onGenerateAnimation?: (index: number) => void;
   onOpenPreview?: (src: string) => void;
 }
 
-const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview }) => {
+const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspectRatio = '16:9', onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview }) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState(row.visualPrompt || '');
 
@@ -275,7 +276,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, onReg
         )}
       </td>
       <td className="py-5 px-6 align-top">
-        <div className="relative aspect-video w-48 mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img">
+        <div className={`relative mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img ${aspectRatio === '9:16' ? 'aspect-[9/16] w-28' : 'aspect-video w-48'}`}>
           {row.status === 'generating' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
@@ -361,6 +362,7 @@ TableRow.displayName = 'TableRow';
 const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices }) => {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const onOpenPreview = useCallback((src: string) => setPreviewSrc(src), []);
+  const aspectRatio = (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9';
   const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => loadSubtitleConfig());
   const [showSubSettings, setShowSubSettings] = useState(false);
 
@@ -584,6 +586,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
                   row={row}
                   index={index}
                   isAnimating={animatingIndices?.has(index) || false}
+                  aspectRatio={aspectRatio}
                   onRegenerateImage={onRegenerateImage}
                   onRegenerateWithPrompt={onRegenerateWithPrompt}
                   onGenerateAnimation={onGenerateAnimation}

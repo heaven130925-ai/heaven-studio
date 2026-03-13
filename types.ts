@@ -122,6 +122,7 @@ export interface GeneratedAsset extends ScriptScene {
 export enum GenerationStep {
   IDLE = 'IDLE',
   SCRIPTING = 'SCRIPTING',
+  SCRIPT_READY = 'SCRIPT_READY',  // 대본 완성 → 사용자 확인 후 이미지 생성 대기
   ASSETS = 'ASSETS',
   COMPLETED = 'COMPLETED',
   ERROR = 'ERROR'

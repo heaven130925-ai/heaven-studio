@@ -136,6 +136,89 @@ const App: React.FC = () => {
     resetCost();
   };
 
+  // SCRIPT_READY 상태에서 이미지(+음성) 생성 시작
+  const handleContinueGeneration = useCallback(async (imageOnly: boolean = true) => {
+    if (isProcessingRef.current || assetsRef.current.length === 0) return;
+    isProcessingRef.current = true;
+    isAbortedRef.current = false;
+    setStep(GenerationStep.ASSETS);
+    setProgressMessage(imageOnly ? '이미지 생성 중...' : '이미지 및 음성 생성 중...');
+
+    const initialAssets = assetsRef.current;
+
+    const runAudio = async () => {
+      const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
+      if (ttsProvider === 'google') {
+        try {
+          const narrations = initialAssets.map(a => a.narration);
+          const audioList = await generateAllScenesAudio(narrations, setProgressMessage);
+          if (isAbortedRef.current) return;
+          audioList.forEach((audioData, i) => { if (audioData) updateAssetAt(i, { audioData }); });
+        } catch (e: any) { console.error('[TTS] 배치 실패:', e.message); }
+        return;
+      }
+      const TTS_DELAY = 1500;
+      for (let i = 0; i < initialAssets.length; i++) {
+        if (isAbortedRef.current) break;
+        setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+        try {
+          const elResult = await generateAudioWithElevenLabs(assetsRef.current[i].narration);
+          if (elResult.audioData) {
+            updateAssetAt(i, { audioData: elResult.audioData, subtitleData: elResult.subtitleData, audioDuration: elResult.estimatedDuration });
+            const charCount = assetsRef.current[i].narration.length;
+            addCost('tts', charCount * PRICING.TTS.perCharacter, charCount);
+          }
+        } catch (e: any) {
+          try { const fb = await generateAudioForScene(assetsRef.current[i].narration); updateAssetAt(i, { audioData: fb }); } catch {}
+        }
+        if (i < initialAssets.length - 1) await wait(TTS_DELAY);
+      }
+    };
+
+    const runImages = async () => {
+      const MAX_RETRIES = 2;
+      const imageModel = getSelectedImageModel();
+      const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
+      for (let i = 0; i < initialAssets.length; i++) {
+        if (isAbortedRef.current) break;
+        updateAssetAt(i, { status: 'generating' });
+        let success = false;
+        for (let attempt = 0; attempt <= MAX_RETRIES && !success; attempt++) {
+          if (isAbortedRef.current) break;
+          setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 이미지 생성 중...`);
+          try {
+            if (attempt > 0) await wait(2000);
+            const img = await generateImage(assetsRef.current[i], currentReferenceImages);
+            if (img) { updateAssetAt(i, { imageData: img, status: 'completed' }); addCost('image', imagePrice, 1); success = true; }
+            else throw new Error('이미지 없음');
+          } catch (e: any) {
+            if (e.message?.includes('API key not valid') || e.status === 400) { setNeedsKey(true); break; }
+          }
+        }
+        if (!success && !isAbortedRef.current) updateAssetAt(i, { status: 'error' });
+        await wait(50);
+      }
+    };
+
+    try {
+      await Promise.all(imageOnly ? [runImages()] : [runAudio(), runImages()]);
+      if (isAbortedRef.current) return;
+      setStep(GenerationStep.COMPLETED);
+      const cost = costRef.current;
+      const costMsg = `이미지 ${cost.imageCount}장 ${formatKRW(cost.images)} + TTS ${cost.ttsCharacters}자 ${formatKRW(cost.tts)} = 총 ${formatKRW(cost.total)}`;
+      setProgressMessage(`생성 완료! ${costMsg}`);
+      try {
+        const savedProject = await saveProject(currentTopic, assetsRef.current, undefined, costRef.current);
+        refreshProjects();
+        setProgressMessage(`"${savedProject.name}" 저장됨 | ${costMsg}`);
+      } catch {}
+    } catch (error: any) {
+      if (!isAbortedRef.current) { setStep(GenerationStep.ERROR); setProgressMessage(`오류: ${error.message}`); }
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [currentReferenceImages, currentTopic]);
+
   const handleGenerate = useCallback(async (
     topic: string,
     refImgs: ReferenceImages,
@@ -174,14 +257,14 @@ const App: React.FC = () => {
         setProgressMessage('외부 콘텐츠 분석 중...');
         targetTopic = "Custom Analysis Topic";
       } else {
-        setProgressMessage(`글로벌 경제 트렌드 탐색 중...`);
+        setProgressMessage(`트렌드 탐색 중...`);
         const trends = await findTrendingTopics(topic, usedTopicsRef.current);
         if (isAbortedRef.current) return;
         targetTopic = trends[0].topic;
         usedTopicsRef.current.push(targetTopic);
       }
 
-      setProgressMessage(`스토리보드 및 메타포 생성 중...`);
+      setProgressMessage(`대본 생성 중...`);
 
       // 긴 대본(3000자 초과) 감지 시 청크 분할 처리
       const inputLength = sourceText?.length || 0;
@@ -211,6 +294,17 @@ const App: React.FC = () => {
       }));
       assetsRef.current = initialAssets;
       setGeneratedData(initialAssets);
+
+      // 자동 주제 모드: 대본 완성 후 사용자가 스타일 선택 후 이미지 생성하도록 대기
+      // 수동 대본 모드 + imageOnly: 바로 이미지 생성
+      const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
+      if (isAutoTopic && !imageOnly) {
+        setStep(GenerationStep.SCRIPT_READY);
+        setProgressMessage(`대본 완성! 비주얼 스타일을 선택하고 이미지 생성을 눌러주세요. (${scriptScenes.length}개 씬)`);
+        isProcessingRef.current = false;
+        return;
+      }
+
       setStep(GenerationStep.ASSETS);
 
       const runAudio = async () => {
@@ -765,17 +859,33 @@ const App: React.FC = () => {
         )}
         
         {step !== GenerationStep.IDLE && (
-          <div className="max-w-7xl mx-auto px-4 text-center mb-12">
-             <div className="inline-flex items-center gap-4 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
-                {step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS ? (
+          <div className="max-w-7xl mx-auto px-4 text-center mb-6">
+             <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
+                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) ? (
                   <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
-                ) : <div className={`w-2 h-2 rounded-full ${step === GenerationStep.ERROR ? 'bg-red-500' : 'bg-green-500'}`}></div>}
+                ) : <div className={`w-2 h-2 rounded-full ${step === GenerationStep.ERROR ? 'bg-red-500' : step === GenerationStep.SCRIPT_READY ? 'bg-yellow-400' : 'bg-green-500'}`}></div>}
                 <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
                 {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
-                  <button onClick={handleAbort} className="ml-2 px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
+                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
+                )}
+                {/* 대본 완성 후 액션 버튼 */}
+                {step === GenerationStep.SCRIPT_READY && (
+                  <>
+                    <button onClick={() => handleContinueGeneration(true)}
+                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black transition-colors flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      이미지만 생성
+                    </button>
+                    <button onClick={() => handleContinueGeneration(false)}
+                      className="px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-black transition-colors flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      이미지+음성 생성
+                    </button>
+                    <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
+                  </>
                 )}
                 {(step === GenerationStep.COMPLETED || step === GenerationStep.ERROR) && generatedData.length > 0 && (
-                  <button onClick={handleReset} className="ml-2 px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
                 )}
              </div>
           </div>

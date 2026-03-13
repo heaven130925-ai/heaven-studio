@@ -221,6 +221,8 @@ export const CONFIG = {
     VOICE_STYLE: 'tubegen_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
     ASPECT_RATIO: 'tubegen_aspect_ratio',         // '16:9' | '9:16'
     VISUAL_STYLE_ID: 'tubegen_visual_style_id',   // VisualStyleId
+    LONGFORM_DURATION: 'tubegen_longform_duration',   // seconds per scene (longform)
+    SHORTFORM_DURATION: 'tubegen_shortform_duration', // seconds per scene (shortform)
   },
 
   // 애니메이션 설정
