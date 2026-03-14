@@ -638,14 +638,16 @@ export const generateImageForScene = async (
   // 선택된 이미지 모델 확인
   const selectedModel = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) || CONFIG.DEFAULT_IMAGE_MODEL;
   const isImagen3 = selectedModel.startsWith('imagen-3');
+  const isImagen4 = selectedModel.startsWith('imagen-4');
+  const isImagenModel = isImagen3 || isImagen4;
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
-  // Imagen 3 선택 + 참조 이미지 없을 때 → Imagen 3 사용 (실패 시 Gemini로 폴백)
-  if (isImagen3 && !hasAnyRef) {
+  // Imagen 3/4 선택 + 참조 이미지 없을 때 → Imagen 사용 (실패 시 Gemini로 폴백)
+  if (isImagenModel && !hasAnyRef) {
     const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
     const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
-    console.log(`[Image Gen] Imagen 3 사용: ${selectedModel}, 비율: ${ar}`);
+    console.log(`[Image Gen] Imagen 사용: ${selectedModel}, 비율: ${ar}`);
     try {
       const result = await generateImageWithImagen3(prompt, selectedModel);
       if (result) return result;
@@ -653,17 +655,17 @@ export const generateImageForScene = async (
       const msg = e?.message || '';
       const isPermissionError = msg.includes('403') || msg.includes('permission') || msg.includes('billing') || msg.includes('quota') || msg.includes('not found') || msg.includes('PERMISSION_DENIED') || msg.includes('serviceDisabled');
       if (isPermissionError) {
-        console.warn(`[Image Gen] Imagen 3 권한 없음 → Gemini 2.5 Flash로 폴백`);
+        console.warn(`[Image Gen] Imagen 권한 없음 → Gemini 2.5 Flash로 폴백`);
       } else {
-        throw e; // 다른 에러는 그대로 전파
+        throw e;
       }
     }
     // Gemini Flash로 폴백
   }
 
   // 참조 이미지 있거나 Gemini 선택 시 → Gemini 사용
-  if (isImagen3 && hasAnyRef) {
-    console.log(`[Image Gen] Imagen 3 선택이지만 참조 이미지 있음 → Gemini로 폴백`);
+  if (isImagenModel && hasAnyRef) {
+    console.log(`[Image Gen] Imagen 선택이지만 참조 이미지 있음 → Gemini로 폴백`);
   }
 
   // 스타일 참조 이미지가 없을 때만 선택된 화풍 적용 (스타일 참조 우선)

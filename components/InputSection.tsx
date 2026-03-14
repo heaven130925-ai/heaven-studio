@@ -621,11 +621,28 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                             className={`w-full p-3 rounded-xl border text-left transition-all ${imageModelId === m.id ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
                             <div className="flex justify-between items-center">
                               <span className="font-bold text-sm">{m.name}</span>
-                              <span className="text-green-400 text-xs font-bold">${m.pricePerImage.toFixed(4)}</span>
+                              <div className="text-right">
+                                <div className="text-green-400 text-xs font-bold">${m.pricePerImage.toFixed(3)}/장</div>
+                                <div className="text-slate-500 text-[10px]">≈ {Math.round(m.pricePerImage * 1450)}원</div>
+                              </div>
                             </div>
                             <div className="text-xs opacity-60 mt-0.5">{m.description}</div>
                           </button>
                         ))}
+                        {/* 영상 모델 정보 */}
+                        <div className="mt-3 pt-3 border-t border-slate-700">
+                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">영상 변환 모델</p>
+                          <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700">
+                            <div className="flex justify-between items-center">
+                              <span className="font-bold text-sm text-slate-300">PixVerse v5.5 🎬</span>
+                              <div className="text-right">
+                                <div className="text-green-400 text-xs font-bold">$0.150/영상</div>
+                                <div className="text-slate-500 text-[10px]">≈ 218원 (5초)</div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-slate-600 mt-0.5">fal.ai · 이미지→영상 변환</div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
