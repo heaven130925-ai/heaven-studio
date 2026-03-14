@@ -171,6 +171,84 @@ export async function fetchVideoAsBase64(videoUrl: string): Promise<string | nul
 }
 
 /**
+ * Face Swap: 생성된 씬 이미지에 캐릭터 얼굴 교체
+ * - fal-ai/face-swap 사용
+ * - base_image: 씬 이미지 (얼굴이 교체될 대상)
+ * - swap_image: 캐릭터 참조 이미지 (원본 얼굴)
+ * @returns base64 결과 이미지 또는 null (실패 시 원본 반환용)
+ */
+export async function faceSwapCharacter(
+  sceneImageBase64: string,    // 씬 이미지 (target)
+  faceRefBase64: string,       // 캐릭터 얼굴 (source)
+  apiKey?: string
+): Promise<string | null> {
+  const key = apiKey || getFalApiKey();
+  if (!key) {
+    console.warn('[FaceSwap] FAL API 키 없음, 스킵');
+    return null;
+  }
+
+  try {
+    console.log('[FaceSwap] 얼굴 교체 시작...');
+
+    // 두 이미지를 fal 스토리지에 업로드
+    const [sceneUrl, faceUrl] = await Promise.all([
+      uploadImageToFal(sceneImageBase64, key),
+      uploadImageToFal(faceRefBase64, key),
+    ]);
+
+    if (!sceneUrl || !faceUrl) {
+      console.warn('[FaceSwap] 이미지 업로드 실패');
+      return null;
+    }
+
+    const response = await fetch('https://fal.run/fal-ai/face-swap', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        base_image_url: sceneUrl,   // 씬 이미지 (얼굴 교체 대상)
+        swap_image_url: faceUrl,    // 참조 얼굴 이미지
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.warn(`[FaceSwap] API 오류 (${response.status}):`, err.slice(0, 200));
+      return null;
+    }
+
+    const result = await response.json();
+    const imageUrl = result?.image?.url || result?.images?.[0]?.url;
+    if (!imageUrl) {
+      console.warn('[FaceSwap] 결과 URL 없음');
+      return null;
+    }
+
+    // URL → base64 변환
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) return null;
+    const blob = await imgResp.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const b64 = (reader.result as string).split(',')[1];
+        console.log('[FaceSwap] 얼굴 교체 완료');
+        resolve(b64);
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+
+  } catch (e: any) {
+    console.warn('[FaceSwap] 실패 (원본 유지):', e.message);
+    return null;
+  }
+}
+
+/**
  * 여러 이미지를 순차적으로 영상 변환 (rate limit 고려)
  */
 export async function batchGenerateVideos(

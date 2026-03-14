@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { ScriptScene, ReferenceImages } from "../types";
 import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, getFinalVisualPrompt } from "./prompts";
 import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from "../config";
+import { faceSwapCharacter } from "./falService";
 
 /**
  * Gemini API 클라이언트 초기화
@@ -838,7 +839,20 @@ ${styleDesc.instruction}`
         return null;
       }, 2, 3000); // 각 대체어당 2회 재시도
 
-      if (result) return result;
+      if (result) {
+        // 캐릭터 참조가 있고 FAL 키가 있으면 face swap으로 얼굴 일관성 보장
+        if (hasCharacterRef) {
+          const faceRefRaw = referenceImages.character[0];
+          const faceRef = faceRefRaw.includes(',') ? faceRefRaw.split(',')[1] : faceRefRaw;
+          const swapped = await faceSwapCharacter(result, faceRef);
+          if (swapped) {
+            console.log('[Image Gen] Face swap 적용 완료');
+            return swapped;
+          }
+          console.log('[Image Gen] Face swap 실패 또는 FAL 키 없음 → 원본 반환');
+        }
+        return result;
+      }
     } catch (error: any) {
       lastError = error;
       const errorMsg = error.message || JSON.stringify(error);
