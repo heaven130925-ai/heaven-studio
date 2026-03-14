@@ -44,6 +44,46 @@ interface PreparedScene {
 }
 
 /**
+ * 타임스탬프 없을 때 글자 수 비례로 자막 분배 (Google TTS 폴백)
+ */
+function createTimingEstimatedChunks(text: string, duration: number, maxChars: number = 15): SubtitleChunk[] {
+  if (!text.trim() || duration <= 0) return [];
+
+  // 구두점/공백 기준으로 짧게 자르기
+  const rawChunks: string[] = [];
+  let remaining = text.trim();
+  const breakChars = [',', '.', '?', '!', '。', '，', ' ', '~'];
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxChars) {
+      rawChunks.push(remaining);
+      break;
+    }
+    let cutAt = maxChars;
+    for (let i = Math.min(maxChars, remaining.length - 1); i >= Math.floor(maxChars * 0.5); i--) {
+      if (breakChars.includes(remaining[i])) { cutAt = i + 1; break; }
+    }
+    const chunk = remaining.slice(0, cutAt).trim();
+    if (chunk) rawChunks.push(chunk);
+    remaining = remaining.slice(cutAt).trim();
+  }
+
+  if (rawChunks.length === 0) return [];
+
+  // 글자 수 비례로 시간 배분
+  const totalChars = rawChunks.reduce((s, c) => s + c.length, 0);
+  const result: SubtitleChunk[] = [];
+  let t = 0;
+  for (let i = 0; i < rawChunks.length; i++) {
+    const dur = (rawChunks[i].length / totalChars) * duration;
+    const end = i === rawChunks.length - 1 ? duration : t + dur;
+    result.push({ text: rawChunks[i], startTime: t, endTime: end });
+    t = end;
+  }
+  return result;
+}
+
+/**
  * 자막 데이터를 청크로 변환
  * - AI 의미 단위 청크가 있으면 우선 사용 (22자 이하, 의미 단위)
  * - 없으면 기존 단어 수 기반으로 폴백
@@ -359,8 +399,18 @@ export const generateVideo = async (
       console.log(`[Video] 씬 ${i + 1} 오디오 없음, 기본 ${DEFAULT_DURATION}초 사용`);
     }
 
-    // 자막 청크 미리 계산 (자막 비활성화시 빈 배열)
-    const subtitleChunks = enableSubtitles ? createSubtitleChunks(asset.subtitleData, config) : [];
+    // 자막 청크 미리 계산
+    let subtitleChunks: SubtitleChunk[] = [];
+    if (enableSubtitles) {
+      if (asset.subtitleData && asset.subtitleData.words.length > 0) {
+        // ElevenLabs: 타임스탬프 기반 청크
+        subtitleChunks = createSubtitleChunks(asset.subtitleData, config);
+      } else if (asset.narration && audioBuffer && audioBuffer.duration > 0) {
+        // Google TTS: 타임스탬프 없음 → 글자 수 비례 추정
+        subtitleChunks = createTimingEstimatedChunks(asset.narration, audioBuffer.duration);
+        console.log(`[Video] 씬 ${i + 1}: Google TTS 추정 자막 ${subtitleChunks.length}개 청크`);
+      }
+    }
     if (subtitleChunks.length > 0) {
       console.log(`[Video] 씬 ${i + 1}: ${subtitleChunks.length}개 자막 청크 생성`);
     }
