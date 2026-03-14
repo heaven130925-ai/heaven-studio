@@ -747,55 +747,45 @@ export const generateImageForScene = async (
         const charTextDesc = referenceImages.characterDescription?.trim();
 
         if (hasCharacterRef) {
-          // ─── 이미지 편집 모드: 캐릭터 이미지를 BASE로 씬에 맞게 편집 ───
-          // 핵심 원리: "새로 그리기"가 아닌 "기존 캐릭터 이미지를 씬에 맞게 수정"
-          // → 얼굴/헤어/피부가 픽셀 수준에서 보존됨
-
-          // 씬 핵심만 추출 (action + setting, 캐릭터 외모 제거)
+          // ─── 캐릭터 일관성 모드 ───
           const sceneAction = scene.narration
-            ? scene.narration.slice(0, 120)
-            : sanitizedPrompt.slice(0, 200);
+            ? scene.narration.slice(0, 150)
+            : sanitizedPrompt.slice(0, 250);
 
           const styleHint = (() => {
             if (hasStyleRef) return '';
             const sp = getSelectedGeminiStylePrompt();
-            return sp ? ` Art style: ${sp}.` : '';
+            return sp ? `\nArt style: ${sp}` : '';
           })();
 
-          const charFeatures = charTextDesc
-            ? `The person in the image has: ${charTextDesc}`
-            : `The person shown in the reference image`;
+          // 캐릭터 설명 텍스트 (수동 입력 또는 자동 추출)
+          const descBlock = charTextDesc
+            ? `\nCharacter features to reproduce exactly:\n${charTextDesc}`
+            : '';
 
-          // 편집 지시: 캐릭터 이미지 → 씬 적용
-          parts.push({
-            text: `You are an image editor. I will give you a reference photo of a person. Your task is to create a new illustration/image that:
-1. Shows this EXACT person — same face, same hair color and style, same skin tone, same body proportions. Do NOT change any facial features or hair.
-2. Places them in a new scene/setting based on the description below.
-3. The person's identity must be 100% preserved and instantly recognizable.
-
-${charFeatures}${styleHint}`
-          });
-
-          // 캐릭터 참조 이미지 (첫 번째 = 가장 선명한 얼굴 기준)
-          const primaryChar = referenceImages.character[0];
-          const primaryData = primaryChar.includes(',') ? primaryChar.split(',')[1] : primaryChar;
-          parts.push({ inlineData: { data: primaryData, mimeType: 'image/jpeg' } });
-
-          // 추가 참조 이미지 (있으면)
-          referenceImages.character.slice(1).forEach(img => {
+          // 모든 참조 이미지를 먼저 나열
+          referenceImages.character.forEach((img, idx) => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
-            parts.push({ text: `Additional reference angle of the same person:` });
+            parts.push({
+              text: idx === 0
+                ? `This is the character reference photo. Study this person's face carefully.`
+                : `Same character, additional angle:`
+            });
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 씬 지시 (캐릭터 외모 언급 없이 배경/행동/상황만)
+          // 핵심 지시
           parts.push({
-            text: `Now create the image. Scene to depict: ${sceneAction}
+            text: `Generate an illustration of the person shown in the reference photo above, placed in a new scene.
 
-CRITICAL RULES:
-- The person's face and hair MUST match the reference photo exactly
-- Only change: background, setting, pose, expression appropriate to the scene
-- Do NOT alter: face shape, eye color, hair color, skin tone, nose, lips`
+MANDATORY — copy these features from the reference photo exactly:
+• Face: same face shape, same eyes (color + shape), same nose, same lips, same skin tone
+• Hair: same color, same length, same style — do not change at all
+• Overall look: this person must be instantly recognizable as the same individual${descBlock}
+
+Scene to illustrate: ${sceneAction}${styleHint}
+
+DO NOT invent a new face. DO NOT change hair color or style. Reproduce the reference person faithfully.`
           });
 
         } else {
