@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Header from './components/Header';
 import InputSection from './components/InputSection';
+import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
 import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt, extractCharactersFromScript, generateCharacterImage, CharacterInfo } from './services/geminiService';
@@ -22,6 +23,13 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 type ViewMode = 'main' | 'gallery';
 
 const App: React.FC = () => {
+  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || '')
+    .split(',').map((p: string) => p.trim()).filter(Boolean);
+  const savedPass = localStorage.getItem('heaven_access') || '';
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    allowedPasswords.length === 0 || allowedPasswords.includes(savedPass)
+  );
+
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
@@ -693,6 +701,10 @@ const App: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <PasswordGate onSuccess={() => setIsAuthenticated(true)} />;
   }
 
   return (
