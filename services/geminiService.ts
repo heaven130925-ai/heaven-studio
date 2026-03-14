@@ -673,6 +673,7 @@ export const generateImageForScene = async (
   scene: ScriptScene,
   referenceImages: ReferenceImages
 ): Promise<string | null> => {
+  console.warn(`[GEN-START] generateImageForScene 호출됨. character배열길이=${referenceImages.character?.length ?? 'undefined'}`);
   // 캐릭터 참조 이미지가 있으면 고정 프롬프트 제외
   const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
   const hasStyleRef = referenceImages.style && referenceImages.style.length > 0;
