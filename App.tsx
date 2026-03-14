@@ -40,6 +40,8 @@ const App: React.FC = () => {
   const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const [needsKey, setNeedsKey] = useState(false);
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
+  const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
+  const [showApiModal, setShowApiModal] = useState(false);
 
   // 갤러리 뷰 관련
   const [viewMode, setViewMode] = useState<ViewMode>('main');
@@ -93,6 +95,8 @@ const App: React.FC = () => {
     if ((window as any).aistudio) {
       await (window as any).aistudio.openSelectKey();
       setNeedsKey(false);
+    } else {
+      setShowApiModal(true);
     }
   };
 
@@ -579,6 +583,10 @@ const App: React.FC = () => {
     }
   }, [animatingIndices]);
 
+  const handleSelectThumbnail = useCallback((imageBase64: string) => {
+    setThumbnailBaseImage(imageBase64);
+  }, []);
+
   const triggerVideoExport = async (enableSubtitles: boolean = true) => {
     if (isVideoGenerating) return;
     try {
@@ -783,6 +791,8 @@ const App: React.FC = () => {
           onTabChange={setInputActiveTab}
           manualScript={inputManualScript}
           onManualScriptChange={setInputManualScript}
+          thumbnailBaseImage={thumbnailBaseImage}
+          onThumbnailBaseImageChange={setThumbnailBaseImage}
         />
 
         {/* 캐릭터 카드 */}
@@ -846,9 +856,48 @@ const App: React.FC = () => {
               isExporting={isVideoGenerating}
               animatingIndices={animatingIndices}
               onGenerateAnimation={handleGenerateAnimation}
+              onSelectThumbnail={handleSelectThumbnail}
           />
         )}
       </main>
+      )}
+
+      {/* API 키 설정 모달 */}
+      {showApiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white">🔑 API 키 설정</h2>
+              <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
+            </div>
+            {[
+              { label: 'Gemini API 키', key: 'tubegen_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
+              { label: 'ElevenLabs API 키', key: 'tubegen_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
+              { label: 'FAL API 키', key: 'tubegen_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
+            ].map(({ label, key, placeholder, link, hint }) => (
+              <div key={key} className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</label>
+                <input
+                  type="password"
+                  defaultValue={localStorage.getItem(key) || ''}
+                  placeholder={placeholder}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v) localStorage.setItem(key, v);
+                  }}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-brand-500 focus:outline-none"
+                />
+                <p className="text-[11px] text-slate-600">{hint} — <a href={link} target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">{link.replace('https://', '')}</a></p>
+              </div>
+            ))}
+            <button
+              onClick={() => { setShowApiModal(false); window.location.reload(); }}
+              className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-black rounded-xl transition-colors"
+            >
+              저장 후 새로고침
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

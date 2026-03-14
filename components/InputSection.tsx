@@ -27,9 +27,11 @@ interface InputSectionProps {
   onTabChange: (tab: 'auto' | 'manual') => void;
   manualScript: string;
   onManualScriptChange: (v: string) => void;
+  thumbnailBaseImage?: string | null;
+  onThumbnailBaseImageChange?: (img: string | null) => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -92,6 +94,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [thumbnailText, setThumbnailText] = useState('');
   const [thumbnailImage, setThumbnailImage] = useState<string | null>(null);
   const [isThumbnailGenerating, setIsThumbnailGenerating] = useState(false);
+  const [thumbnailFontSize, setThumbnailFontSize] = useState(80);
+  const [thumbnailTextColor, setThumbnailTextColor] = useState('#ffffff');
+  const [thumbnailTextY, setThumbnailTextY] = useState(85);
+  const [thumbnailCustomImage, setThumbnailCustomImage] = useState<string | null>(null);
+  const thumbnailCanvasRef = useRef<HTMLCanvasElement>(null);
+  const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
 
   // 프로젝트
   const [projects, setProjects] = useState<ProjectSettings[]>([]);
@@ -270,6 +278,61 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     });
     if (styleFileInputRef.current) styleFileInputRef.current.value = '';
   }, [styleRefImages.length]);
+
+  useEffect(() => {
+    const canvas = thumbnailCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const base = thumbnailCustomImage || thumbnailBaseImage;
+    if (!base) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      canvas.width = 1280;
+      canvas.height = 720;
+      ctx.drawImage(img, 0, 0, 1280, 720);
+      if (thumbnailText.trim()) {
+        const yPx = Math.round((thumbnailTextY / 100) * 720);
+        const fontSize = thumbnailFontSize;
+        ctx.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = Math.round(fontSize * 0.12);
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.lineJoin = 'round';
+        ctx.strokeText(thumbnailText, 640, yPx);
+        ctx.fillStyle = thumbnailTextColor;
+        ctx.fillText(thumbnailText, 640, yPx);
+      }
+    };
+    img.src = base.startsWith('data:') ? base : `data:image/jpeg;base64,${base}`;
+  }, [thumbnailBaseImage, thumbnailCustomImage, thumbnailText, thumbnailFontSize, thumbnailTextColor, thumbnailTextY]);
+
+  const handleDownloadThumbnail = useCallback(() => {
+    const canvas = thumbnailCanvasRef.current;
+    if (!canvas) return;
+    canvas.toBlob(blob => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `thumbnail_${Date.now()}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/jpeg', 0.95);
+  }, []);
+
+  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setThumbnailCustomImage(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleGenerateThumbnail = useCallback(async () => {
     setIsThumbnailGenerating(true);
@@ -914,42 +977,128 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 {/* 🎬 썸네일 생성 패널 */}
                 {activePanel === 'thumbnail' && (
                   <div className="space-y-4">
-                    <p className="text-sm text-slate-500">AI가 자동으로 썸네일 이미지를 생성합니다.</p>
-                    <div>
-                      <p className="text-sm font-bold text-slate-400 mb-2">썸네일 텍스트</p>
+                    {/* 베이스 이미지 선택 */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">썸네일 이미지 선택</p>
+                      <input ref={thumbnailFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailUpload} />
+                      {/* 업로드 드래그앤드롭 영역 */}
+                      <div
+                        className="w-full border-2 border-dashed border-slate-600 hover:border-brand-500 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-800/40 hover:bg-slate-800/70"
+                        onClick={() => thumbnailFileInputRef.current?.click()}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const file = e.dataTransfer.files?.[0];
+                          if (!file || !file.type.startsWith('image/')) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setThumbnailCustomImage(ev.target?.result as string);
+                          reader.readAsDataURL(file);
+                        }}
+                      >
+                        <div className="text-3xl mb-2">📁</div>
+                        <p className="text-sm font-bold text-slate-300">내 이미지 업로드</p>
+                        <p className="text-xs text-slate-500 mt-1">클릭하거나 이미지를 여기에 드래그</p>
+                      </div>
+                      <p className="text-xs text-slate-600 text-center">또는 아래 씬 이미지에서 ⭐ 버튼을 클릭</p>
+                      {(thumbnailBaseImage || thumbnailCustomImage) && (
+                        <button
+                          type="button"
+                          onClick={() => { setThumbnailCustomImage(null); onThumbnailBaseImageChange?.(null); }}
+                          className="w-full py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold rounded-lg border border-red-600/30 transition-all"
+                        >
+                          ✕ 선택된 이미지 초기화
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 캔버스 미리보기 */}
+                    <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-700 aspect-video">
+                      <canvas
+                        ref={thumbnailCanvasRef}
+                        className="w-full h-full object-contain"
+                        style={{ display: (thumbnailBaseImage || thumbnailCustomImage) ? 'block' : 'none' }}
+                      />
+                      {!(thumbnailBaseImage || thumbnailCustomImage) && (
+                        <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm">
+                          이미지를 선택하세요
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 텍스트 오버레이 컨트롤 */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">텍스트 오버레이</p>
                       <input
                         type="text"
                         value={thumbnailText}
                         onChange={(e) => setThumbnailText(e.target.value)}
-                        placeholder="썸네일에 넣을 글자 (비워두면 AI 자동 생성)"
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-brand-500"
+                        placeholder="썸네일에 넣을 텍스트"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-brand-500"
                       />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleGenerateThumbnail}
-                      disabled={isProcessing || isThumbnailGenerating}
-                      className="w-full py-3 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-500 hover:to-pink-500 disabled:opacity-40 text-white font-black rounded-xl transition-all text-sm"
-                    >
-                      {isThumbnailGenerating ? '생성 중...' : '🎨 AI 썸네일 생성'}
-                    </button>
-                    {thumbnailImage && (
-                      <div className="relative rounded-xl overflow-hidden border border-slate-700">
-                        <img src={`data:image/jpeg;base64,${thumbnailImage}`} alt="썸네일" className="w-full" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = `data:image/jpeg;base64,${thumbnailImage}`;
-                            link.download = `thumbnail_${Date.now()}.jpg`;
-                            link.click();
-                          }}
-                          className="absolute bottom-2 right-2 px-3 py-1.5 bg-slate-900/80 text-white text-sm font-bold rounded-lg hover:bg-slate-800"
-                        >
-                          ⬇ 다운로드
-                        </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-slate-500 mb-1 block">글자 크기: {thumbnailFontSize}px</label>
+                          <input
+                            type="range" min={40} max={200} step={4}
+                            value={thumbnailFontSize}
+                            onChange={(e) => setThumbnailFontSize(Number(e.target.value))}
+                            className="w-full accent-brand-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-500 mb-1 block">텍스트 색상</label>
+                          <input
+                            type="color"
+                            value={thumbnailTextColor}
+                            onChange={(e) => setThumbnailTextColor(e.target.value)}
+                            className="w-full h-9 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
+                          />
+                        </div>
                       </div>
+                      <div>
+                        <label className="text-xs text-slate-500 mb-1 block">텍스트 위치: {thumbnailTextY}%</label>
+                        <input
+                          type="range" min={10} max={95} step={1}
+                          value={thumbnailTextY}
+                          onChange={(e) => setThumbnailTextY(Number(e.target.value))}
+                          className="w-full accent-brand-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 다운로드 */}
+                    {(thumbnailBaseImage || thumbnailCustomImage) && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadThumbnail}
+                        className="w-full py-3 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-500 hover:to-pink-500 text-white font-black rounded-xl transition-all text-sm"
+                      >
+                        ⬇ 썸네일 다운로드 (1280×720)
+                      </button>
                     )}
+
+                    {/* AI 생성 섹션 */}
+                    <div className="border-t border-slate-700 pt-4">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">AI 썸네일 생성</p>
+                      <button
+                        type="button"
+                        onClick={handleGenerateThumbnail}
+                        disabled={isProcessing || isThumbnailGenerating}
+                        className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold rounded-xl transition-all text-sm border border-slate-600"
+                      >
+                        {isThumbnailGenerating ? '생성 중...' : '🎨 AI로 썸네일 이미지 생성'}
+                      </button>
+                      {thumbnailImage && (
+                        <div className="mt-3 relative rounded-xl overflow-hidden border border-slate-700 cursor-pointer" onClick={() => {
+                          setThumbnailCustomImage(`data:image/jpeg;base64,${thumbnailImage}`);
+                        }}>
+                          <img src={`data:image/jpeg;base64,${thumbnailImage}`} alt="AI 썸네일" className="w-full" />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-all flex items-center justify-center text-white text-sm font-bold">
+                            클릭하면 에디터에서 편집
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -65,6 +65,7 @@ interface ResultTableProps {
   onGenerateAnimation?: (index: number) => void;  // 영상 변환 콜백
   isExporting?: boolean;
   animatingIndices?: Set<number>;  // 현재 영상 변환 중인 인덱스들
+  onSelectThumbnail?: (imageBase64: string) => void;
 }
 
 // 오디오 디코딩 함수 (컴포넌트 외부로 이동하여 재생성 방지)
@@ -207,9 +208,10 @@ interface TableRowProps {
   onRegenerateWithPrompt?: (index: number, customPrompt: string) => void;
   onGenerateAnimation?: (index: number) => void;
   onOpenPreview?: (src: string) => void;
+  onSelectThumbnail?: (imageBase64: string) => void;
 }
 
-const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspectRatio = '16:9', subConfig, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview }) => {
+const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspectRatio = '16:9', subConfig, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview, onSelectThumbnail }) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState(row.visualPrompt || '');
 
@@ -364,6 +366,9 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
                 <button onClick={() => downloadImage(row.imageData!, row.sceneNumber)} className="p-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 text-emerald-400 transition-all" title="이미지 다운로드">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 </button>
+                <button onClick={() => onSelectThumbnail?.(row.imageData!)} className="p-2 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all" title="썸네일 베이스로 선택">
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                </button>
               </div>
             </>
           ) : <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-slate-800 m-2 rounded-lg"><span className="text-[7px] text-slate-700 font-black uppercase">대기 중</span></div>}
@@ -387,7 +392,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
 
 TableRow.displayName = 'TableRow';
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices }) => {
+const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices, onSelectThumbnail }) => {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const onOpenPreview = useCallback((src: string) => setPreviewSrc(src), []);
   const aspectRatio = (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9';
@@ -627,6 +632,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
                   onRegenerateWithPrompt={onRegenerateWithPrompt}
                   onGenerateAnimation={onGenerateAnimation}
                   onOpenPreview={onOpenPreview}
+                  onSelectThumbnail={onSelectThumbnail}
                 />
               ))}
             </tbody>
