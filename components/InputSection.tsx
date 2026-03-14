@@ -46,7 +46,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [characterStrength, setCharacterStrength] = useState(DEFAULT_REFERENCE_IMAGES.characterStrength);
   const [styleStrength, setStyleStrength] = useState(DEFAULT_REFERENCE_IMAGES.styleStrength);
   const [characterDescription, setCharacterDescription] = useState<string>(''); // Gemini Vision 자동 추출
-  const [isAnalyzingCharacter, setIsAnalyzingCharacter] = useState(false);
 
   // 이미지 설정
   const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
@@ -271,11 +270,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
         setCharacterRefImages((prev: string[]) => [...prev, dataUrl].slice(0, 5));
         // 첫 번째 이미지 업로드 시 Gemini Vision으로 캐릭터 특징 자동 추출
         if (newImages.length === 1) {
-          setIsAnalyzingCharacter(true);
-          setCharacterDescription('');
           analyzeCharacterReference(dataUrl).then(desc => {
             setCharacterDescription(desc);
-            setIsAnalyzingCharacter(false);
           });
         }
       };
@@ -527,20 +523,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       <div className="mt-2 space-y-2">
                         <div className="flex justify-between text-xs mb-1"><span className="text-slate-400">강도</span><span className="text-violet-400">{characterStrength}%</span></div>
                         <input type="range" min={0} max={100} value={characterStrength} onChange={(e) => setCharacterStrength(+e.target.value)} className="w-full accent-violet-500" />
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs text-slate-400">캐릭터 설명 (수동 수정 가능)</span>
-                            {isAnalyzingCharacter && <span className="text-xs text-yellow-400 animate-pulse">🔍 분석 중...</span>}
-                          </div>
-                          <textarea
-                            value={characterDescription}
-                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCharacterDescription(e.target.value)}
-                            placeholder="예: young Korean woman, long black hair, brown eyes, pale skin, wearing white blouse..."
-                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-violet-500"
-                            rows={3}
-                          />
-                          <p className="text-xs text-slate-500 mt-0.5">영어로 작성할수록 정확도 높음. AI가 자동 추출하지만 직접 수정 가능.</p>
-                        </div>
                       </div>
                     )}
                   </div>
