@@ -108,6 +108,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [geminiTtsGenderFilter, setGeminiTtsGenderFilter] = useState<'male' | 'female' | null>(null);
   const [playingGeminiVoiceId, setPlayingGeminiVoiceId] = useState<string | null>(null);
 
+  // 썸네일
+  const [thumbnailText, setThumbnailText] = useState('');
+  const [thumbnailImage, setThumbnailImage] = useState<string | null>(null);
+  const [isThumbnailGenerating, setIsThumbnailGenerating] = useState(false);
+
   // 프로젝트
   const [projects, setProjects] = useState<ProjectSettings[]>([]);
   const [newProjectName, setNewProjectName] = useState('');
@@ -267,6 +272,19 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     if (styleFileInputRef.current) styleFileInputRef.current.value = '';
   }, [styleRefImages.length]);
 
+  const handleGenerateThumbnail = useCallback(async () => {
+    setIsThumbnailGenerating(true);
+    try {
+      const { generateThumbnail } = await import('../services/geminiService');
+      const result = await generateThumbnail(topic || thumbnailText || '유튜브 썸네일', thumbnailText);
+      if (result) setThumbnailImage(result);
+    } catch (e) {
+      console.error('썸네일 생성 실패:', e);
+    } finally {
+      setIsThumbnailGenerating(false);
+    }
+  }, [topic, thumbnailText]);
+
   const PlayIcon = () => <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>;
   const PauseIcon = () => <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>;
   const CheckIcon = () => <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>;
@@ -291,12 +309,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
           {/* 🎨 비주얼 스타일 */}
           <Section title="🎨 비주얼 스타일" defaultOpen={true} badge={visualStyleId !== 'none' ? VISUAL_STYLES.find(s => s.id === visualStyleId)?.name : undefined}>
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative flex flex-col items-center gap-0.5 p-1.5 rounded-lg border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                  <div className={`w-full aspect-video rounded bg-gradient-to-br ${style.bg} flex items-center justify-center text-base`}>{style.emoji}</div>
-                  <span className="text-[8px] font-bold text-slate-300 leading-tight text-center line-clamp-1">{style.name}</span>
+                  className={`relative flex flex-col items-center gap-1 p-2 rounded-lg border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
+                  <div className={`w-full aspect-video rounded bg-gradient-to-br ${style.bg} flex items-center justify-center text-xl`}>{style.emoji}</div>
+                  <span className="text-[10px] font-bold text-slate-300 leading-tight text-center line-clamp-1">{style.name}</span>
                   {visualStyleId === style.id && (
                     <div className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-brand-500 rounded-full flex items-center justify-center">
                       <CheckIcon />
@@ -711,7 +729,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 예)
 나레이션 1: 옛날 옛적, 베들레헴의 한 작은 마을에...
 나레이션 2: 동방박사들이 별을 따라 찾아왔습니다..."
-                    className="flex-1 min-h-64 bg-transparent text-slate-100 p-5 focus:ring-0 focus:outline-none placeholder-slate-600 resize-none text-sm" />
+                    className="flex-1 min-h-96 bg-transparent text-slate-100 p-5 focus:ring-0 focus:outline-none placeholder-slate-600 resize-none text-sm" />
                   <div className="px-5 pb-3 flex items-center justify-between border-t border-slate-800 pt-2">
                     <span className={`text-xs font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-slate-500'}`}>
                       {manualScript.length.toLocaleString()}자

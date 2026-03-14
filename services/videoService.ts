@@ -179,13 +179,18 @@ function renderSubtitle(
 
   const boxX = Math.max(safeMargin, (canvas.width - boxWidth) / 2);
   let boxY: number;
-  const position = config.position ?? 'bottom';
-  if (position === 'top') {
-    boxY = config.bottomMargin;
-  } else if (position === 'middle') {
-    boxY = (canvas.height - boxHeight) / 2;
+  if (config.yPercent !== undefined) {
+    const usableHeight = canvas.height - boxHeight - safeMargin * 2;
+    boxY = safeMargin + (config.yPercent / 100) * usableHeight;
   } else {
-    boxY = canvas.height - config.bottomMargin - boxHeight;
+    const position = config.position ?? 'bottom';
+    if (position === 'top') {
+      boxY = config.bottomMargin;
+    } else if (position === 'middle') {
+      boxY = (canvas.height - boxHeight) / 2;
+    } else {
+      boxY = canvas.height - config.bottomMargin - boxHeight;
+    }
   }
 
   // 경계 체크

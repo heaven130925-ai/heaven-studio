@@ -91,7 +91,8 @@ export interface SubtitleConfig {
   textColor: string;         // 텍스트 색상
   strokeColor: string;       // 테두리 색상
   strokeWidth: number;       // 테두리 굵기 (0 = 없음)
-  position: 'top' | 'middle' | 'bottom';  // 자막 위치
+  position: 'top' | 'middle' | 'bottom';  // 자막 위치 (하위호환)
+  yPercent?: number;  // 수직 위치 0(상단)~100(하단), position보다 우선
 }
 
 // 기본 자막 설정
@@ -106,7 +107,8 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   textColor: '#FFFFFF',
   strokeColor: '#000000',
   strokeWidth: 4,
-  position: 'bottom'
+  position: 'bottom',
+  yPercent: 85
 };
 
 export interface GeneratedAsset extends ScriptScene {

@@ -815,7 +815,7 @@ function splitTtsText(text: string, maxChars: number = 400): string[] {
 
   while (remaining.length > maxChars) {
     let breakIdx = -1;
-    const min = Math.floor(maxChars * 0.5);
+    const min = Math.floor(maxChars * 0.88);
 
     // 1순위: 문장 끝 기호
     for (let i = maxChars; i >= min; i--) {
@@ -956,7 +956,7 @@ export const generateAllScenesAudio = async (
   if (narrations.length === 0) return [];
 
   const fullText = narrations.join(' ');
-  const chunks = splitTtsText(fullText, 500);
+  const chunks = splitTtsText(fullText, 4000);
 
   console.log(`[TTS Batch] 전체 ${narrations.length}개 씬 → ${chunks.length}개 청크 일괄 생성`);
   onProgress?.(`전체 나레이션 음성 생성 중 (0/${chunks.length})`);
@@ -1233,4 +1233,52 @@ export const generateCharacterImage = async (character: CharacterInfo): Promise<
     const imagePart = response.candidates?.[0]?.content?.parts?.find((p: any) => p.inlineData?.mimeType?.startsWith('image/'));
     return imagePart?.inlineData?.data || null;
   });
+};
+
+/**
+ * 유튜브 썸네일 생성
+ * @param topic 주제
+ * @param overlayText 썸네일에 넣을 텍스트 (선택)
+ */
+export const generateThumbnail = async (topic: string, overlayText?: string): Promise<string | null> => {
+  const ai = getAI();
+  if (!ai) return null;
+
+  const textInstruction = overlayText
+    ? `썸네일 이미지 상단 또는 하단에 굵은 한국어 텍스트로 "${overlayText}"를 명확하게 표시하라.`
+    : `주제를 잘 나타내는 임팩트 있는 한국어 텍스트를 썸네일에 포함하라.`;
+
+  const prompt = `유튜브 썸네일 이미지를 생성하라. 16:9 비율 (1280x720).
+주제: "${topic}"
+${textInstruction}
+요구사항:
+- 강렬하고 눈길을 끄는 비주얼
+- 밝고 대비가 강한 색상
+- 텍스트는 크고 굵게, 읽기 쉽게
+- 전문적인 유튜브 썸네일 스타일
+- 클릭을 유도하는 감정적인 표현`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: prompt,
+      config: {
+        responseModalities: ['IMAGE'],
+        responseMimeType: 'image/jpeg',
+      },
+    });
+
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if ((part as any).inlineData?.data) {
+          return (part as any).inlineData.data;
+        }
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error('[Thumbnail] 생성 실패:', e);
+    return null;
+  }
 };
