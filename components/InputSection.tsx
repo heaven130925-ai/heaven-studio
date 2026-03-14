@@ -556,7 +556,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 {/* 생성 버튼 */}
                 <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
                   className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black py-4 rounded-2xl transition-all text-lg tracking-wide shadow-lg shadow-brand-500/20">
-                  {isProcessing ? '생성 중...' : activeTab === 'auto' ? '▶ 대본 생성 시작' : '▶ 스토리보드 생성'}
+                  {isProcessing ? '생성 중...' : activeTab === 'auto' ? '▶ 대본 생성 시작 v2 : '▶ 스토리보드 생성 v2'}
                 </button>
 
                 <div className="flex gap-2">
