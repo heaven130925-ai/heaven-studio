@@ -533,6 +533,9 @@ const getSelectedGeminiStylePrompt = (): string => {
   // 비주얼 스타일 빠른 선택기 우선 적용
   const visualStyleId = localStorage.getItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID);
   if (visualStyleId && visualStyleId !== 'none') {
+    if (visualStyleId === 'custom') {
+      return localStorage.getItem(CONFIG.STORAGE_KEYS.CUSTOM_STYLE_PROMPT) || '';
+    }
     const found = (VISUAL_STYLES as readonly { id: string; prompt: string }[]).find(s => s.id === visualStyleId);
     if (found) return found.prompt;
   }

@@ -39,6 +39,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [visualStyleId, setVisualStyleId] = useState<VisualStyleId>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID) as VisualStyleId) || 'none'
   );
+  const [customStylePrompt, setCustomStylePrompt] = useState<string>(
+    localStorage.getItem(CONFIG.STORAGE_KEYS.CUSTOM_STYLE_PROMPT) || ''
+  );
 
   // 참조 이미지
   const [characterRefImages, setCharacterRefImages] = useState<string[]>([]);
@@ -390,6 +393,15 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 </button>
               ))}
             </div>
+            {visualStyleId === 'custom' && (
+              <textarea
+                value={customStylePrompt}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setCustomStylePrompt(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.CUSTOM_STYLE_PROMPT, e.target.value); }}
+                placeholder="원하는 스타일을 영어로 입력... (예: anime style, soft pastel colors, clean line art)"
+                className="mt-2 w-full bg-slate-900 border border-violet-600 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-violet-400"
+                rows={3}
+              />
+            )}
             {visualStyleId !== 'none' && (
               <button type="button" onClick={() => selectVisualStyle('none')} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition-colors">✕ 선택 해제</button>
             )}
@@ -615,6 +627,15 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                         </button>
                       ))}
                     </div>
+                    {visualStyleId === 'custom' && (
+                      <textarea
+                        value={customStylePrompt}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setCustomStylePrompt(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.CUSTOM_STYLE_PROMPT, e.target.value); }}
+                        placeholder="원하는 스타일을 영어로 입력... (예: anime style, soft pastel colors, clean line art)"
+                        className="mt-3 w-full bg-slate-900 border border-violet-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 resize-none focus:outline-none focus:border-violet-400"
+                        rows={3}
+                      />
+                    )}
                     {visualStyleId !== 'none' && (
                       <button type="button" onClick={() => selectVisualStyle('none')} className="mt-3 text-sm text-slate-500 hover:text-red-400 transition-colors">✕ 선택 해제</button>
                     )}
