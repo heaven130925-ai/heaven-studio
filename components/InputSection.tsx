@@ -296,30 +296,54 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     <div className="w-full max-w-6xl mx-auto my-6 px-4">
       <div className="flex gap-0 items-stretch min-h-[600px]">
 
-        {/* ════ 왼쪽 사이드바 ════ */}
-        <div className="flex-none w-20 bg-slate-900/60 border border-slate-800 rounded-l-2xl flex flex-col py-3 gap-1">
-          {[
-            { id: 'visual', emoji: '🎨', label: '비주얼' },
-            { id: 'image', emoji: '🖼️', label: '이미지' },
-            { id: 'voice', emoji: '🎙️', label: '음성' },
-            { id: 'subtitle', emoji: '📝', label: '자막' },
-            { id: 'thumbnail', emoji: '🎬', label: '썸네일' },
-            { id: 'project', emoji: '💾', label: '프로젝트' },
-          ].map(({ id, emoji, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActivePanel(activePanel === id ? null : id)}
-              className={`flex flex-col items-center gap-1 py-3 mx-1 rounded-xl transition-all ${
-                activePanel === id
-                  ? 'bg-brand-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <span className="text-2xl">{emoji}</span>
-              <span className="text-[11px] font-bold leading-tight">{label}</span>
-            </button>
-          ))}
+        {/* ════ 왼쪽 사이드바 (1/3) ════ */}
+        <div className="flex-none w-1/3 bg-slate-900/60 border border-slate-800 rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
+          {/* 비주얼 스타일 (항상 표시) */}
+          <div className="p-3 border-b border-slate-800">
+            <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 px-1">🎨 비주얼 스타일</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {VISUAL_STYLES.map(style => (
+                <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
+                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
+                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center text-xl`}>{style.emoji}</div>
+                  <span className="text-xs font-bold text-slate-300 leading-tight text-center line-clamp-1">{style.name}</span>
+                  {visualStyleId === style.id && (
+                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-brand-500 rounded-full flex items-center justify-center">
+                      <CheckIcon />
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+            {visualStyleId !== 'none' && (
+              <button type="button" onClick={() => selectVisualStyle('none')} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition-colors">✕ 선택 해제</button>
+            )}
+          </div>
+
+          {/* 카테고리 버튼들 */}
+          <div className="flex flex-col gap-1 p-2">
+            {[
+              { id: 'image', emoji: '🖼️', label: '이미지 설정' },
+              { id: 'voice', emoji: '🎙️', label: '음성 설정' },
+              { id: 'subtitle', emoji: '📝', label: '자막 설정' },
+              { id: 'thumbnail', emoji: '🎬', label: '썸네일 생성' },
+              { id: 'project', emoji: '💾', label: '프로젝트' },
+            ].map(({ id, emoji, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActivePanel(activePanel === id ? null : id)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                  activePanel === id
+                    ? 'bg-brand-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <span className="text-2xl flex-none">{emoji}</span>
+                <span className="text-sm font-bold">{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ════ 오른쪽 메인 패널 ════ */}
@@ -363,60 +387,94 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                   </div>
                 )}
 
-                {/* 씬 수 + 참조이미지 + 영상포맷 한 줄 */}
-                <div className="grid grid-cols-3 gap-3">
+                {/* 씬 수 + 영상 포맷 */}
+                <div className="grid grid-cols-2 gap-3">
                   {/* 씬 수 */}
                   <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-xs font-bold text-slate-400 mb-2">씬 수</p>
+                    <p className="text-sm font-bold text-slate-400 mb-2">씬 수</p>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={500}
                         value={sceneCount === 0 ? '' : sceneCount}
                         onChange={(e) => { const v = parseInt(e.target.value, 10); setSceneCount(isNaN(v) || v < 0 ? 0 : v); }}
                         placeholder="자동"
-                        className="w-16 bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none text-center" />
-                      <span className="text-xs text-slate-500">{sceneCount > 0 ? `${sceneCount}씬` : 'AI결정'}</span>
-                    </div>
-                  </div>
-
-                  {/* 참조 이미지 (간단 버전) */}
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-xs font-bold text-slate-400 mb-2">캐릭터 참조</p>
-                    <div className="flex gap-1 flex-wrap">
-                      {characterRefImages.slice(0, 3).map((img, i) => (
-                        <div key={i} className="relative w-8 h-8 rounded overflow-hidden border border-violet-500/50">
-                          <img src={img} alt="" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => setCharacterRefImages(prev => prev.filter((_, idx) => idx !== i))}
-                            className="absolute inset-0 bg-red-500/70 text-white opacity-0 hover:opacity-100 flex items-center justify-center text-[8px] font-bold">✕</button>
-                        </div>
-                      ))}
-                      {characterRefImages.length < 5 && (
-                        <button type="button" onClick={() => characterFileInputRef.current?.click()}
-                          className="w-8 h-8 border-2 border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500 hover:border-violet-500 hover:text-violet-400 text-lg">+</button>
-                      )}
-                      <input type="file" ref={characterFileInputRef} onChange={handleCharacterImageChange} accept="image/*" className="hidden" multiple />
+                        className="w-20 bg-slate-900 border border-slate-600 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none text-center" />
+                      <span className="text-sm text-slate-500">{sceneCount > 0 ? `${sceneCount}씬 고정` : 'AI 자동 결정'}</span>
                     </div>
                   </div>
 
                   {/* 영상 포맷 */}
                   <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-xs font-bold text-slate-400 mb-2">영상 포맷</p>
-                    <div className="flex gap-1.5">
+                    <p className="text-sm font-bold text-slate-400 mb-2">영상 포맷</p>
+                    <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${aspectRatio === '16:9' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
                         롱폼
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-1 rounded-lg text-xs font-bold transition-all ${aspectRatio === '9:16' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
                         숏폼
                       </button>
                     </div>
-                    <div className="flex items-center gap-1 mt-1.5">
+                    <div className="flex items-center gap-2">
                       <input type="number" min={1} max={60}
                         value={aspectRatio === '16:9' ? longformDuration : shortformDuration}
                         onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) { aspectRatio === '16:9' ? changeLongformDuration(v) : changeShortformDuration(v); }}}
-                        className="w-12 bg-slate-900 border border-slate-600 rounded px-1 py-1 text-sm text-white text-center focus:border-brand-500 focus:outline-none" />
-                      <span className="text-xs text-slate-400">{aspectRatio === '16:9' ? '분' : '초'}</span>
+                        className="w-16 bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-brand-500 focus:outline-none" />
+                      <span className="text-sm text-slate-400">{aspectRatio === '16:9' ? '분' : '초'}</span>
                     </div>
+                  </div>
+                </div>
+
+                {/* 참조 이미지 (캐릭터 + 화풍) */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* 캐릭터 */}
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
+                    <p className="text-sm font-bold text-white mb-2">🧑 캐릭터 참조</p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {characterRefImages.map((img, i) => (
+                        <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-violet-500/50">
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => setCharacterRefImages(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute inset-0 bg-red-500/70 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">✕</button>
+                        </div>
+                      ))}
+                      {characterRefImages.length < 5 && (
+                        <button type="button" onClick={() => characterFileInputRef.current?.click()}
+                          className="w-12 h-10 border-2 border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500 hover:border-violet-500 hover:text-violet-400 text-xl">+</button>
+                      )}
+                      <input type="file" ref={characterFileInputRef} onChange={handleCharacterImageChange} accept="image/*" className="hidden" multiple />
+                    </div>
+                    {characterRefImages.length > 0 && (
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs mb-1"><span className="text-slate-400">강도</span><span className="text-violet-400">{characterStrength}%</span></div>
+                        <input type="range" min={0} max={100} value={characterStrength} onChange={(e) => setCharacterStrength(+e.target.value)} className="w-full accent-violet-500" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 화풍 */}
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
+                    <p className="text-sm font-bold text-white mb-2">🎨 화풍 참조</p>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {styleRefImages.map((img, i) => (
+                        <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-fuchsia-500/50">
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                          <button type="button" onClick={() => setStyleRefImages(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute inset-0 bg-red-500/70 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">✕</button>
+                        </div>
+                      ))}
+                      {styleRefImages.length < 5 && (
+                        <button type="button" onClick={() => styleFileInputRef.current?.click()}
+                          className="w-12 h-10 border-2 border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500 hover:border-fuchsia-500 hover:text-fuchsia-400 text-xl">+</button>
+                      )}
+                      <input type="file" ref={styleFileInputRef} onChange={handleStyleImageChange} accept="image/*" className="hidden" multiple />
+                    </div>
+                    {styleRefImages.length > 0 && (
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs mb-1"><span className="text-slate-400">강도</span><span className="text-fuchsia-400">{styleStrength}%</span></div>
+                        <input type="range" min={0} max={100} value={styleStrength} onChange={(e) => setStyleStrength(+e.target.value)} className="w-full accent-fuchsia-500" />
+                      </div>
+                    )}
                   </div>
                 </div>
 
