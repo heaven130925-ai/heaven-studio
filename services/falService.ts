@@ -184,23 +184,36 @@ export async function faceSwapCharacter(
 ): Promise<string | null> {
   const key = apiKey || getFalApiKey();
   if (!key) {
-    console.warn('[FaceSwap] FAL API 키 없음, 스킵');
+    console.error('[FaceSwap] ❌ FAL API 키 없음! 설정에서 FAL API 키를 입력해주세요.');
     return null;
   }
 
-  try {
-    console.log('[FaceSwap] 얼굴 교체 시작...');
+  console.log('[FaceSwap] 🔄 얼굴 교체 시작... FAL 키:', key.slice(0, 8) + '...');
 
+  try {
     // 두 이미지를 fal 스토리지에 업로드
+    console.log('[FaceSwap] 📤 이미지 업로드 중...');
     const [sceneUrl, faceUrl] = await Promise.all([
-      uploadImageToFal(sceneImageBase64, key),
-      uploadImageToFal(faceRefBase64, key),
+      uploadImageToFalStrict(sceneImageBase64, key),
+      uploadImageToFalStrict(faceRefBase64, key),
     ]);
 
-    if (!sceneUrl || !faceUrl) {
-      console.warn('[FaceSwap] 이미지 업로드 실패');
+    if (!sceneUrl) {
+      console.error('[FaceSwap] ❌ 씬 이미지 업로드 실패 - FAL 스토리지 접근 불가');
       return null;
     }
+    if (!faceUrl) {
+      console.error('[FaceSwap] ❌ 얼굴 참조 이미지 업로드 실패');
+      return null;
+    }
+
+    console.log('[FaceSwap] ✅ 업로드 완료:', sceneUrl.slice(0, 60) + '...', faceUrl.slice(0, 60) + '...');
+
+    const requestBody = {
+      base_image_url: sceneUrl,   // 씬 이미지 (얼굴 교체 대상)
+      swap_image_url: faceUrl,    // 참조 얼굴 이미지
+    };
+    console.log('[FaceSwap] 📡 API 호출 중... fal-ai/face-swap');
 
     const response = await fetch('https://fal.run/fal-ai/face-swap', {
       method: 'POST',
@@ -208,42 +221,93 @@ export async function faceSwapCharacter(
         'Authorization': `Key ${key}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        base_image_url: sceneUrl,   // 씬 이미지 (얼굴 교체 대상)
-        swap_image_url: faceUrl,    // 참조 얼굴 이미지
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       const err = await response.text();
-      console.warn(`[FaceSwap] API 오류 (${response.status}):`, err.slice(0, 200));
+      console.error(`[FaceSwap] ❌ API 오류 (HTTP ${response.status}):`, err.slice(0, 500));
       return null;
     }
 
     const result = await response.json();
-    const imageUrl = result?.image?.url || result?.images?.[0]?.url;
+    console.log('[FaceSwap] 📋 API 응답:', JSON.stringify(result).slice(0, 300));
+
+    const imageUrl = result?.image?.url || result?.images?.[0]?.url || result?.output?.[0];
     if (!imageUrl) {
-      console.warn('[FaceSwap] 결과 URL 없음');
+      console.error('[FaceSwap] ❌ 결과 이미지 URL 없음. 전체 응답:', JSON.stringify(result));
       return null;
     }
 
+    console.log('[FaceSwap] 📥 결과 이미지 다운로드 중:', imageUrl.slice(0, 80));
+
     // URL → base64 변환
     const imgResp = await fetch(imageUrl);
-    if (!imgResp.ok) return null;
+    if (!imgResp.ok) {
+      console.error('[FaceSwap] ❌ 결과 이미지 다운로드 실패:', imgResp.status);
+      return null;
+    }
     const blob = await imgResp.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const b64 = (reader.result as string).split(',')[1];
-        console.log('[FaceSwap] 얼굴 교체 완료');
+        console.log('[FaceSwap] ✅ 얼굴 교체 완료!');
         resolve(b64);
       };
-      reader.onerror = () => resolve(null);
+      reader.onerror = () => {
+        console.error('[FaceSwap] ❌ base64 변환 실패');
+        resolve(null);
+      };
       reader.readAsDataURL(blob);
     });
 
   } catch (e: any) {
-    console.warn('[FaceSwap] 실패 (원본 유지):', e.message);
+    console.error('[FaceSwap] ❌ 예외 발생:', e.message, e.stack?.slice(0, 300));
+    return null;
+  }
+}
+
+/**
+ * 이미지를 fal.ai 스토리지에 업로드 (실패 시 null 반환 - data URL 폴백 없음)
+ * face swap은 실제 HTTP URL이 필요하기 때문
+ */
+async function uploadImageToFalStrict(imageBase64: string, apiKey: string): Promise<string | null> {
+  try {
+    const binaryString = atob(imageBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'image/png' });
+
+    const formData = new FormData();
+    formData.append('file', blob, 'image.png');
+
+    const uploadResponse = await fetch('https://fal.run/fal-ai/storage/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${apiKey}`
+      },
+      body: formData
+    });
+
+    if (!uploadResponse.ok) {
+      const errText = await uploadResponse.text();
+      console.error(`[FaceSwap] ❌ 스토리지 업로드 실패 (HTTP ${uploadResponse.status}):`, errText.slice(0, 200));
+      return null;
+    }
+
+    const uploadResult = await uploadResponse.json();
+    const url = uploadResult.url || uploadResult.access_url;
+    if (!url) {
+      console.error('[FaceSwap] ❌ 업로드 응답에 URL 없음:', JSON.stringify(uploadResult));
+      return null;
+    }
+    return url;
+
+  } catch (error: any) {
+    console.error('[FaceSwap] ❌ 업로드 예외:', error.message);
     return null;
   }
 }
