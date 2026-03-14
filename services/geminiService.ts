@@ -685,25 +685,13 @@ export const generateImageForScene = async (
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
-  // Imagen 3/4 선택 시 → 참조 이미지 여부와 무관하게 Imagen 사용
-  // 참조 이미지가 있을 경우: 자동 추출된 캐릭터 설명 텍스트를 프롬프트에 주입 (Imagen은 이미지 입력 미지원)
-  if (isImagenModel) {
+  // Imagen 3/4 선택 시
+  // 캐릭터 참조가 있으면 Imagen은 이미지 입력 불가 → Gemini Flash Image로 처리 (시각적 참조 필수)
+  // 캐릭터 참조가 없으면 Imagen 직접 사용
+  if (isImagenModel && !hasCharacterRef) {
     const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
-    const basePrompt = getFinalVisualPrompt(scene, hasCharacterRef, getSelectedGeminiStylePrompt(), textMode, ar);
-
-    // 캐릭터 설명 텍스트를 프롬프트 앞에 주입 (일관성 강화)
-    const charTextDesc = referenceImages.characterDescription?.trim();
-    const prompt = (hasCharacterRef && charTextDesc)
-      ? `CHARACTER (maintain exact consistency): ${charTextDesc}\n\n${basePrompt}`
-      : basePrompt;
-
-    if (hasCharacterRef && charTextDesc) {
-      console.log(`[Image Gen] Imagen + 캐릭터 텍스트 설명 주입 (${charTextDesc.length}자)`);
-    } else if (hasCharacterRef) {
-      console.log(`[Image Gen] Imagen + 캐릭터 참조 있지만 텍스트 설명 없음 (기본 프롬프트 사용)`);
-    }
-
-    console.log(`[Image Gen] Imagen 사용: ${selectedModel}, 비율: ${ar}`);
+    const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
+    console.log(`[Image Gen] Imagen 사용 (참조 없음): ${selectedModel}, 비율: ${ar}`);
     try {
       const result = await generateImageWithImagen3(prompt, selectedModel);
       if (result) return result;
@@ -717,6 +705,10 @@ export const generateImageForScene = async (
       }
     }
     // Gemini Flash로 폴백
+  }
+
+  if (isImagenModel && hasCharacterRef) {
+    console.log(`[Image Gen] Imagen 선택이지만 캐릭터 참조 있음 → Gemini Flash Image로 전환 (시각적 참조 필수)`);
   }
 
   // 스타일 참조 이미지가 없을 때만 선택된 화풍 적용 (스타일 참조 우선)
@@ -752,78 +744,92 @@ export const generateImageForScene = async (
       const result = await retryGeminiRequest("Pro Image Generation", async () => {
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
+        const charTextDesc = referenceImages.characterDescription?.trim();
 
-        // 캐릭터 참조 이미지 추가 (강도 정보 + 자동 추출 텍스트 설명 포함)
         if (hasCharacterRef) {
-          const charDesc = getStrengthDescription(characterStrength);
-          const charTextDesc = referenceImages.characterDescription?.trim();
+          // ─── 캐릭터 일관성 모드: 캐릭터가 PRIMARY, 씬은 SECONDARY ───
+          // 1단계: 씬 상황 간략 설명 (캐릭터가 무엇을 하는지)
+          parts.push({
+            text: `Generate an image of this character in the following scene.`
+          });
 
-          // 텍스트 설명이 있으면 먼저 명시적 특징 나열 (이미지보다 텍스트 앵커가 일관성에 더 효과적)
-          if (charTextDesc) {
-            parts.push({
-              text: `[CHARACTER CONSISTENCY - CRITICAL ⚠️]
-You MUST draw this EXACT character. Preserve ALL of the following features WITHOUT exception:
-
-${charTextDesc}
-
-This is a CHARACTER CONSISTENCY requirement. Every single image in this series must show the same character.
-DO NOT change: hair color, eye color, skin tone, face shape, or any distinctive feature listed above.
-Strength: ${characterStrength}% — ${charDesc.instruction}`
-            });
-          } else {
-            parts.push({
-              text: `[CHARACTER REFERENCE - Strength: ${characterStrength}%]
-⚠️ CRITICAL: Maintain EXACT character consistency. Match this character's appearance ${charDesc.level}.
-${charDesc.instruction}
-Preserve ALL features: face shape, skin tone, eye color, hair color/style, clothing, body proportions.`
-            });
-          }
-
+          // 2단계: 캐릭터 참조 이미지 (맨 앞에 배치 → 모델이 시각적으로 가장 먼저 앵커링)
           referenceImages.character.forEach(img => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
-        }
 
-        // 스타일 참조 이미지 추가 (강도 정보 포함)
-        if (hasStyleRef) {
-          const styleDesc = getStrengthDescription(styleStrength);
-          parts.push({
-            text: `[STYLE REFERENCE - Strength: ${styleStrength}%]
-Match this art style ${styleDesc.level}.
-${styleDesc.instruction}
-Focus on: color palette, brush strokes, lighting, overall mood.`
-          });
-          referenceImages.style.forEach(img => {
-            const imageData = img.includes(',') ? img.split(',')[1] : img;
-            parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
-          });
-        }
+          // 3단계: 캐릭터 특징 텍스트 강제 지시 (이미지 직후 → 시각+텍스트 이중 앵커)
+          const charConstraint = charTextDesc
+            ? `⚠️ CHARACTER IDENTITY (MUST PRESERVE EXACTLY):
+The character shown in the reference image above has these exact features:
+${charTextDesc}
 
-        // 스타일 참조 이미지가 없을 때만 선택된 화풍 프롬프트 적용
-        // (스타일 참조 이미지 우선 원칙)
-        if (!hasStyleRef) {
-          const geminiStylePrompt = getSelectedGeminiStylePrompt();
-          if (geminiStylePrompt) {
+ABSOLUTE RULES — violating any of these means failure:
+• Face: same face shape, skin tone, eye color, nose, lips — NO exceptions
+• Hair: same color, length, and style — do NOT change
+• If shown, clothing style should be consistent
+• This person must be INSTANTLY RECOGNIZABLE as the same individual across all images`
+            : `⚠️ CHARACTER IDENTITY (MUST PRESERVE EXACTLY):
+The character shown above must appear IDENTICALLY in this scene.
+Same face, same hair color and style, same skin tone, same body proportions.
+NO changes to appearance allowed.`;
+
+          parts.push({ text: charConstraint });
+
+          // 4단계: 스타일 참조 이미지 (있으면)
+          if (hasStyleRef) {
+            const styleDesc = getStrengthDescription(styleStrength);
             parts.push({
-              text: `[ART STYLE INSTRUCTION]
-Apply this art style: ${geminiStylePrompt}
-Ensure the entire image consistently follows this visual style.`
+              text: `[ART STYLE - apply ${styleDesc.level}] ${styleDesc.instruction}`
             });
-            console.log(`[Image Gen] Gemini 화풍 적용: ${geminiStylePrompt.slice(0, 50)}...`);
+            referenceImages.style.forEach(img => {
+              const imageData = img.includes(',') ? img.split(',')[1] : img;
+              parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
+            });
+          } else {
+            const geminiStylePrompt = getSelectedGeminiStylePrompt();
+            if (geminiStylePrompt) {
+              parts.push({ text: `[ART STYLE] ${geminiStylePrompt}` });
+            }
           }
+
+          // 5단계: 씬 프롬프트 (보조 — 캐릭터가 무엇을 하는지만 참고)
+          parts.push({
+            text: `[SCENE — secondary to character]: ${sanitizedPrompt}`
+          });
+
+        } else {
+          // ─── 일반 모드 (캐릭터 참조 없음): 기존 순서 유지 ───
+          if (hasStyleRef) {
+            const styleDesc = getStrengthDescription(styleStrength);
+            parts.push({
+              text: `[STYLE REFERENCE - Strength: ${styleStrength}%]
+Match this art style ${styleDesc.level}.
+${styleDesc.instruction}`
+            });
+            referenceImages.style.forEach(img => {
+              const imageData = img.includes(',') ? img.split(',')[1] : img;
+              parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
+            });
+          } else {
+            const geminiStylePrompt = getSelectedGeminiStylePrompt();
+            if (geminiStylePrompt) {
+              parts.push({
+                text: `[ART STYLE INSTRUCTION]\nApply this art style: ${geminiStylePrompt}`
+              });
+            }
+          }
+          parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
         }
 
-        // 최종 프롬프트 추가
-        parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
-
-        // 텍스트 모드별 마지막 강제 지시 (SCENE PROMPT 이후 맨 끝에 배치 → 최우선 적용)
+        // 텍스트 모드별 마지막 강제 지시
         if (textMode === 'none') {
-          parts.push({ text: `[ABSOLUTE FINAL COMMAND] This image must contain ZERO text of any kind. No letters, no words, no numbers, no Korean (한글), no signs, no labels. Pure visual only.` });
+          parts.push({ text: `[FINAL] No text, letters, words, or numbers in the image. Pure visual only.` });
         } else if (textMode === 'numbers') {
-          parts.push({ text: `[ABSOLUTE FINAL COMMAND] Only Arabic numerals (0-9) and basic math symbols (+,-,%,$) are allowed as text. STRICTLY NO Korean (한글), NO English words, NO letters of any kind.` });
+          parts.push({ text: `[FINAL] Only Arabic numerals (0-9) allowed. No Korean, no English words.` });
         } else if (textMode === 'english') {
-          parts.push({ text: `[ABSOLUTE FINAL COMMAND] Only Latin/English characters are allowed as text. STRICTLY NO Korean (한글), NO Chinese, NO Japanese, NO non-Latin script.` });
+          parts.push({ text: `[FINAL] Only Latin/English characters allowed. No Korean, no Chinese, no Japanese.` });
         }
 
         const response = await ai.models.generateContent({
