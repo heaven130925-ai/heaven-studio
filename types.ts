@@ -5,6 +5,7 @@ export interface ReferenceImages {
   style: string[];          // 스타일 참조 이미지 (최대 2장) - 화풍/분위기 참조
   characterStrength: number; // 캐릭터 참조 강도 (0~100, 기본 70)
   styleStrength: number;     // 스타일 참조 강도 (0~100, 기본 70)
+  characterDescription?: string; // Gemini Vision으로 자동 추출한 캐릭터 특징 텍스트 (일관성 강화)
 }
 
 // 기본 참조 이미지 설정
@@ -12,7 +13,8 @@ export const DEFAULT_REFERENCE_IMAGES: ReferenceImages = {
   character: [],
   style: [],
   characterStrength: 70,
-  styleStrength: 70
+  styleStrength: 70,
+  characterDescription: ''
 };
 
 export interface SceneAnalysis {

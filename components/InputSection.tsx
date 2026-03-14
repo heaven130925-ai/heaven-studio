@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
-import { generateGeminiTtsPreview } from '../services/geminiService';
+import { generateGeminiTtsPreview, analyzeCharacterReference } from '../services/geminiService';
 
 
 function pcmBase64ToWavUrl(base64Pcm: string): string {
@@ -45,6 +45,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [styleRefImages, setStyleRefImages] = useState<string[]>([]);
   const [characterStrength, setCharacterStrength] = useState(DEFAULT_REFERENCE_IMAGES.characterStrength);
   const [styleStrength, setStyleStrength] = useState(DEFAULT_REFERENCE_IMAGES.styleStrength);
+  const [characterDescription, setCharacterDescription] = useState<string>(''); // Gemini Vision 자동 추출
+  const [isAnalyzingCharacter, setIsAnalyzingCharacter] = useState(false);
 
   // 이미지 설정
   const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
@@ -241,7 +243,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const canSubmitAuto = topic.trim().length > 0;
   const canSubmitManual = manualScript.trim().length > 0;
 
-  const buildRefImages = useCallback((): ReferenceImages => ({ character: characterRefImages, style: styleRefImages, characterStrength, styleStrength }), [characterRefImages, styleRefImages, characterStrength, styleStrength]);
+  const buildRefImages = useCallback((): ReferenceImages => ({ character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }), [characterRefImages, styleRefImages, characterStrength, styleStrength, characterDescription]);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault(); if (isProcessing) return;
@@ -260,9 +262,23 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const handleCharacterImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files; if (!files) return;
     const slots = 5 - characterRefImages.length;
+    const newImages: string[] = [];
     (Array.from(files) as File[]).slice(0, slots).forEach(file => {
       const reader = new FileReader();
-      reader.onloadend = () => setCharacterRefImages(prev => [...prev, reader.result as string].slice(0, 5));
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        newImages.push(dataUrl);
+        setCharacterRefImages((prev: string[]) => [...prev, dataUrl].slice(0, 5));
+        // 첫 번째 이미지 업로드 시 Gemini Vision으로 캐릭터 특징 자동 추출
+        if (newImages.length === 1) {
+          setIsAnalyzingCharacter(true);
+          setCharacterDescription('');
+          analyzeCharacterReference(dataUrl).then(desc => {
+            setCharacterDescription(desc);
+            setIsAnalyzingCharacter(false);
+          });
+        }
+      };
       reader.readAsDataURL(file);
     });
     if (characterFileInputRef.current) characterFileInputRef.current.value = '';
@@ -497,7 +513,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       {characterRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-violet-500/50">
                           <img src={img} alt="" className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => setCharacterRefImages(prev => prev.filter((_, idx) => idx !== i))}
+                          <button type="button" onClick={() => { setCharacterRefImages((prev: string[]) => { const next = prev.filter((_: string, idx: number) => idx !== i); if (next.length === 0) { setCharacterDescription(''); } return next; }); }}
                             className="absolute inset-0 bg-red-500/70 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center text-xs font-bold">✕</button>
                         </div>
                       ))}
@@ -508,9 +524,15 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       <input type="file" ref={characterFileInputRef} onChange={handleCharacterImageChange} accept="image/*" className="hidden" multiple />
                     </div>
                     {characterRefImages.length > 0 && (
-                      <div className="mt-2">
+                      <div className="mt-2 space-y-2">
                         <div className="flex justify-between text-xs mb-1"><span className="text-slate-400">강도</span><span className="text-violet-400">{characterStrength}%</span></div>
                         <input type="range" min={0} max={100} value={characterStrength} onChange={(e) => setCharacterStrength(+e.target.value)} className="w-full accent-violet-500" />
+                        {isAnalyzingCharacter && (
+                          <p className="text-xs text-yellow-400 animate-pulse">🔍 캐릭터 특징 분석 중... (일관성 강화)</p>
+                        )}
+                        {!isAnalyzingCharacter && characterDescription && (
+                          <p className="text-xs text-green-400">✅ 캐릭터 분석 완료 — 이미지 일관성 강화됨</p>
+                        )}
                       </div>
                     )}
                   </div>

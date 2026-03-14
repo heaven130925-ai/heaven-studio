@@ -622,6 +622,48 @@ const generateImageWithImagen3 = async (
 };
 
 /**
+ * 참조 이미지(캐릭터)에서 Gemini Vision으로 특징 텍스트 자동 추출
+ * - 업로드 시 1회 실행, 이후 매 씬 생성에 재사용
+ * @param imageBase64 - base64 이미지 (data:URL 또는 raw base64)
+ * @returns 영어로 된 상세 캐릭터 묘사 텍스트
+ */
+export const analyzeCharacterReference = async (imageBase64: string): Promise<string> => {
+  try {
+    const ai = getAI();
+    const imageData = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: {
+        parts: [
+          {
+            text: `Analyze this character/person reference image and provide an extremely detailed description in English for use in AI image generation prompts.
+
+Output a single paragraph (no bullet points) covering ALL of these features:
+1. FACE: exact skin tone, face shape, eye color and shape, eyebrow style, nose shape, lip shape/color, cheekbones
+2. HAIR: exact color (e.g., "ash blonde", "jet black"), length, texture (straight/wavy/curly), style (how it's worn)
+3. BODY: build, height impression, posture
+4. CLOTHING: every piece of clothing with exact colors and style
+5. DISTINCTIVE FEATURES: any unique marks, accessories, expressions
+
+Be extremely specific about colors. This description will be used to maintain perfect consistency across multiple AI-generated images.
+Output ONLY the description paragraph, no intro text.`
+          },
+          { inlineData: { data: imageData, mimeType: 'image/jpeg' } }
+        ]
+      }
+    });
+
+    const description = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    console.log(`[Character Analysis] 추출 완료 (${description.length}자):`, description.slice(0, 150) + '...');
+    return description;
+  } catch (e) {
+    console.warn('[Character Analysis] 분석 실패:', e);
+    return '';
+  }
+};
+
+/**
  * 씬에 대한 이미지 생성 (Gemini 사용)
  * @param scene - 씬 데이터
  * @param referenceImages - 분리된 참조 이미지 (캐릭터/스타일 + 강도)
@@ -633,7 +675,7 @@ export const generateImageForScene = async (
   // 캐릭터 참조 이미지가 있으면 고정 프롬프트 제외
   const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
   const hasStyleRef = referenceImages.style && referenceImages.style.length > 0;
-  const hasAnyRef = hasCharacterRef || hasStyleRef;
+
 
   // 선택된 이미지 모델 확인
   const selectedModel = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) || CONFIG.DEFAULT_IMAGE_MODEL;
@@ -643,10 +685,24 @@ export const generateImageForScene = async (
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
-  // Imagen 3/4 선택 + 참조 이미지 없을 때 → Imagen 사용 (실패 시 Gemini로 폴백)
-  if (isImagenModel && !hasAnyRef) {
+  // Imagen 3/4 선택 시 → 참조 이미지 여부와 무관하게 Imagen 사용
+  // 참조 이미지가 있을 경우: 자동 추출된 캐릭터 설명 텍스트를 프롬프트에 주입 (Imagen은 이미지 입력 미지원)
+  if (isImagenModel) {
     const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
-    const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
+    const basePrompt = getFinalVisualPrompt(scene, hasCharacterRef, getSelectedGeminiStylePrompt(), textMode, ar);
+
+    // 캐릭터 설명 텍스트를 프롬프트 앞에 주입 (일관성 강화)
+    const charTextDesc = referenceImages.characterDescription?.trim();
+    const prompt = (hasCharacterRef && charTextDesc)
+      ? `CHARACTER (maintain exact consistency): ${charTextDesc}\n\n${basePrompt}`
+      : basePrompt;
+
+    if (hasCharacterRef && charTextDesc) {
+      console.log(`[Image Gen] Imagen + 캐릭터 텍스트 설명 주입 (${charTextDesc.length}자)`);
+    } else if (hasCharacterRef) {
+      console.log(`[Image Gen] Imagen + 캐릭터 참조 있지만 텍스트 설명 없음 (기본 프롬프트 사용)`);
+    }
+
     console.log(`[Image Gen] Imagen 사용: ${selectedModel}, 비율: ${ar}`);
     try {
       const result = await generateImageWithImagen3(prompt, selectedModel);
@@ -661,11 +717,6 @@ export const generateImageForScene = async (
       }
     }
     // Gemini Flash로 폴백
-  }
-
-  // 참조 이미지 있거나 Gemini 선택 시 → Gemini 사용
-  if (isImagenModel && hasAnyRef) {
-    console.log(`[Image Gen] Imagen 선택이지만 참조 이미지 있음 → Gemini로 폴백`);
   }
 
   // 스타일 참조 이미지가 없을 때만 선택된 화풍 적용 (스타일 참조 우선)
@@ -702,15 +753,32 @@ export const generateImageForScene = async (
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
 
-        // 캐릭터 참조 이미지 추가 (강도 정보 포함)
+        // 캐릭터 참조 이미지 추가 (강도 정보 + 자동 추출 텍스트 설명 포함)
         if (hasCharacterRef) {
           const charDesc = getStrengthDescription(characterStrength);
-          parts.push({
-            text: `[CHARACTER REFERENCE - Strength: ${characterStrength}%]
-Match this character's appearance ${charDesc.level}.
+          const charTextDesc = referenceImages.characterDescription?.trim();
+
+          // 텍스트 설명이 있으면 먼저 명시적 특징 나열 (이미지보다 텍스트 앵커가 일관성에 더 효과적)
+          if (charTextDesc) {
+            parts.push({
+              text: `[CHARACTER CONSISTENCY - CRITICAL ⚠️]
+You MUST draw this EXACT character. Preserve ALL of the following features WITHOUT exception:
+
+${charTextDesc}
+
+This is a CHARACTER CONSISTENCY requirement. Every single image in this series must show the same character.
+DO NOT change: hair color, eye color, skin tone, face shape, or any distinctive feature listed above.
+Strength: ${characterStrength}% — ${charDesc.instruction}`
+            });
+          } else {
+            parts.push({
+              text: `[CHARACTER REFERENCE - Strength: ${characterStrength}%]
+⚠️ CRITICAL: Maintain EXACT character consistency. Match this character's appearance ${charDesc.level}.
 ${charDesc.instruction}
-Focus on: face, hair, clothing, body proportions.`
-          });
+Preserve ALL features: face shape, skin tone, eye color, hair color/style, clothing, body proportions.`
+            });
+          }
+
           referenceImages.character.forEach(img => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
