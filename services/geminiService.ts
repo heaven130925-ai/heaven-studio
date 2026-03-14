@@ -634,7 +634,7 @@ export const analyzeCharacterReference = async (imageBase64: string): Promise<st
     const imageData = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       contents: {
         parts: [
           {
@@ -841,15 +841,17 @@ ${styleDesc.instruction}`
 
       if (result) {
         // 캐릭터 참조가 있고 FAL 키가 있으면 face swap으로 얼굴 일관성 보장
+        console.log(`[Image Gen] 이미지 생성 완료. hasCharacterRef=${hasCharacterRef}, charImages=${referenceImages.character?.length || 0}`);
         if (hasCharacterRef) {
           const faceRefRaw = referenceImages.character[0];
+          console.log(`[Image Gen] Face swap 시도 중... 참조 이미지 크기: ${faceRefRaw?.length || 0}자`);
           const faceRef = faceRefRaw.includes(',') ? faceRefRaw.split(',')[1] : faceRefRaw;
           const swapped = await faceSwapCharacter(result, faceRef);
           if (swapped) {
-            console.log('[Image Gen] Face swap 적용 완료');
+            console.log('[Image Gen] ✅ Face swap 적용 완료');
             return swapped;
           }
-          console.log('[Image Gen] Face swap 실패 또는 FAL 키 없음 → 원본 반환');
+          console.error('[Image Gen] ❌ Face swap 실패 또는 FAL 키 없음 → 원본 반환');
         }
         return result;
       }
