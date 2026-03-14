@@ -1130,7 +1130,7 @@ ${narration}
 JSON 배열만 출력. 예: ["청크1", "청크2"]`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -1188,7 +1188,7 @@ Return ONLY the motion prompt, no explanation. Example:
 "Slow gentle zoom in. Character slightly nods with a warm smile, eyes blinking naturally. Subtle breathing motion. Background remains static. Maintain original art style consistency."`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 
@@ -1341,7 +1341,7 @@ ${textInstruction}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseModalities: ['IMAGE'],
