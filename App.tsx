@@ -54,6 +54,7 @@ const App: React.FC = () => {
   // 캐릭터 추출 상태
   const [characters, setCharacters] = useState<CharacterInfo[]>([]);
   const [isExtractingCharacters, setIsExtractingCharacters] = useState(false);
+  const [regeneratingCharIdx, setRegeneratingCharIdx] = useState<number | null>(null);
   const costRef = useRef<CostBreakdown>({
     images: 0, tts: 0, videos: 0, total: 0,
     imageCount: 0, ttsCharacters: 0, videoCount: 0
@@ -659,6 +660,22 @@ const App: React.FC = () => {
     }
   }, [isExtractingCharacters]);
 
+  // 캐릭터 개별 이미지 재생성 핸들러
+  const handleRegenerateCharacter = useCallback(async (idx: number) => {
+    const char = characters[idx];
+    if (!char || regeneratingCharIdx !== null) return;
+    setRegeneratingCharIdx(idx);
+    setCharacters(prev => { const n = [...prev]; n[idx] = { ...n[idx], imageData: null }; return n; });
+    try {
+      const img = await generateCharacterImage(char);
+      setCharacters(prev => { const n = [...prev]; n[idx] = { ...n[idx], imageData: img }; return n; });
+    } catch (e: any) {
+      alert(`이미지 재생성 실패: ${e.message}`);
+    } finally {
+      setRegeneratingCharIdx(null);
+    }
+  }, [characters, regeneratingCharIdx]);
+
   // 프로젝트 불러오기 핸들러
   const handleLoadProject = (project: SavedProject) => {
     // 저장된 에셋을 현재 상태로 로드
@@ -806,7 +823,7 @@ const App: React.FC = () => {
               </h2>
               <button onClick={() => setCharacters([])} className="text-[10px] text-slate-500 hover:text-red-400 transition-colors">초기화</button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {characters.map((char, i) => (
                 <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
                   <div className="aspect-square bg-slate-800 flex items-center justify-center relative">
@@ -816,9 +833,27 @@ const App: React.FC = () => {
                       <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent animate-spin rounded-full" />
                     )}
                   </div>
-                  <div className="p-3 flex flex-col gap-1">
+                  <div className="p-3 flex flex-col gap-2">
                     <p className="text-sm font-black text-white truncate">{char.name}</p>
-                    <p className="text-[10px] text-slate-400 leading-relaxed line-clamp-3">{char.description}</p>
+                    <textarea
+                      value={char.description}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCharacters((prev: CharacterInfo[]) => {
+                        const n = [...prev];
+                        n[i] = { ...n[i], description: e.target.value };
+                        return n;
+                      })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 resize-none focus:outline-none focus:border-violet-500"
+                      rows={3}
+                    />
+                    <button
+                      onClick={() => handleRegenerateCharacter(i)}
+                      disabled={regeneratingCharIdx !== null}
+                      className="w-full py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                    >
+                      {regeneratingCharIdx === i ? (
+                        <><span className="w-3 h-3 border border-white border-t-transparent animate-spin rounded-full" /> 생성 중...</>
+                      ) : '🔄 이미지 재생성'}
+                    </button>
                   </div>
                 </div>
               ))}
