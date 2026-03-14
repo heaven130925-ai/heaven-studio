@@ -839,6 +839,7 @@ ${styleDesc.instruction}`
         return null;
       }, 2, 3000); // 각 대체어당 2회 재시도
 
+      console.warn(`[CHECKPOINT] result=${result ? '이미지있음' : 'NULL'}, hasCharacterRef=${hasCharacterRef}, charCount=${referenceImages.character?.length || 0}`);
       if (result) {
         // 캐릭터 참조가 있고 FAL 키가 있으면 face swap으로 얼굴 일관성 보장
         console.log(`[Image Gen] 이미지 생성 완료. hasCharacterRef=${hasCharacterRef}, charImages=${referenceImages.character?.length || 0}`);
