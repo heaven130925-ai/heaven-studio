@@ -93,6 +93,7 @@ export interface SubtitleConfig {
   strokeWidth: number;       // 테두리 굵기 (0 = 없음)
   position: 'top' | 'middle' | 'bottom';  // 자막 위치 (하위호환)
   yPercent?: number;  // 수직 위치 0(상단)~100(하단), position보다 우선
+  maxCharsPerChunk?: number;  // 자막 청크당 최대 글자 수 (기본 15, 숏폼은 10 권장)
 }
 
 // 기본 자막 설정
@@ -108,7 +109,8 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   strokeColor: '#000000',
   strokeWidth: 4,
   position: 'bottom',
-  yPercent: 85
+  yPercent: 85,
+  maxCharsPerChunk: 15
 };
 
 export interface GeneratedAsset extends ScriptScene {

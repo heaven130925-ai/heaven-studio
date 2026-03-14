@@ -833,6 +833,23 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                   <div className="space-y-4">
                     <p className="text-sm text-slate-500">MP4 (자막 O) 내보낼 때 적용됩니다</p>
 
+                    {/* 글자 수 조절 */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-slate-400 w-16 shrink-0">글자 수</span>
+                      <div className="flex items-center gap-2 flex-1">
+                        <input type="range" min={5} max={30} step={1}
+                          value={subConfig.maxCharsPerChunk ?? 15}
+                          onChange={(e) => updateSub('maxCharsPerChunk', Number(e.target.value))}
+                          className="flex-1 accent-violet-500" />
+                        <input type="number" min={5} max={30}
+                          value={subConfig.maxCharsPerChunk ?? 15}
+                          onChange={(e) => updateSub('maxCharsPerChunk', Math.max(5, Math.min(30, Number(e.target.value))))}
+                          className="w-14 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-violet-500" />
+                        <span className="text-xs text-slate-500">자</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 -mt-2">숏폼 10~12자 / 롱폼 15~20자 권장</p>
+
                     {/* 위치 */}
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-slate-400 w-16 shrink-0">위치</span>

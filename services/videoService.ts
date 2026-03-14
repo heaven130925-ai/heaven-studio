@@ -106,11 +106,18 @@ function createSubtitleChunks(
     }));
   }
 
-  // 폴백: 기존 단어 수 기반 분리
+  // 폴백: 단어 수 기반 분리 (maxCharsPerChunk 기준으로 동적 조정)
   console.log('[Video] 기본 단어 수 기반 자막 사용');
   const chunks: SubtitleChunk[] = [];
   const words = subtitleData.words;
-  const wordsPerChunk = config.wordsPerLine * config.maxLines;
+  // maxCharsPerChunk 설정이 있으면 글자 수 기준으로 청크 크기 계산
+  const maxCharsPerChunk = config.maxCharsPerChunk ?? 15;
+  let wordsPerChunk = config.wordsPerLine * config.maxLines;
+  // 단어 평균 글자 수로 wordsPerChunk 재계산
+  if (words.length > 0) {
+    const avgWordLen = words.reduce((s, w) => s + w.word.length, 0) / words.length;
+    wordsPerChunk = Math.max(1, Math.round(maxCharsPerChunk / (avgWordLen + 1)));
+  }
 
   for (let i = 0; i < words.length; i += wordsPerChunk) {
     const chunkWords = words.slice(i, Math.min(i + wordsPerChunk, words.length));
@@ -407,8 +414,9 @@ export const generateVideo = async (
         subtitleChunks = createSubtitleChunks(asset.subtitleData, config);
       } else if (asset.narration && audioBuffer && audioBuffer.duration > 0) {
         // Google TTS: 타임스탬프 없음 → 글자 수 비례 추정
-        subtitleChunks = createTimingEstimatedChunks(asset.narration, audioBuffer.duration);
-        console.log(`[Video] 씬 ${i + 1}: Google TTS 추정 자막 ${subtitleChunks.length}개 청크`);
+        const maxChars = config.maxCharsPerChunk ?? 15;
+        subtitleChunks = createTimingEstimatedChunks(asset.narration, audioBuffer.duration, maxChars);
+        console.log(`[Video] 씬 ${i + 1}: Google TTS 추정 자막 ${subtitleChunks.length}개 청크 (최대 ${maxChars}자)`);
       }
     }
     if (subtitleChunks.length > 0) {

@@ -486,6 +486,22 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
             <span className="text-slate-600 text-[10px]">MP4 (자막 O) 내보낼 때 적용됩니다</span>
           </div>
 
+          {/* 글자 수 */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[11px] text-slate-400 w-16 shrink-0">글자 수</span>
+            <div className="flex items-center gap-2 flex-1">
+              <input type="range" min={5} max={30} step={1}
+                value={subConfig.maxCharsPerChunk ?? 15}
+                onChange={(e) => updateSub('maxCharsPerChunk', Number(e.target.value))}
+                className="flex-1 accent-violet-500" />
+              <input type="number" min={5} max={30}
+                value={subConfig.maxCharsPerChunk ?? 15}
+                onChange={(e) => updateSub('maxCharsPerChunk', Math.max(5, Math.min(30, Number(e.target.value))))}
+                className="w-12 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white text-center focus:outline-none focus:border-violet-500" />
+              <span className="text-[10px] text-slate-500">자 (숏폼 10·롱폼 15)</span>
+            </div>
+          </div>
+
           {/* 위치 */}
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-[11px] text-slate-400 w-16 shrink-0">위치</span>
