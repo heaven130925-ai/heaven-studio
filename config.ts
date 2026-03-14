@@ -8,11 +8,19 @@
 // 이미지 생성 모델 목록
 export const IMAGE_MODELS = [
   {
+    id: 'imagen-4.0-fast-generate-001',
+    name: 'Imagen 4 Fast ⚡',
+    provider: 'Google',
+    pricePerImage: 0.02,
+    description: '최신·빠름·저렴 — 유료 API키 필요',
+    speed: '빠름'
+  },
+  {
     id: 'imagen-4.0-generate-001',
-    name: 'Imagen 4 🔥',
+    name: 'Imagen 4 Standard 🔥',
     provider: 'Google',
     pricePerImage: 0.04,
-    description: '최신 최고품질, 색감/디테일 대폭 향상',
+    description: '최신 고품질, 색감/디테일 향상 — 유료 API키 필요',
     speed: '보통'
   },
   {
@@ -20,7 +28,7 @@ export const IMAGE_MODELS = [
     name: 'Imagen 4 Ultra ✨',
     provider: 'Google',
     pricePerImage: 0.06,
-    description: '최고 퀄리티, 가장 정교한 이미지',
+    description: '최고품질 2K해상도 — 유료 API키 필요',
     speed: '느림'
   },
   {
@@ -115,6 +123,7 @@ export const PRICING = {
   USD_TO_KRW: 1450,
 
   IMAGE: {
+    'imagen-4.0-fast-generate-001': 0.02,
     'imagen-4.0-generate-001': 0.04,
     'imagen-4.0-ultra-generate-001': 0.06,
     'imagen-3.0-fast-generate-001': 0.02,
