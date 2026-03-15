@@ -758,7 +758,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 인라인 스크롤 (absolute 드롭다운 제거) */}
-                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: '240px' }}>
+                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: '420px' }}>
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -817,7 +817,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </button>
                           ))}
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-1.5 max-h-96 overflow-y-auto">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10' : 'border-slate-700 hover:border-slate-500'}`}
                               onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
