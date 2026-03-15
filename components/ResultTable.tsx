@@ -440,7 +440,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
 
       <div className="flex items-center justify-between mb-6 bg-black/60 backdrop-blur-md p-5 rounded-3xl border border-white/[0.08]">
         <div className="flex items-center gap-4">
-          <div className="w-0.5 h-10 bg-gradient-to-b from-red-500 to-rose-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+          <div className="w-0.5 h-10 bg-gradient-to-b from-red-400/60 to-rose-400/30 rounded-full shadow-[0_0_6px_rgba(239,68,68,0.25)]"></div>
           <div>
             <h2 className="text-xl font-black text-white tracking-tight">Heaven 1.0 마스터 스토리보드</h2>
             <p className="text-white/25 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
@@ -467,7 +467,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
                 {isExporting ? <div className="w-3 h-3 border-2 border-white/20 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 X)
             </button>
-            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-gradient-to-r from-red-500 to-rose-600 text-white hover:from-red-500 hover:to-rose-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'}`}>
+            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-black/50 border border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/60 shadow-[0_0_8px_rgba(239,68,68,0.15)] hover:shadow-[0_0_14px_rgba(239,68,68,0.3)]'}`}>
                 {isExporting ? <div className="w-3 h-3 border-2 border-white/30 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 O)
             </button>

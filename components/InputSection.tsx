@@ -409,11 +409,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-white/[0.12] border border-white/20 text-white' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]' : 'text-white/40 hover:text-white/70'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-white/[0.12] border border-white/20 text-white' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]' : 'text-white/40 hover:text-white/70'}`}>
                   수동 대본
                 </button>
               </div>
@@ -460,11 +460,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     <p className="text-sm font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-white/[0.12] border border-white/20 text-white' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         롱폼
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-white/[0.12] border border-white/20 text-white' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         숏폼
                       </button>
                     </div>
@@ -536,7 +536,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   {/* 네온 바 */}
                   <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
                   <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="w-full relative bg-red-500 hover:bg-red-400 active:bg-red-600 disabled:opacity-40 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide shadow-[0_4px_32px_rgba(239,68,68,0.7),0_0_80px_rgba(239,68,68,0.3)] hover:shadow-[0_4px_40px_rgba(239,68,68,0.9),0_0_100px_rgba(239,68,68,0.4)] disabled:shadow-none border border-red-400/40">
+                    className="w-full relative bg-red-500 hover:bg-red-400 active:bg-red-600 disabled:opacity-60 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide shadow-[0_4px_32px_rgba(239,68,68,0.7),0_0_80px_rgba(239,68,68,0.3)] hover:shadow-[0_4px_40px_rgba(239,68,68,0.9),0_0_100px_rgba(239,68,68,0.4)] disabled:shadow-none border border-red-400/40">
                     {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}
@@ -544,7 +544,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 </div>
 
                 <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-40 text-white text-base font-bold transition-all shadow-[0_4px_24px_rgba(16,185,129,0.6)] hover:shadow-[0_4px_32px_rgba(16,185,129,0.8)] disabled:shadow-none border border-emerald-400/40">
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-60 text-white text-base font-bold transition-all shadow-[0_4px_24px_rgba(16,185,129,0.6)] hover:shadow-[0_4px_32px_rgba(16,185,129,0.8)] disabled:shadow-none border border-emerald-400/40">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
                   이미지만 생성
                 </button>

@@ -136,10 +136,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  // 오디오: React JSX 없이 직접 생성 (타이밍 문제 방지)
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  const blobUrlRef = useRef<string>('');
   // 줌/패닝
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -151,22 +151,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
 
-  // audioData가 data:URL이면 그대로, raw base64면 prefix 붙이기
-  const getAudioSrc = (s: typeof scene) =>
-    s?.audioData
-      ? (s.audioData.startsWith('data:') ? s.audioData : `data:audio/mpeg;base64,${s.audioData}`)
-      : '';
-  const audioSrc = getAudioSrc(scene);
+  // base64 → Blob URL 변환 (data URL보다 브라우저 호환성 높음)
+  const makeBlobUrl = (audioData: string): string => {
+    if (audioData.startsWith('blob:')) return audioData;
+    const b64 = audioData.startsWith('data:') ? audioData.split(',')[1] : audioData;
+    try {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
+    } catch { return `data:audio/mpeg;base64,${b64}`; }
+  };
 
-  // 오디오 엘리먼트: DOM에 추가해야 일부 브라우저에서 재생 허용
+  const hasAudio = !!(scene?.audioData);
+  const audioSrc = hasAudio ? '(loaded)' : ''; // 버튼 활성화 여부용
+
+  // 오디오 엘리먼트 마운트 시 DOM에 추가
   useEffect(() => {
     const audio = document.createElement('audio');
     audio.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none;';
     document.body.appendChild(audio);
     audioRef.current = audio;
-    const onTimeUpdate = () => {
-      if (audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
-    };
+    const onTimeUpdate = () => { if (audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100); };
     const onEnded = () => { setIsPlaying(false); setAudioProgress(0); };
     const onPlay  = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -176,6 +182,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     audio.addEventListener('pause', onPause);
     return () => {
       audio.pause();
+      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = ''; }
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('play', onPlay);
@@ -185,13 +192,25 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     };
   }, []);
 
+  // 씬 변경 시 정지
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) { audio.pause(); audio.src = ''; }
+    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = ''; }
+    setIsPlaying(false);
+    setAudioProgress(0);
+  }, [selectedIdx]);
+
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !scene?.audioData) return;
     if (isPlaying) { audio.pause(); return; }
-    const src = getAudioSrc(scene);
-    if (!src) return;
-    audio.src = src;
+    // Blob URL 생성 (이미 만들었으면 재사용)
+    if (!blobUrlRef.current) {
+      blobUrlRef.current = makeBlobUrl(scene.audioData);
+    }
+    audio.src = blobUrlRef.current;
+    audio.load();
     audio.play().catch(e => { console.error('play error:', e.name, e.message); setIsPlaying(false); });
   };
 
@@ -253,9 +272,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   return (
     <div className="flex h-full overflow-hidden">
       {/* ─── 왼쪽: 캔버스 미리보기 + 컨트롤 ─── */}
-      <div className="flex flex-col w-[68%] border-r border-slate-700/50 overflow-y-auto">
+      <div className="flex flex-col w-[68%] border-r border-blue-900/30 overflow-y-auto">
         {/* 줌/패닝 컨트롤 바 */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-900/80 border-b border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-950/80 border-b border-blue-900/40 shrink-0">
           <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
             className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
             RESET
@@ -338,7 +357,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         </div>
 
         {/* 오디오 플레이어 */}
-        <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-2 bg-blue-950/90 border-b border-blue-900/40 shrink-0">
           <button
             onClick={togglePlay}
             disabled={!audioSrc}
@@ -371,7 +390,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               value={narration}
               onChange={e => onNarrationChange(selectedIdx, e.target.value)}
               rows={2}
-              className="w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-brand-500"
+              className="w-full mt-1 bg-blue-950/60 border border-blue-900/50 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-blue-500"
             />
           </div>
         )}
@@ -389,7 +408,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                   onClick={() => set({ fontFamily: f.value, fontWeight: f.weight })}
                   className={`py-2 px-2 rounded-lg text-xs font-bold transition-colors text-center truncate ${
                     subConfig.fontFamily === f.value
-                      ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   }`}
                   style={{ fontFamily: f.value }}
                 >
@@ -408,7 +427,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <input type="range" min={20} max={120} step={2}
                 value={subConfig.fontSize}
                 onChange={e => set({ fontSize: +e.target.value })}
-                className="w-full accent-brand-500"
+                className="w-full accent-blue-500"
               />
             </div>
             <div>
@@ -418,7 +437,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <input type="range" min={100} max={900} step={100}
                 value={subConfig.fontWeight}
                 onChange={e => set({ fontWeight: +e.target.value })}
-                className="w-full accent-brand-500"
+                className="w-full accent-blue-500"
               />
             </div>
           </div>
@@ -452,7 +471,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <input type="range" min={0} max={20} step={1}
                 value={subConfig.strokeWidth}
                 onChange={e => set({ strokeWidth: +e.target.value })}
-                className="w-full accent-brand-500"
+                className="w-full accent-blue-500"
               />
             </div>
           </div>
@@ -469,7 +488,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 ].map(o => (
                   <button key={o.val} onClick={() => set({ backgroundColor: o.val })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      subConfig.backgroundColor === o.val ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}>
                     {o.label}
                   </button>
@@ -482,7 +501,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button key={a} onClick={() => set({ textAlign: a })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      (subConfig.textAlign ?? 'center') === a ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}>
                     {a === 'left' ? '좌' : a === 'center' ? '중' : '우'}
                   </button>
@@ -499,7 +518,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <input type="range" min={0} max={100} step={1}
               value={subConfig.yPercent ?? 85}
               onChange={e => set({ yPercent: +e.target.value })}
-              className="w-full accent-brand-500"
+              className="w-full accent-blue-500"
             />
           </div>
 
@@ -511,7 +530,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <input type="range" min={5} max={30} step={1}
               value={subConfig.maxCharsPerChunk ?? 15}
               onChange={e => set({ maxCharsPerChunk: +e.target.value })}
-              className="w-full accent-brand-500"
+              className="w-full accent-blue-500"
             />
           </div>
         </div>
@@ -524,7 +543,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             key={i}
             onClick={() => setSelectedIdx(i)}
             className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
-              i === selectedIdx ? 'bg-brand-900/40 border-l-2 border-brand-500' : 'hover:bg-slate-800/60 border-l-2 border-transparent'
+              i === selectedIdx ? 'bg-blue-900/30 border-l-2 border-blue-500' : 'hover:bg-slate-800/60 border-l-2 border-transparent'
             }`}
           >
             {/* 썸네일 */}
