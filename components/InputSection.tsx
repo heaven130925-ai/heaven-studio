@@ -359,18 +359,18 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
       <div className="flex gap-0 items-stretch min-h-[600px]">
 
         {/* ════ 왼쪽 사이드바 (1/3) ════ */}
-        <div className="flex-none w-1/3 bg-slate-900/60 border border-slate-800 rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
+        <div className="flex-none w-1/3 bg-slate-900/40 border border-slate-800/80 rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
           {/* 비주얼 스타일 (항상 표시) */}
           <div className="p-3 border-b border-slate-800">
-            <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 px-1">🎨 비주얼 스타일</p>
+            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Visual Style</p>
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center text-xl`}>{style.emoji}</div>
+                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_8px_rgba(6,182,212,0.15)]' : 'border-slate-700/60 hover:border-slate-500'}`}>
+                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg}`}></div>
                   <span className="text-xs font-bold text-slate-300 leading-tight text-center line-clamp-1">{style.name}</span>
                   {visualStyleId === style.id && (
-                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-brand-500 rounded-full flex items-center justify-center">
+                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
                       <CheckIcon />
                     </div>
                   )}
@@ -387,50 +387,50 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
               />
             )}
             {visualStyleId !== 'none' && (
-              <button type="button" onClick={() => selectVisualStyle('none')} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition-colors">✕ 선택 해제</button>
+              <button type="button" onClick={() => selectVisualStyle('none')} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition-colors">선택 해제</button>
             )}
           </div>
 
           {/* 카테고리 버튼들 */}
           <div className="flex flex-col gap-1 p-2">
             {[
-              { id: 'image', emoji: '🖼️', label: '이미지 설정' },
-              { id: 'voice', emoji: '🎙️', label: '음성 설정' },
-              { id: 'thumbnail', emoji: '🎬', label: '썸네일 생성' },
-              { id: 'project', emoji: '💾', label: '프로젝트' },
-            ].map(({ id, emoji, label }) => (
+              { id: 'image', label: '이미지 설정', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={1.5}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 15l-5-5L5 21"/></svg> },
+              { id: 'voice', label: '음성 설정', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M9 11V7a3 3 0 116 0v4a3 3 0 11-6 0z"/></svg> },
+              { id: 'thumbnail', label: '썸네일 생성', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg> },
+              { id: 'project', label: '프로젝트', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg> },
+            ].map(({ id, label, icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setActivePanel(activePanel === id ? null : id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left ${
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left ${
                   activePanel === id
-                    ? 'bg-brand-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                    ? 'bg-gradient-to-r from-cyan-600/30 to-blue-600/20 border border-cyan-500/40 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.1)]'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'
                 }`}
               >
-                <span className="text-2xl flex-none">{emoji}</span>
-                <span className="text-sm font-bold">{label}</span>
+                <span className="flex-none opacity-80">{icon}</span>
+                <span className="text-sm font-semibold">{label}</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* ════ 오른쪽 메인 패널 ════ */}
-        <div className="flex-1 bg-slate-900/40 border border-l-0 border-slate-800 rounded-r-2xl overflow-hidden flex flex-col">
+        <div className="flex-1 bg-slate-900/20 border border-l-0 border-slate-800/80 rounded-r-2xl overflow-hidden flex flex-col">
 
           {activePanel === null ? (
             /* ── 기본 입력 패널 ── */
             <div className="flex flex-col h-full p-5 gap-4">
 
               {/* 탭 */}
-              <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="flex gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'auto' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-slate-500 hover:text-slate-300'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-black transition-all ${activeTab === 'manual' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-slate-500 hover:text-slate-300'}`}>
                   수동 대본
                 </button>
               </div>
@@ -499,7 +499,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 <div className="grid grid-cols-2 gap-3">
                   {/* 캐릭터 */}
                   <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-sm font-bold text-white mb-2">🧑 캐릭터 참조</p>
+                    <p className="text-sm font-bold text-slate-200 mb-2">캐릭터 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-violet-500/50">
@@ -524,7 +524,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
                   {/* 화풍 */}
                   <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-sm font-bold text-white mb-2">🎨 화풍 참조</p>
+                    <p className="text-sm font-bold text-slate-200 mb-2">화풍 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-fuchsia-500/50">
@@ -550,21 +550,23 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
                 {/* 생성 버튼 */}
                 <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white font-black py-4 rounded-2xl transition-all text-lg tracking-wide shadow-lg shadow-brand-500/20">
-                  {isProcessing ? '생성 중...' : activeTab === 'auto' ? '▶ 대본 생성 시작' : '▶ 스토리보드 생성'}
+                  className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 text-white font-black py-4 rounded-2xl transition-all text-base tracking-wide shadow-lg shadow-cyan-900/30 disabled:shadow-none">
+                  {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                 </button>
 
                 <div className="flex gap-2">
                   <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-sm font-bold transition-all">
-                    🖼️ 이미지만 생성
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-semibold transition-all border border-emerald-600/40">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
+                    이미지만 생성
                   </button>
                   {onExtractCharacters && (
                     <button type="button"
                       onClick={() => { const txt = activeTab === 'auto' ? topic : manualScript; if (txt.trim()) onExtractCharacters(txt); }}
                       disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm font-bold transition-all">
-                      👤 캐릭터 추출
+                      className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white text-sm font-semibold transition-all border border-violet-600/40">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                      캐릭터 추출
                     </button>
                   )}
                 </div>
@@ -575,17 +577,17 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
             /* ── 설정 패널 ── */
             <div className="flex flex-col h-full">
               {/* 패널 헤더 */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800">
-                <h3 className="font-black text-white text-base">
-                  {activePanel === 'visual' && '🎨 비주얼 스타일'}
-                  {activePanel === 'image' && '🖼️ 이미지 설정'}
-                  {activePanel === 'voice' && '🎙️ 음성 설정'}
-                  {activePanel === 'thumbnail' && '🎬 썸네일 생성'}
-                  {activePanel === 'project' && '💾 프로젝트'}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-slate-900/60">
+                <h3 className="font-black text-slate-100 text-sm tracking-wide uppercase">
+                  {activePanel === 'visual' && '비주얼 스타일'}
+                  {activePanel === 'image' && '이미지 설정'}
+                  {activePanel === 'voice' && '음성 설정'}
+                  {activePanel === 'thumbnail' && '썸네일 생성'}
+                  {activePanel === 'project' && '프로젝트'}
                 </h3>
                 <button type="button" onClick={() => setActivePanel(null)}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg text-sm font-bold transition-colors">
-                  ← 메인으로
+                  className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg text-xs font-bold transition-colors border border-slate-700/50">
+                  ← 돌아가기
                 </button>
               </div>
 
@@ -599,10 +601,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
                           className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center text-2xl`}>{style.emoji}</div>
+                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg}`}></div>
                           <span className="text-xs font-bold text-slate-300 leading-tight text-center">{style.name}</span>
                           {visualStyleId === style.id && (
-                            <div className="absolute top-1 right-1 w-4 h-4 bg-brand-500 rounded-full flex items-center justify-center">
+                            <div className="absolute top-1 right-1 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
                               <CheckIcon />
                             </div>
                           )}
@@ -619,7 +621,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       />
                     )}
                     {visualStyleId !== 'none' && (
-                      <button type="button" onClick={() => selectVisualStyle('none')} className="mt-3 text-sm text-slate-500 hover:text-red-400 transition-colors">✕ 선택 해제</button>
+                      <button type="button" onClick={() => selectVisualStyle('none')} className="mt-3 text-sm text-slate-500 hover:text-red-400 transition-colors">선택 해제</button>
                     )}
                   </div>
                 )}
@@ -649,7 +651,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">영상 변환 모델</p>
                           <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700">
                             <div className="flex justify-between items-center">
-                              <span className="font-bold text-sm text-slate-300">PixVerse v5.5 🎬</span>
+                              <span className="font-bold text-sm text-slate-300">PixVerse v5.5</span>
                               <div className="text-right">
                                 <div className="text-green-400 text-xs font-bold">$0.150/영상</div>
                                 <div className="text-slate-500 text-[10px]">≈ 218원 (5초)</div>
@@ -679,7 +681,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">참조 이미지 (각 최대 5장)</p>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                          <p className="text-sm font-bold text-white mb-2">🧑 캐릭터</p>
+                          <p className="text-sm font-bold text-slate-200 mb-2">캐릭터</p>
                           <div className="flex flex-wrap gap-2 items-center">
                             {characterRefImages.map((img, i) => (
                               <div key={i} className="relative group w-14 h-10 rounded overflow-hidden border border-violet-500/50">
@@ -702,7 +704,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                           )}
                         </div>
                         <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                          <p className="text-sm font-bold text-white mb-2">🎨 화풍</p>
+                          <p className="text-sm font-bold text-slate-200 mb-2">화풍</p>
                           <div className="flex flex-wrap gap-2 items-center">
                             {styleRefImages.map((img, i) => (
                               <div key={i} className="relative group w-14 h-10 rounded overflow-hidden border border-fuchsia-500/50">
@@ -748,18 +750,20 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                     {/* TTS 제공자 탭 */}
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setVoiceSubTab('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'elevenlabs'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                        ElevenLabs {elApiKey ? '✅' : '⚠️'}
+                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                        ElevenLabs
+                        <span className={`w-1.5 h-1.5 rounded-full ${elApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
                       <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold ${voiceSubTab === 'google' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                        Google TTS ✅
+                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 ${voiceSubTab === 'google' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                        Google TTS
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
                       </button>
                     </div>
 
                     {voiceSubTab === 'elevenlabs' && (
                       <div className="space-y-3">
-                        {!elApiKey && <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">⚠️ API 키 없음 → Google TTS 사용</p>}
+                        {!elApiKey && <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">API 키 없음 → Google TTS 사용</p>}
                         {elApiKey && (
                           <>
                             <div className="flex items-center gap-2">
@@ -783,7 +787,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                               {showVoiceDropdown && (
                                 <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
                                   <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); setShowVoiceDropdown(false); }}
-                                    className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-slate-800 border-b border-slate-800 ${!elVoiceId ? 'bg-purple-600/20' : ''}`}>🔄 기본값 (Adam)</button>
+                                    className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-slate-800 border-b border-slate-800 ${!elVoiceId ? 'bg-purple-600/20' : ''}`}>기본값 (Adam)</button>
                                   {filteredDefaultVoices.map(voice => (
                                     <div key={voice.id} className={`flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 hover:bg-slate-800 ${elVoiceId === voice.id ? 'bg-purple-600/20' : ''}`}>
                                       <button type="button" onClick={(e) => { e.stopPropagation(); playElevenLabsPreview(voice.id, voice.name); }}
@@ -881,18 +885,18 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                           reader.readAsDataURL(file);
                         }}
                       >
-                        <div className="text-3xl mb-2">📁</div>
+                        <div className="flex justify-center mb-2"><svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
                         <p className="text-sm font-bold text-slate-300">내 이미지 업로드</p>
                         <p className="text-xs text-slate-500 mt-1">클릭하거나 이미지를 여기에 드래그</p>
                       </div>
-                      <p className="text-xs text-slate-600 text-center">또는 아래 씬 이미지에서 ⭐ 버튼을 클릭</p>
+                      <p className="text-xs text-slate-600 text-center">또는 아래 씬 이미지에서 썸네일 버튼을 클릭</p>
                       {(thumbnailBaseImage || thumbnailCustomImage) && (
                         <button
                           type="button"
                           onClick={() => { setThumbnailCustomImage(null); onThumbnailBaseImageChange?.(null); }}
                           className="w-full py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold rounded-lg border border-red-600/30 transition-all"
                         >
-                          ✕ 선택된 이미지 초기화
+                          선택된 이미지 초기화
                         </button>
                       )}
                     </div>
@@ -959,7 +963,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                         onClick={handleDownloadThumbnail}
                         className="w-full py-3 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-500 hover:to-pink-500 text-white font-black rounded-xl transition-all text-sm"
                       >
-                        ⬇ 썸네일 다운로드 (1280×720)
+                        썸네일 다운로드 (1280×720)
                       </button>
                     )}
 
@@ -972,7 +976,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                         disabled={isProcessing || isThumbnailGenerating}
                         className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold rounded-xl transition-all text-sm border border-slate-600"
                       >
-                        {isThumbnailGenerating ? '생성 중...' : '🎨 AI로 썸네일 이미지 생성'}
+                        {isThumbnailGenerating ? '생성 중...' : 'AI로 썸네일 이미지 생성'}
                       </button>
                       {thumbnailImage && (
                         <div className="mt-3 relative rounded-xl overflow-hidden border border-slate-700 cursor-pointer" onClick={() => {

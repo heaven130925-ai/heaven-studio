@@ -709,7 +709,9 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 space-y-6">
           <div className="text-center">
-            <div className="text-4xl mb-3">🔑</div>
+            <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-900/30">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            </div>
             <h1 className="text-2xl font-black text-white">Heaven Studio</h1>
             <p className="text-slate-400 text-sm mt-2">시작하기 전에 Gemini API 키를 입력하세요</p>
           </div>
@@ -727,7 +729,7 @@ const App: React.FC = () => {
             </p>
           </div>
           <button
-            className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-black rounded-xl transition-colors"
+            className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black rounded-xl transition-all shadow-lg shadow-cyan-900/30"
             onClick={() => {
               const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
               if (!input) { alert('API 키를 입력해주세요.'); return; }
@@ -752,42 +754,42 @@ const App: React.FC = () => {
       <Header />
 
       {/* 네비게이션 탭 */}
-      <div className="border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 flex items-center gap-1">
+      <div className="border-b border-slate-800/80 bg-slate-950/40 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 flex items-center gap-0.5">
           <button
             onClick={() => setViewMode('main')}
-            className={`px-4 py-3 text-sm font-bold transition-colors relative ${
+            className={`px-5 py-3.5 text-sm font-semibold transition-all relative ${
               viewMode === 'main'
-                ? 'text-brand-400'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-cyan-300'
+                : 'text-slate-500 hover:text-slate-300'
             }`}
           >
             스토리보드 생성
             {viewMode === 'main' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
             )}
           </button>
           <button
             onClick={() => setViewMode('gallery')}
-            className={`px-4 py-3 text-sm font-bold transition-colors relative flex items-center gap-2 ${
+            className={`px-5 py-3.5 text-sm font-semibold transition-all relative flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-brand-400'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-cyan-300'
+                : 'text-slate-500 hover:text-slate-300'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-slate-700 text-xs rounded-full">
+              <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-xs rounded-full text-slate-400">
                 {savedProjects.length}
               </span>
             )}
             {viewMode === 'gallery' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
             )}
           </button>
           <div className="ml-auto">
-            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-sm font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700 flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700/60 flex items-center gap-2">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               API 키
             </button>
           </div>
@@ -882,7 +884,7 @@ const App: React.FC = () => {
                     >
                       {regeneratingCharIdx === i ? (
                         <><span className="w-3 h-3 border border-white border-t-transparent animate-spin rounded-full" /> 생성 중...</>
-                      ) : '🔄 이미지 재생성'}
+                      ) : '이미지 재생성'}
                     </button>
                   </div>
                 </div>
@@ -998,7 +1000,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
           <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-white">🔑 API 키 설정</h2>
+              <h2 className="text-lg font-black text-white">API 키 설정</h2>
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
             </div>
             {[
