@@ -190,6 +190,7 @@ const App: React.FC = () => {
 
       // 참조 이미지 존재 여부 계산
       const hasRefImages = (refImgs.character?.length || 0) + (refImgs.style?.length || 0) > 0;
+      const hasCharacterRef = (refImgs.character?.length || 0) > 0;
       console.log(`[App] 참조 이미지 - 캐릭터: ${refImgs.character?.length || 0}개, 스타일: ${refImgs.style?.length || 0}개`);
 
       let targetTopic = topic;
@@ -220,13 +221,13 @@ const App: React.FC = () => {
           targetTopic,
           hasRefImages,
           sourceText!,
-          2500, // 청크당 2500자
-          setProgressMessage, // 진행 상황 콜백
-          sceneCount || undefined
+          2500,
+          setProgressMessage,
+          sceneCount || undefined,
+          hasCharacterRef
         );
       } else {
-        // 일반 대본: 기존 방식
-        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
+        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined, hasCharacterRef);
       }
       if (isAbortedRef.current) return;
       

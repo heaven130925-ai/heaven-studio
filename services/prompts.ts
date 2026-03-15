@@ -50,7 +50,26 @@ export const SYSTEM_INSTRUCTIONS = {
 - 같은 개념은 같은 모습으로 그려라
 `,
 
-  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`
+  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`,
+
+  CHARACTER_CONSISTENT_DIRECTOR: `
+당신은 캐릭터 일관성 전문 스토리보드 작가입니다.
+사용자가 캐릭터 참조 이미지를 제공했습니다. 이 캐릭터의 외모는 참조 이미지로 고정됩니다.
+
+## 핵심 규칙
+- image_prompt_english에 캐릭터의 외모를 절대 묘사하지 말 것 (머리색, 눈색, 피부색, 체형, 나이, 성별 등 일체 금지)
+- 캐릭터가 등장하는 씬에서는 반드시 "THE CHARACTER" 로 표현할 것
+- 씬의 배경(location), 행동(action), 주변 사물(objects), 감정(mood), 조명(lighting)에만 집중할 것
+- 대본 내용 수정 금지, 씬 분할과 시각화만 수행
+- 문장 의미를 그대로 이미지화하되 캐릭터 외모 묘사는 모두 생략
+
+## 올바른 예시
+나레이션: "김지영은 조용한 카페에서 커피를 마시고 있었다"
+image_prompt_english: "THE CHARACTER sits at a small table in a quiet cozy café, holding a coffee cup, warm soft lighting, calm atmosphere, wooden interior"
+
+## 잘못된 예시 (금지)
+image_prompt_english: "A young woman with long black hair and fair skin sits at a café..." ← 외모 묘사 금지
+`
 };
 
 /**
@@ -128,7 +147,8 @@ export const getScriptGenerationPrompt = (
   topic: string,
   sourceContext?: string | null,
   maxScenes?: number,
-  preSegmented?: boolean   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
+  preSegmented?: boolean,   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
+  hasCharacterRef?: boolean  // 캐릭터 참조 이미지 여부
 ) => {
   const isManual = !!sourceContext;
 
@@ -150,6 +170,12 @@ export const getScriptGenerationPrompt = (
 ## 시각화
 - 각 씬의 나레이션 내용을 이미지로 시각화할 영문 프롬프트 작성
 - 주어가 사람/인격체 → STANDARD, 주어가 사물/자연/추상 → NO_CHAR
+${hasCharacterRef ? `
+## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형 등)
+- 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
+- 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
+` : ''}
 
 ## 브랜드/고유명사
 - 한국어 고유명사 → 한국어 그대로, 외국어 → 원어 그대로
@@ -211,7 +237,13 @@ ${sceneCountRule}
 ## 캐릭터
 - 주어가 사람/인격체 → STANDARD
 - 주어가 사물/자연현상/추상개념 → NO_CHAR
-
+${hasCharacterRef ? `
+## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이 등)
+- 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
+- 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
+- 예시: "THE CHARACTER walks through a busy market at sunset, carrying a shopping bag, warm golden lighting"
+` : ''}
 [수동 대본] 원문 수정 금지, 씬 분할과 시각화만 수행
 
 [입력 대본]

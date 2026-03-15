@@ -283,11 +283,13 @@ const generateScriptSingle = async (
   hasReferenceImage: boolean,
   sourceContext?: string | null,
   chunkInfo?: { current: number; total: number },
-  maxScenes?: number
+  maxScenes?: number,
+  hasCharacterRef?: boolean
 ): Promise<ScriptScene[]> => {
   return retryGeminiRequest("Script Generation", async () => {
     const ai = getAI();
-    const baseInstruction = topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
+    const baseInstruction = hasCharacterRef ? SYSTEM_INSTRUCTIONS.CHARACTER_CONSISTENT_DIRECTOR :
+                            topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
                             hasReferenceImage ? SYSTEM_INSTRUCTIONS.REFERENCE_MATCH :
                             SYSTEM_INSTRUCTIONS.CHIEF_ART_DIRECTOR;
 
@@ -327,7 +329,7 @@ const generateScriptSingle = async (
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented),
+      contents: getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented, hasCharacterRef),
       config: {
         thinkingConfig: { thinkingBudget: 24576 },
         responseMimeType: "application/json",
@@ -369,9 +371,10 @@ export const generateScript = async (
   topic: string,
   hasReferenceImage: boolean,
   sourceContext?: string | null,
-  maxScenes?: number
+  maxScenes?: number,
+  hasCharacterRef?: boolean
 ): Promise<ScriptScene[]> => {
-  return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
+  return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes, hasCharacterRef);
 };
 
 /**
@@ -445,14 +448,15 @@ export const generateScriptChunked = async (
   sourceContext: string,
   chunkSize: number = 2500,
   onProgress?: (message: string) => void,
-  maxScenes?: number
+  maxScenes?: number,
+  hasCharacterRef?: boolean
 ): Promise<ScriptScene[]> => {
   const inputLength = sourceContext.length;
 
   // 청크 분할 기준 이하면 일반 처리
   if (inputLength <= chunkSize) {
     console.log(`[Chunked Script] 입력(${inputLength}자)이 청크 크기(${chunkSize}자) 이하. 일반 처리.`);
-    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
+    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes, hasCharacterRef);
   }
 
   console.log(`[Chunked Script] ========================================`);
@@ -493,7 +497,8 @@ export const generateScriptChunked = async (
         hasReferenceImage,
         chunkContext,
         { current: i + 1, total: chunks.length },
-        chunkMaxScenes
+        chunkMaxScenes,
+        hasCharacterRef
       );
 
       // 씬 번호 재조정 (이전 씬들 뒤에 이어서)
@@ -749,7 +754,6 @@ export const generateImageForScene = async (
       const result = await retryGeminiRequest("Pro Image Generation", async () => {
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
-        const charTextDesc = referenceImages.characterDescription?.trim();
 
         if (hasCharacterRef) {
           // ─── 캐릭터 일관성 모드 ───
