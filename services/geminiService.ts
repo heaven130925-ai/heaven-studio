@@ -819,7 +819,9 @@ ${styleDesc.instruction}`
               });
             }
           }
-          parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
+          // 나레이션(한국어 원문)을 컨텍스트로 추가 → 씬 내용 이해도 향상
+          const narrationCtx = scene.narration ? `[SCENE NARRATION - what is happening]\n${scene.narration}\n\n` : '';
+          parts.push({ text: `${narrationCtx}[VISUAL PROMPT - how to draw it]\n${sanitizedPrompt}` });
         }
 
         // 텍스트 모드별 마지막 강제 지시

@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG } from '../types';
+import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { generateGeminiTtsPreview, analyzeCharacterReference } from '../services/geminiService';
@@ -111,22 +111,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
   // 패널 네비게이션
   const [activePanel, setActivePanel] = useState<string | null>(null);
-
-  // 자막 설정
-  const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => {
-    try {
-      const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG);
-      if (saved) return { ...DEFAULT_SUBTITLE_CONFIG, ...JSON.parse(saved) };
-    } catch {}
-    return { ...DEFAULT_SUBTITLE_CONFIG };
-  });
-  const updateSub = <K extends keyof SubtitleConfig>(key: K, value: SubtitleConfig[K]) => {
-    setSubConfig(prev => {
-      const next = { ...prev, [key]: value };
-      localStorage.setItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG, JSON.stringify(next));
-      return next;
-    });
-  };
 
   const characterFileInputRef = useRef<HTMLInputElement>(null);
   const styleFileInputRef = useRef<HTMLInputElement>(null);
@@ -412,7 +396,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
             {[
               { id: 'image', emoji: '🖼️', label: '이미지 설정' },
               { id: 'voice', emoji: '🎙️', label: '음성 설정' },
-              { id: 'subtitle', emoji: '📝', label: '자막 설정' },
               { id: 'thumbnail', emoji: '🎬', label: '썸네일 생성' },
               { id: 'project', emoji: '💾', label: '프로젝트' },
             ].map(({ id, emoji, label }) => (
@@ -597,7 +580,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                   {activePanel === 'visual' && '🎨 비주얼 스타일'}
                   {activePanel === 'image' && '🖼️ 이미지 설정'}
                   {activePanel === 'voice' && '🎙️ 음성 설정'}
-                  {activePanel === 'subtitle' && '📝 자막 설정'}
                   {activePanel === 'thumbnail' && '🎬 썸네일 생성'}
                   {activePanel === 'project' && '💾 프로젝트'}
                 </h3>
@@ -875,169 +857,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
-
-                {/* 📝 자막 설정 패널 */}
-                {activePanel === 'subtitle' && (
-                  <div className="space-y-4">
-                    <p className="text-sm text-slate-500">MP4 (자막 O) 내보낼 때 적용됩니다</p>
-
-                    {/* 글자 수 조절 */}
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400 w-16 shrink-0">글자 수</span>
-                      <div className="flex items-center gap-2 flex-1">
-                        <input type="range" min={5} max={30} step={1}
-                          value={subConfig.maxCharsPerChunk ?? 15}
-                          onChange={(e) => updateSub('maxCharsPerChunk', Number(e.target.value))}
-                          className="flex-1 accent-violet-500" />
-                        <input type="number" min={5} max={30}
-                          value={subConfig.maxCharsPerChunk ?? 15}
-                          onChange={(e) => updateSub('maxCharsPerChunk', Math.max(5, Math.min(30, Number(e.target.value))))}
-                          className="w-14 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white text-center focus:outline-none focus:border-violet-500" />
-                        <span className="text-xs text-slate-500">자</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-600 -mt-2">숏폼 10~12자 / 롱폼 15~20자 권장</p>
-
-                    {/* 위치 */}
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-slate-400 w-16 shrink-0">위치</span>
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="text-xs text-slate-500">상단</span>
-                        <input type="range" min={0} max={100} step={1}
-                          value={subConfig.yPercent ?? 85}
-                          onChange={(e) => updateSub('yPercent', Number(e.target.value))}
-                          onKeyDown={(e) => {
-                            if (e.key === 'ArrowUp') { e.preventDefault(); updateSub('yPercent', Math.max(0, (subConfig.yPercent ?? 85) - 1)); }
-                            if (e.key === 'ArrowDown') { e.preventDefault(); updateSub('yPercent', Math.min(100, (subConfig.yPercent ?? 85) + 1)); }
-                          }}
-                          className="flex-1 accent-violet-500" />
-                        <span className="text-xs text-slate-500">하단</span>
-                        <span className="text-sm text-violet-400 w-8 text-right">{subConfig.yPercent ?? 85}%</span>
-                      </div>
-                    </div>
-
-                    {/* 크기 */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-sm text-slate-400 w-16 shrink-0">크기</span>
-                      {[24, 32, 40, 48, 56, 64].map(size => (
-                        <button key={size} type="button" onClick={() => updateSub('fontSize', size)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${subConfig.fontSize === size ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
-                          {size}px
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* 폰트 */}
-                    <div>
-                      <span className="text-sm text-slate-400 block mb-2">폰트</span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { label: 'Noto Sans KR', value: '"Noto Sans KR", "Malgun Gothic", sans-serif' },
-                          { label: '맑은 고딕', value: '"Malgun Gothic", sans-serif' },
-                          { label: '나눔고딕', value: '"Nanum Gothic", sans-serif' },
-                          { label: '나눔명조', value: '"Nanum Myeongjo", serif' },
-                          { label: '나눔바른고딕', value: '"Nanum Barun Gothic", "Nanum Gothic", sans-serif' },
-                          { label: '나눔스퀘어', value: '"Nanum Square", "Nanum Gothic", sans-serif' },
-                          { label: '돋움', value: '"Dotum", sans-serif' },
-                          { label: '굴림', value: '"Gulim", sans-serif' },
-                          { label: '바탕', value: '"Batang", serif' },
-                          { label: '궁서', value: '"Gungsuh", serif' },
-                          { label: 'Arial', value: 'Arial, sans-serif' },
-                          { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif' },
-                          { label: 'Impact', value: 'Impact, "Arial Narrow", sans-serif' },
-                          { label: 'Georgia', value: 'Georgia, serif' },
-                          { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
-                          { label: 'Tahoma', value: 'Tahoma, Geneva, sans-serif' },
-                          { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
-                          { label: 'Courier New', value: '"Courier New", Courier, monospace' },
-                        ].map(opt => (
-                          <button key={opt.value} type="button" onClick={() => updateSub('fontFamily', opt.value)}
-                            className={`px-2 py-1.5 rounded-lg text-sm font-bold transition-all ${subConfig.fontFamily === opt.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                            style={{ fontFamily: opt.value }}>
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 굵기 */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-sm text-slate-400 w-16 shrink-0">굵기</span>
-                      {[{ label: '가늘게', value: 300 }, { label: '보통', value: 400 }, { label: '중간', value: 500 }, { label: '굵게', value: 700 }, { label: '아주굵게', value: 900 }].map(opt => (
-                        <button key={opt.value} type="button" onClick={() => updateSub('fontWeight', opt.value)}
-                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${subConfig.fontWeight === opt.value ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                          style={{ fontWeight: opt.value }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* 테두리 */}
-                    <div className="flex items-center gap-6 flex-wrap">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-slate-400">테두리색</span>
-                        <input type="color" value={subConfig.strokeColor ?? '#000000'} onChange={(e) => updateSub('strokeColor', e.target.value)}
-                          className="w-9 h-9 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-slate-400">테두리굵기</span>
-                        <input type="range" min={0} max={12} step={1} value={subConfig.strokeWidth ?? 4} onChange={(e) => updateSub('strokeWidth', Number(e.target.value))}
-                          className="w-32 accent-violet-500" />
-                        <span className="text-sm text-slate-500">{subConfig.strokeWidth ?? 4}px</span>
-                      </div>
-                    </div>
-
-                    {/* 배경 */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-sm text-slate-400 w-16 shrink-0">배경</span>
-                      {[
-                        { label: '없음', value: 'rgba(0,0,0,0)' },
-                        { label: '반투명', value: 'rgba(0,0,0,0.75)' },
-                        { label: '불투명', value: 'rgba(0,0,0,0.95)' },
-                        { label: '흰색', value: 'rgba(255,255,255,0.85)' },
-                      ].map(opt => (
-                        <button key={opt.value} type="button" onClick={() => updateSub('backgroundColor', opt.value)}
-                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border ${subConfig.backgroundColor === opt.value ? 'border-violet-500 ring-1 ring-violet-500' : 'border-slate-700'}`}
-                          style={{ background: opt.value === 'rgba(0,0,0,0)' ? 'repeating-conic-gradient(#444 0% 25%, #222 0% 50%) 0/10px 10px' : opt.value, color: opt.value.includes('255,255,255') ? '#000' : '#fff' }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* 글자색 + 여백 */}
-                    <div className="flex items-center gap-6 flex-wrap">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-slate-400">글자색</span>
-                        <input type="color" value={subConfig.textColor} onChange={(e) => updateSub('textColor', e.target.value)}
-                          className="w-9 h-9 rounded-lg border border-slate-700 bg-slate-800 cursor-pointer" />
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-slate-400">여백</span>
-                        <input type="range" min={20} max={200} value={subConfig.bottomMargin} onChange={(e) => updateSub('bottomMargin', Number(e.target.value))}
-                          className="w-32 accent-violet-500" />
-                        <span className="text-sm text-slate-500">{subConfig.bottomMargin}px</span>
-                      </div>
-                    </div>
-
-                    {/* 미리보기 */}
-                    <div className="relative h-24 rounded-xl bg-gradient-to-b from-slate-700 to-slate-900 border border-slate-600 overflow-hidden">
-                      <div className="absolute inset-0 flex items-center justify-center opacity-20 text-slate-400 text-sm">미리보기</div>
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-center whitespace-nowrap"
-                        style={{
-                          background: subConfig.backgroundColor,
-                          color: subConfig.textColor,
-                          fontFamily: subConfig.fontFamily,
-                          fontSize: Math.round(subConfig.fontSize * 0.5) + 'px',
-                          fontWeight: subConfig.fontWeight ?? 700,
-                          WebkitTextStroke: (subConfig.strokeWidth ?? 4) > 0 ? `${Math.round((subConfig.strokeWidth ?? 4) * 0.5)}px ${subConfig.strokeColor ?? '#000'}` : undefined,
-                          top: subConfig.yPercent !== undefined ? `calc(${subConfig.yPercent}% - 20px)` : undefined,
-                        }}>
-                        자막이 이렇게 표시됩니다
-                      </div>
-                    </div>
                   </div>
                 )}
 

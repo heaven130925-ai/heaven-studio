@@ -815,6 +815,21 @@ const App: React.FC = () => {
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
       <main className="py-8">
+        {/* 기존 스토리보드로 돌아가기 배너 */}
+        {generatedData.length > 0 && !showStoryboard && (
+          <div className="max-w-7xl mx-auto px-4 mb-6">
+            <button
+              onClick={() => setShowStoryboard(true)}
+              className="w-full flex items-center justify-between px-5 py-3 rounded-xl bg-brand-600/20 border border-brand-500/40 hover:bg-brand-600/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
+                <span className="text-sm font-bold text-brand-300">이전에 생성된 스토리보드가 있습니다 ({generatedData.length}개 씬)</span>
+              </div>
+              <span className="text-sm font-black text-brand-400">스토리보드 보기 →</span>
+            </button>
+          </div>
+        )}
         <InputSection
           onGenerate={handleGenerate}
           onExtractCharacters={handleExtractCharacters}

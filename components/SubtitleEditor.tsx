@@ -150,8 +150,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
   }, [selectedIdx]);
 
+  // audioData가 data:URL이면 그대로, raw base64면 prefix 붙이기
   const audioSrc = scene?.audioData
-    ? `data:audio/mpeg;base64,${scene.audioData}`
+    ? (scene.audioData.startsWith('data:') ? scene.audioData : `data:audio/mpeg;base64,${scene.audioData}`)
     : null;
 
   const togglePlay = () => {
@@ -165,8 +166,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    // 폰트 로드 대기
-    document.fonts.load(`${subConfig.fontWeight ?? 700} 40px ${subConfig.fontFamily}`).then(() => {
+    // 폰트 로드 대기 (실제 사용 크기로 로드)
+    document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`).then(() => {
       renderSubtitleOnCanvas(canvas, scene?.imageData ?? null, narration, subConfig);
     }).catch(() => {
       renderSubtitleOnCanvas(canvas, scene?.imageData ?? null, narration, subConfig);
@@ -174,19 +175,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   }, [scene, narration, subConfig]);
 
   useEffect(() => { redraw(); }, [redraw]);
-
-  // 위치 그리드 (3x3)
-  const posGrid = [
-    { x: 0,  y: 0,  label: '↖' },
-    { x: 50, y: 0,  label: '↑' },
-    { x: 100,y: 0,  label: '↗' },
-    { x: 0,  y: 50, label: '←' },
-    { x: 50, y: 50, label: '●' },
-    { x: 100,y: 50, label: '→' },
-    { x: 0,  y: 85, label: '↙' },
-    { x: 50, y: 85, label: '↓' },
-    { x: 100,y: 85, label: '↘' },
-  ];
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -373,25 +361,27 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             </div>
           </div>
 
-          {/* 위치 그리드 (3x3) */}
-          <div>
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-2">위치</label>
-            <div className="grid grid-cols-3 gap-1 w-28">
-              {posGrid.map(p => {
-                const active = Math.abs((subConfig.xPercent ?? 50) - p.x) < 5 &&
-                               Math.abs((subConfig.yPercent ?? 85) - p.y) < 10;
-                return (
-                  <button
-                    key={`${p.x}-${p.y}`}
-                    onClick={() => set({ xPercent: p.x, yPercent: p.y })}
-                    className={`aspect-square rounded text-sm font-bold transition-colors ${
-                      active ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
+          {/* 위치 슬라이더 */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
+                세로 위치 <span className="text-slate-400 normal-case">{subConfig.yPercent ?? 85}% (↑위 ↓아래)</span>
+              </label>
+              <input type="range" min={0} max={100} step={1}
+                value={subConfig.yPercent ?? 85}
+                onChange={e => set({ yPercent: +e.target.value })}
+                className="w-full accent-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
+                가로 위치 <span className="text-slate-400 normal-case">{subConfig.xPercent ?? 50}% (←왼쪽 →오른쪽)</span>
+              </label>
+              <input type="range" min={0} max={100} step={1}
+                value={subConfig.xPercent ?? 50}
+                onChange={e => set({ xPercent: +e.target.value })}
+                className="w-full accent-brand-500"
+              />
             </div>
           </div>
 
