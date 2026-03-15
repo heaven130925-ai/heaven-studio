@@ -366,11 +366,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_8px_rgba(6,182,212,0.2)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center`}>
-                    <div className="w-5 h-5 rounded-full border-2 border-white/30" style={{ boxShadow: '0 0 8px rgba(255,255,255,0.25), inset 0 0 6px rgba(255,255,255,0.1)' }} />
+                  className={`relative p-1.5 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
+                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1 overflow-hidden`}>
+                    <div className="w-4 h-4 rounded-full border-2 border-white/40" style={{ boxShadow: '0 0 8px rgba(255,255,255,0.3), inset 0 0 5px rgba(255,255,255,0.15)' }} />
+                    <span className="text-[9px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] text-center px-1 leading-tight">{style.name}</span>
                   </div>
-                  <span className="text-xs font-semibold text-white/70 leading-tight text-center line-clamp-1">{style.name}</span>
                   {visualStyleId === style.id && (
                     <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
                       <CheckIcon />
@@ -602,11 +602,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                     <div className="grid grid-cols-3 gap-2">
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                          className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-brand-400 bg-brand-500/10' : 'border-slate-700 hover:border-slate-500'}`}>
-                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center`}>
-                            <div className="w-6 h-6 rounded-full border-2 border-white/30" style={{ boxShadow: '0 0 10px rgba(255,255,255,0.25), inset 0 0 8px rgba(255,255,255,0.1)' }} />
+                          className={`relative p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
+                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1.5 overflow-hidden`}>
+                            <div className="w-5 h-5 rounded-full border-2 border-white/40" style={{ boxShadow: '0 0 10px rgba(255,255,255,0.3), inset 0 0 7px rgba(255,255,255,0.15)' }} />
+                            <span className="text-[10px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
                           </div>
-                          <span className="text-xs font-bold text-slate-300 leading-tight text-center">{style.name}</span>
                           {visualStyleId === style.id && (
                             <div className="absolute top-1 right-1 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
                               <CheckIcon />
