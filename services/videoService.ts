@@ -205,30 +205,28 @@ function renderSubtitle(
   if (lines.length === 0) return;
 
   // 자막 스타일 설정
-  const lineHeight = config.fontSize * 1.4;
-  const padding = 16;
+  const lineSpacing = config.fontSize * 1.15;
+  const vPad = 6;
+  const hPad = 14;
   const safeMargin = 10;
-  const xPercent = config.xPercent ?? 50;
   const align = config.textAlign ?? 'center';
 
   ctx.font = `${config.fontWeight ?? 700} ${config.fontSize}px ${config.fontFamily}`;
-  ctx.textAlign = align as CanvasTextAlign;
-  ctx.textBaseline = 'top';
+  ctx.textAlign = 'center';  // 항상 가운데
+  ctx.textBaseline = 'middle';
 
   // 전체 자막 영역 크기 계산
   const maxLineWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
-  let boxWidth = maxLineWidth + padding * 2;
-  const boxHeight = lines.length * lineHeight + padding * 2;
+  let boxWidth = maxLineWidth + hPad * 2;
+  const boxHeight = lines.length * lineSpacing + vPad * 2;
 
   // 화면 경계 체크
   const maxBoxWidth = canvas.width - safeMargin * 2;
   if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
 
-  // 수평 위치 (xPercent: 0=왼쪽, 50=가운데, 100=오른쪽)
-  const usableWidth = canvas.width - boxWidth - safeMargin * 2;
-  let boxX = safeMargin + (xPercent / 100) * usableWidth;
+  // 항상 가로 중앙 고정
+  let boxX = (canvas.width - boxWidth) / 2;
   if (boxX < safeMargin) boxX = safeMargin;
-  if (boxX + boxWidth > canvas.width - safeMargin) boxX = canvas.width - safeMargin - boxWidth;
 
   // 수직 위치
   let boxY: number;
@@ -244,25 +242,22 @@ function renderSubtitle(
   if (boxY < safeMargin) boxY = safeMargin;
   if (boxY + boxHeight > canvas.height - safeMargin) boxY = canvas.height - safeMargin - boxHeight;
 
-  // 텍스트 X 기준점 (align에 따라)
-  const textX = align === 'left' ? boxX + padding
-    : align === 'right' ? boxX + boxWidth - padding
-    : boxX + boxWidth / 2;
+  // 텍스트 X: 항상 박스 중앙
+  const textX = boxX + boxWidth / 2;
 
-  // 반투명 배경 박스 (투명도 0이면 생략)
+  // 반투명 배경 박스
   if (config.backgroundColor && config.backgroundColor !== 'rgba(0, 0, 0, 0)' && config.backgroundColor !== 'transparent') {
     ctx.fillStyle = config.backgroundColor;
     ctx.beginPath();
-    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 6);
     ctx.fill();
   }
 
-  // 텍스트 렌더링
+  // 텍스트 렌더링 (middle baseline)
   lines.forEach((line, lineIndex) => {
-    const textY = boxY + padding + lineIndex * lineHeight;
+    const textY = boxY + vPad + lineSpacing * (lineIndex + 0.5);
     const sw = config.strokeWidth ?? 6;
 
-    // 테두리 (strokeWidth > 0일 때만)
     if (sw > 0) {
       ctx.strokeStyle = config.strokeColor ?? '#000000';
       ctx.lineWidth = sw;
@@ -270,7 +265,6 @@ function renderSubtitle(
       ctx.strokeText(line, textX, textY);
     }
 
-    // 텍스트
     ctx.fillStyle = config.textColor;
     ctx.fillText(line, textX, textY);
   });

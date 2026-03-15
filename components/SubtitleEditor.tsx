@@ -37,18 +37,17 @@ function renderSubtitleOnCanvas(
     if (!text.trim()) return;
 
     const fontSize = config.fontSize;
-    const lineHeight = fontSize * 1.4;
-    const padding = 16;
+    const lineSpacing = fontSize * 1.15;  // 줄간격 타이트하게
+    const vPad = 6;   // 위아래 패딩 축소
+    const hPad = 14;  // 좌우 패딩
     const safeMargin = 10;
-    const xPercent = config.xPercent ?? 50;
     const align = config.textAlign ?? 'center';
 
-    // 폰트 로드 대기 후 렌더
     ctx.font = `${config.fontWeight ?? 700} ${fontSize}px ${config.fontFamily}`;
-    ctx.textBaseline = 'top';
+    ctx.textBaseline = 'middle';  // 수직 중앙 기준
     ctx.textAlign = align as CanvasTextAlign;
 
-    // 자막 청크 분할 (maxCharsPerChunk 기준)
+    // 자막 청크 분할
     const maxChars = config.maxCharsPerChunk ?? 15;
     const words = text.split('');
     const lines: string[] = [];
@@ -65,36 +64,35 @@ function renderSubtitleOnCanvas(
     const displayLines = lines.slice(0, config.maxLines ?? 2);
 
     const maxLineWidth = Math.max(...displayLines.map(l => ctx.measureText(l).width));
-    let boxWidth = maxLineWidth + padding * 2;
-    const boxHeight = displayLines.length * lineHeight + padding * 2;
+    let boxWidth = maxLineWidth + hPad * 2;
+    const boxHeight = displayLines.length * lineSpacing + vPad * 2;
 
     const maxBoxWidth = W - safeMargin * 2;
     if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
 
-    const usableWidth = W - boxWidth - safeMargin * 2;
-    let boxX = safeMargin + (xPercent / 100) * usableWidth;
+    // 항상 가로 중앙 고정
+    let boxX = (W - boxWidth) / 2;
     boxX = Math.max(safeMargin, Math.min(boxX, W - safeMargin - boxWidth));
 
     const usableHeight = H - boxHeight - safeMargin * 2;
     let boxY = safeMargin + ((config.yPercent ?? 85) / 100) * usableHeight;
     boxY = Math.max(safeMargin, Math.min(boxY, H - safeMargin - boxHeight));
 
-    const textX = align === 'left' ? boxX + padding
-      : align === 'right' ? boxX + boxWidth - padding
-      : boxX + boxWidth / 2;
+    // 텍스트 X: 항상 박스 가운데
+    const textX = boxX + boxWidth / 2;
 
     // 배경
     const bg = config.backgroundColor ?? 'rgba(0,0,0,0)';
     if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
       ctx.fillStyle = bg;
       ctx.beginPath();
-      (ctx as any).roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+      (ctx as any).roundRect(boxX, boxY, boxWidth, boxHeight, 6);
       ctx.fill();
     }
 
-    // 텍스트
+    // 텍스트 (middle baseline → 박스 내 수직 중앙)
     displayLines.forEach((line, i) => {
-      const textY = boxY + padding + i * lineHeight;
+      const textY = boxY + vPad + lineSpacing * (i + 0.5);
       const sw = config.strokeWidth ?? 6;
       if (sw > 0) {
         ctx.strokeStyle = config.strokeColor ?? '#000000';
@@ -220,17 +218,16 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right">
             {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '오디오') : '오디오 없음'}
           </span>
-          {audioSrc && (
-            <audio
-              ref={audioRef}
-              src={audioSrc}
-              onTimeUpdate={() => {
-                const audio = audioRef.current;
-                if (audio && audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
-              }}
-              onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
-            />
-          )}
+          {/* 오디오 항상 렌더링 (ref 유지를 위해 조건부 제거) */}
+          <audio
+            ref={audioRef}
+            src={audioSrc || ''}
+            onTimeUpdate={() => {
+              const audio = audioRef.current;
+              if (audio && audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
+            }}
+            onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
+          />
         </div>
 
         {/* 자막 텍스트 편집 */}
@@ -361,28 +358,16 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             </div>
           </div>
 
-          {/* 위치 슬라이더 */}
-          <div className="space-y-3">
-            <div>
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
-                세로 위치 <span className="text-slate-400 normal-case">{subConfig.yPercent ?? 85}% (↑위 ↓아래)</span>
-              </label>
-              <input type="range" min={0} max={100} step={1}
-                value={subConfig.yPercent ?? 85}
-                onChange={e => set({ yPercent: +e.target.value })}
-                className="w-full accent-brand-500"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
-                가로 위치 <span className="text-slate-400 normal-case">{subConfig.xPercent ?? 50}% (←왼쪽 →오른쪽)</span>
-              </label>
-              <input type="range" min={0} max={100} step={1}
-                value={subConfig.xPercent ?? 50}
-                onChange={e => set({ xPercent: +e.target.value })}
-                className="w-full accent-brand-500"
-              />
-            </div>
+          {/* 세로 위치 슬라이더 (가로는 항상 중앙 고정) */}
+          <div>
+            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
+              세로 위치 <span className="text-slate-400 normal-case">{subConfig.yPercent ?? 85}% &nbsp;(0=상단 / 100=하단)</span>
+            </label>
+            <input type="range" min={0} max={100} step={1}
+              value={subConfig.yPercent ?? 85}
+              onChange={e => set({ yPercent: +e.target.value })}
+              className="w-full accent-brand-500"
+            />
           </div>
 
           {/* 자막 청크 크기 */}

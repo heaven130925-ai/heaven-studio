@@ -755,7 +755,9 @@ export const generateImageForScene = async (
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
 
-        if (hasCharacterRef) {
+        // NO_CHAR 씬(사물/추상)은 캐릭터 참조 무시하고 일반 모드로 처리
+        const isNoCharScene = scene.analysis?.composition_type === 'NO_CHAR';
+        if (hasCharacterRef && !isNoCharScene) {
           // ─── 캐릭터 일관성 모드 ───
           const userEditedPrompt = scene.visualPrompt?.trim();
           const sceneAction = [

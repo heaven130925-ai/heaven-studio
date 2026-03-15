@@ -18,7 +18,7 @@ export const DEFAULT_REFERENCE_IMAGES: ReferenceImages = {
 };
 
 export interface SceneAnalysis {
-  composition_type: 'MICRO' | 'STANDARD' | 'MACRO';
+  composition_type: 'MICRO' | 'STANDARD' | 'MACRO' | 'NO_CHAR';
   composition_explanation: string; // 구도_설명
   camera: {
     view: string;    // 시점
