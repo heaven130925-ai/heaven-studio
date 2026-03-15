@@ -763,34 +763,30 @@ export const generateImageForScene = async (
             return sp ? `\nArt style: ${sp}` : '';
           })();
 
-          // 캐릭터 설명 텍스트 (수동 입력 또는 자동 추출)
-          const descBlock = charTextDesc
-            ? `\nCharacter features to reproduce exactly:\n${charTextDesc}`
-            : '';
+          // 참조 이미지를 [CHARACTER LOCK] 블록으로 강조
+          parts.push({ text: `[CHARACTER LOCK — DO NOT DEVIATE]
+The image(s) below define the ONLY character allowed in this scene.
+You MUST reproduce this exact person. Zero deviation permitted.` });
 
-          // 모든 참조 이미지를 먼저 나열
           referenceImages.character.forEach((img, idx) => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
-            parts.push({
-              text: idx === 0
-                ? `This is the character reference photo. Study this person's face carefully.`
-                : `Same character, additional angle:`
-            });
+            if (idx > 0) parts.push({ text: `Same character, another angle:` });
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 핵심 지시
+          // 핵심 지시 (텍스트 설명 제거 — 시각 참조만 사용)
           parts.push({
-            text: `Generate an illustration of the person shown in the reference photo above, placed in a new scene.
+            text: `Draw this EXACT character in a new scene.
 
-MANDATORY — copy these features from the reference photo exactly:
-• Face: same face shape, same eyes (color + shape), same nose, same lips, same skin tone
-• Hair: same color, same length, same style — do not change at all
-• Overall look: this person must be instantly recognizable as the same individual${descBlock}
+LOCKED FEATURES (must match reference 100%):
+• Face shape, eye shape & color, nose, lips, skin tone — copy exactly
+• Hair color, hair length, hair style — identical, no changes
+• Overall appearance — viewer must instantly recognize same person
 
-Scene to illustrate: ${sceneAction}${styleHint}
+Scene: ${sceneAction}${styleHint}
 
-DO NOT invent a new face. DO NOT change hair color or style. Reproduce the reference person faithfully.`
+FORBIDDEN: inventing a new face, changing hair, altering skin tone.
+OUTPUT: illustration with the reference character faithfully reproduced.`
           });
 
         } else {

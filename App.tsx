@@ -43,6 +43,9 @@ const App: React.FC = () => {
   const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
   const [showApiModal, setShowApiModal] = useState(false);
 
+  // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
+  const [showStoryboard, setShowStoryboard] = useState(false);
+
   // 갤러리 뷰 관련
   const [viewMode, setViewMode] = useState<ViewMode>('main');
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
@@ -150,6 +153,7 @@ const App: React.FC = () => {
     setGeneratedData([]);
     setInputManualScript('');
     setInputActiveTab('auto');
+    setShowStoryboard(false);
     setStep(GenerationStep.IDLE);
     setProgressMessage('');
     resetCost();
@@ -168,8 +172,7 @@ const App: React.FC = () => {
     isProcessingRef.current = true;
     isAbortedRef.current = false;
 
-    // 이전 대본 초기화
-    setInputManualScript('');
+    setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -861,40 +864,79 @@ const App: React.FC = () => {
           </div>
         )}
         
-        {step !== GenerationStep.IDLE && (
+        {/* SCRIPT_READY 상태: 대본 완성 안내 */}
+        {step === GenerationStep.SCRIPT_READY && (
           <div className="max-w-7xl mx-auto px-4 text-center mb-6">
-             <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
-                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) ? (
-                  <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
-                ) : <div className={`w-2 h-2 rounded-full ${step === GenerationStep.ERROR ? 'bg-red-500' : step === GenerationStep.SCRIPT_READY ? 'bg-yellow-400' : 'bg-green-500'}`}></div>}
-                <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
-                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
-                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
-                )}
-                {/* 대본 완성: 아래 대본창에서 확인 후 스토리보드 생성 버튼 안내 */}
-                {step === GenerationStep.SCRIPT_READY && (
-                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
-                )}
-                {(step === GenerationStep.COMPLETED || step === GenerationStep.ERROR) && generatedData.length > 0 && (
-                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
-                )}
-             </div>
+            <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
+              <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+              <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
+              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
+            </div>
           </div>
         )}
-
-        {generatedData.length > 0 && (
-          <ResultTable
-              data={generatedData}
-              onRegenerateImage={handleRegenerateImage}
-              onRegenerateWithPrompt={handleRegenerateWithPrompt}
-              onExportVideo={triggerVideoExport}
-              isExporting={isVideoGenerating}
-              animatingIndices={animatingIndices}
-              onGenerateAnimation={handleGenerateAnimation}
-              onSelectThumbnail={handleSelectThumbnail}
-          />
-        )}
       </main>
+      )}
+
+      {/* 스토리보드 생성 화면 (새 창) */}
+      {showStoryboard && (
+        <div className="fixed inset-0 z-40 bg-slate-950 flex flex-col overflow-hidden">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900 shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors"
+              >
+                ← 입력으로 돌아가기
+              </button>
+              <span className="text-slate-600 text-sm">|</span>
+              <h2 className="text-white font-black text-base">스토리보드</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
+                <>
+                  <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
+                  <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
+                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
+                </>
+              )}
+              {step === GenerationStep.COMPLETED && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">전체 리셋</button>
+                </>
+              )}
+              {step === GenerationStep.ERROR && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  <span className="text-sm font-bold text-red-400">{progressMessage}</span>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
+                </>
+              )}
+            </div>
+          </div>
+          {/* 컨텐츠 */}
+          <div className="flex-1 overflow-y-auto py-6">
+            {generatedData.length > 0 ? (
+              <ResultTable
+                data={generatedData}
+                onRegenerateImage={handleRegenerateImage}
+                onRegenerateWithPrompt={handleRegenerateWithPrompt}
+                onExportVideo={triggerVideoExport}
+                isExporting={isVideoGenerating}
+                animatingIndices={animatingIndices}
+                onGenerateAnimation={handleGenerateAnimation}
+                onSelectThumbnail={handleSelectThumbnail}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
+                <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
+                <p className="text-sm">{progressMessage || '생성 준비 중...'}</p>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* API 키 설정 모달 */}
