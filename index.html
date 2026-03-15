@@ -15,11 +15,26 @@
           extend: {
             colors: {
               brand: {
-                50: '#f0f9ff',
-                100: '#e0f2fe',
-                500: '#0ea5e9',
-                600: '#0284c7',
-                900: '#0c4a6e',
+                50: '#ecfeff',
+                100: '#cffafe',
+                400: '#22d3ee',
+                500: '#06b6d4',
+                600: '#0891b2',
+                900: '#083344',
+              },
+              // slate 팔레트를 파란 틴트 없는 순수 중성 그레이로 교체 → 전체 UI 선명해짐
+              slate: {
+                50:  '#f9f9f9',
+                100: '#f0f0f0',
+                200: '#e4e4e4',
+                300: '#cccccc',
+                400: '#a0a0a0',
+                500: '#737373',
+                600: '#525252',
+                700: '#383838',
+                800: '#242424',
+                900: '#141414',
+                950: '#0a0a0a',
               }
             }
           }
@@ -27,21 +42,17 @@
       }
     </script>
     <style>
-      /* Custom Scrollbar for sleek look */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+      body {
+        background: #0a0a0a;
+        -webkit-font-smoothing: antialiased;
       }
-      ::-webkit-scrollbar-track {
-        background: #1e293b;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #475569;
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #64748b;
-      }
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 5px; height: 5px; }
+      ::-webkit-scrollbar-track { background: #111; }
+      ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: #444; }
+      /* 선택 하이라이트 */
+      ::selection { background: rgba(6,182,212,0.3); }
     </style>
   <script type="importmap">
 {
@@ -57,7 +68,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-950 text-slate-200 antialiased min-h-screen">
+  <body class="bg-[#0a0a0a] text-white antialiased min-h-screen">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

@@ -359,18 +359,18 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
       <div className="flex gap-0 items-stretch min-h-[600px]">
 
         {/* ════ 왼쪽 사이드바 (1/3) ════ */}
-        <div className="flex-none w-1/3 bg-slate-900/40 border border-slate-800/80 rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
+        <div className="flex-none w-1/3 bg-white/[0.03] border border-white/[0.08] rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
           {/* 비주얼 스타일 (항상 표시) */}
-          <div className="p-3 border-b border-slate-800">
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 px-1">Visual Style</p>
+          <div className="p-3 border-b border-white/[0.07]">
+            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-2 px-1">Visual Style</p>
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_8px_rgba(6,182,212,0.15)]' : 'border-slate-700/60 hover:border-slate-500'}`}>
+                  className={`relative flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_0_8px_rgba(6,182,212,0.2)]' : 'border-white/[0.08] hover:border-white/20'}`}>
                   <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center`}>
                     <div className="w-5 h-5 rounded-full border-2 border-white/30" style={{ boxShadow: '0 0 8px rgba(255,255,255,0.25), inset 0 0 6px rgba(255,255,255,0.1)' }} />
                   </div>
-                  <span className="text-xs font-bold text-slate-300 leading-tight text-center line-clamp-1">{style.name}</span>
+                  <span className="text-xs font-semibold text-white/70 leading-tight text-center line-clamp-1">{style.name}</span>
                   {visualStyleId === style.id && (
                     <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
                       <CheckIcon />
@@ -407,8 +407,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 onClick={() => setActivePanel(activePanel === id ? null : id)}
                 className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left ${
                   activePanel === id
-                    ? 'bg-gradient-to-r from-cyan-600/30 to-blue-600/20 border border-cyan-500/40 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.1)]'
-                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200 border border-transparent'
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
+                    : 'text-white/40 hover:bg-white/[0.06] hover:text-white/80 border border-transparent'
                 }`}
               >
                 <span className="flex-none opacity-80">{icon}</span>
@@ -419,20 +419,20 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
         </div>
 
         {/* ════ 오른쪽 메인 패널 ════ */}
-        <div className="flex-1 bg-slate-900/20 border border-l-0 border-slate-800/80 rounded-r-2xl overflow-hidden flex flex-col">
+        <div className="flex-1 bg-white/[0.02] border border-l-0 border-white/[0.08] rounded-r-2xl overflow-hidden flex flex-col">
 
           {activePanel === null ? (
             /* ── 기본 입력 패널 ── */
             <div className="flex flex-col h-full p-5 gap-4">
 
               {/* 탭 */}
-              <div className="flex gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800/80">
+              <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_10px_rgba(6,182,212,0.2)]' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
                   수동 대본
                 </button>
               </div>
@@ -440,19 +440,19 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-4 flex-1">
                 {activeTab === 'auto' ? (
-                  <div className="bg-slate-950 border border-slate-700 rounded-2xl overflow-hidden">
+                  <div className="bg-black/50 border border-white/[0.1] rounded-2xl overflow-hidden">
                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} disabled={isProcessing}
                       placeholder="주제를 입력하세요 (예: 예수님 탄생, 우주의 신비, 한국의 역사...)"
-                      className="block w-full bg-transparent text-slate-100 py-4 px-5 focus:ring-0 focus:outline-none placeholder-slate-600 text-base disabled:opacity-50" />
-                    <div className="px-5 pb-3 text-xs text-slate-600">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
+                      className="block w-full bg-transparent text-white py-4 px-5 focus:ring-0 focus:outline-none placeholder-white/20 text-base disabled:opacity-50" />
+                    <div className="px-5 pb-3 text-xs text-white/25">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
                   </div>
                 ) : (
-                  <div className="flex-1 bg-slate-950 border border-slate-700 rounded-2xl overflow-hidden flex flex-col">
+                  <div className="flex-1 bg-black/50 border border-white/[0.1] rounded-2xl overflow-hidden flex flex-col">
                     <textarea value={manualScript} onChange={(e) => onManualScriptChange(e.target.value)} disabled={isProcessing}
                       placeholder={"여기에 대본을 붙여넣거나 직접 작성하세요.\n\n예)\n나레이션 1: 옛날 옛적...\n나레이션 2: ..."}
-                      className="flex-1 min-h-72 bg-transparent text-slate-100 p-5 focus:ring-0 focus:outline-none placeholder-slate-600 resize-none text-sm" />
-                    <div className="px-5 pb-3 flex items-center justify-between border-t border-slate-800 pt-2">
-                      <span className={`text-xs font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-slate-500'}`}>
+                      className="flex-1 min-h-72 bg-transparent text-white p-5 focus:ring-0 focus:outline-none placeholder-white/20 resize-none text-sm" />
+                    <div className="px-5 pb-3 flex items-center justify-between border-t border-white/[0.07] pt-2">
+                      <span className={`text-xs font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-white/25'}`}>
                         {manualScript.length.toLocaleString()}자
                       </span>
                     </div>
@@ -462,28 +462,28 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 {/* 씬 수 + 영상 포맷 */}
                 <div className="grid grid-cols-2 gap-3">
                   {/* 씬 수 */}
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-sm font-bold text-slate-400 mb-2">씬 수</p>
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
+                    <p className="text-sm font-bold text-white/60 mb-2">씬 수</p>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={500}
                         value={sceneCount === 0 ? '' : sceneCount}
                         onChange={(e) => { const v = parseInt(e.target.value, 10); setSceneCount(isNaN(v) || v < 0 ? 0 : v); }}
                         placeholder="자동"
-                        className="w-20 bg-slate-900 border border-slate-600 rounded-lg px-2 py-2 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none text-center" />
-                      <span className="text-sm text-slate-500">{sceneCount > 0 ? `${sceneCount}씬 고정` : 'AI 자동 결정'}</span>
+                        className="w-20 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/25 focus:border-cyan-500 focus:outline-none text-center" />
+                      <span className="text-sm text-white/40">{sceneCount > 0 ? `${sceneCount}씬 고정` : 'AI 자동 결정'}</span>
                     </div>
                   </div>
 
                   {/* 영상 포맷 */}
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
-                    <p className="text-sm font-bold text-slate-400 mb-2">영상 포맷</p>
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
+                    <p className="text-sm font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         롱폼
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-brand-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         숏폼
                       </button>
                     </div>
@@ -491,8 +491,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       <input type="number" min={1} max={60}
                         value={aspectRatio === '16:9' ? longformDuration : shortformDuration}
                         onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) { aspectRatio === '16:9' ? changeLongformDuration(v) : changeShortformDuration(v); }}}
-                        className="w-16 bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-brand-500 focus:outline-none" />
-                      <span className="text-sm text-slate-400">{aspectRatio === '16:9' ? '분' : '초'}</span>
+                        className="w-16 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-cyan-500 focus:outline-none" />
+                      <span className="text-sm text-white/40">{aspectRatio === '16:9' ? '분' : '초'}</span>
                     </div>
                   </div>
                 </div>
@@ -500,7 +500,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 {/* 참조 이미지 (캐릭터 + 화풍) */}
                 <div className="grid grid-cols-2 gap-3">
                   {/* 캐릭터 */}
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
                     <p className="text-sm font-bold text-slate-200 mb-2">캐릭터 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
@@ -525,7 +525,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                   </div>
 
                   {/* 화풍 */}
-                  <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3">
+                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-3">
                     <p className="text-sm font-bold text-slate-200 mb-2">화풍 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
@@ -579,8 +579,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
             /* ── 설정 패널 ── */
             <div className="flex flex-col h-full">
               {/* 패널 헤더 */}
-              <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800/80 bg-slate-900/60">
-                <h3 className="font-black text-slate-100 text-sm tracking-wide uppercase">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.07] bg-black/30">
+                <h3 className="font-black text-white text-sm tracking-wide uppercase">
                   {activePanel === 'visual' && '비주얼 스타일'}
                   {activePanel === 'image' && '이미지 설정'}
                   {activePanel === 'voice' && '음성 설정'}
@@ -588,7 +588,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                   {activePanel === 'project' && '프로젝트'}
                 </h3>
                 <button type="button" onClick={() => setActivePanel(null)}
-                  className="px-3 py-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg text-xs font-bold transition-colors border border-slate-700/50">
+                  className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-white/50 hover:text-white rounded-lg text-xs font-bold transition-colors border border-white/[0.08]">
                   ← 돌아가기
                 </button>
               </div>

@@ -750,18 +750,18 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
       <Header />
 
       {/* 네비게이션 탭 */}
-      <div className="border-b border-slate-800/80 bg-slate-950/40 backdrop-blur-sm">
+      <div className="border-b border-white/[0.07] bg-black/60 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 flex items-center gap-0.5">
           <button
             onClick={() => setViewMode('main')}
             className={`px-5 py-3.5 text-sm font-semibold transition-all relative ${
               viewMode === 'main'
-                ? 'text-cyan-300'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'text-cyan-400'
+                : 'text-white/40 hover:text-white/80'
             }`}
           >
             스토리보드 생성
@@ -773,13 +773,13 @@ const App: React.FC = () => {
             onClick={() => setViewMode('gallery')}
             className={`px-5 py-3.5 text-sm font-semibold transition-all relative flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-cyan-300'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'text-cyan-400'
+                : 'text-white/40 hover:text-white/80'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-xs rounded-full text-slate-400">
+              <span className="px-1.5 py-0.5 bg-white/[0.08] border border-white/10 text-xs rounded-full text-white/50">
                 {savedProjects.length}
               </span>
             )}
@@ -788,7 +788,7 @@ const App: React.FC = () => {
             )}
           </button>
           <div className="ml-auto">
-            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700/60 flex items-center gap-2">
+            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               API 키
             </button>

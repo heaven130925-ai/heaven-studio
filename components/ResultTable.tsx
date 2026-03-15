@@ -223,11 +223,11 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
   };
 
   return (
-    <tr className="group hover:bg-slate-800/20 transition-colors">
-      <td className="py-5 px-6 align-top font-mono text-slate-600 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
+    <tr className="group hover:bg-white/[0.03] transition-colors">
+      <td className="py-5 px-6 align-top font-mono text-white/25 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
       <td className="py-5 px-6 align-top">
         <div className="space-y-3">
-          <p className="text-slate-200 text-sm leading-relaxed font-medium">{row.narration}</p>
+          <p className="text-white text-sm leading-relaxed font-medium">{row.narration}</p>
           {row.analysis?.composition_type && (
             <div className="flex flex-wrap gap-1">
               <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${
@@ -265,7 +265,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
               </button>
               <button
                 onClick={() => { setEditPrompt(row.visualPrompt || ''); setIsEditOpen(false); }}
-                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 text-[9px] font-black uppercase tracking-wider transition-all border border-slate-700"
+                className="px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-white/50 text-[9px] font-black uppercase tracking-wider transition-all border border-white/[0.08]"
               >
                 취소
               </button>
@@ -273,12 +273,12 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
           </div>
         ) : (
           <div className="relative group/prompt">
-            <div className="bg-slate-950/30 rounded-lg p-3 border border-slate-800/50 text-xs text-slate-400 font-mono leading-relaxed whitespace-pre-wrap">
+            <div className="bg-white/[0.03] rounded-lg p-3 border border-white/[0.06] text-xs text-white/50 font-mono leading-relaxed whitespace-pre-wrap">
               {row.visualPrompt}
             </div>
             <button
               onClick={() => { setEditPrompt(row.visualPrompt || ''); setIsEditOpen(true); }}
-              className="absolute top-1.5 right-1.5 opacity-0 group-hover/prompt:opacity-100 transition-opacity p-1.5 rounded-md bg-slate-800 hover:bg-brand-600 border border-slate-700 hover:border-brand-500 text-slate-400 hover:text-white"
+              className="absolute top-1.5 right-1.5 opacity-0 group-hover/prompt:opacity-100 transition-opacity p-1.5 rounded-md bg-white/[0.08] hover:bg-cyan-500/30 border border-white/[0.1] hover:border-cyan-500/40 text-white/40 hover:text-white"
               title="프롬프트 편집"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -287,7 +287,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
         )}
       </td>
       <td className="py-5 px-6 align-top">
-        <div className={`relative mx-auto rounded-xl overflow-hidden bg-slate-950 border border-slate-800 shadow-inner group/img ${aspectRatio === '9:16' ? 'aspect-[9/16] w-28' : 'aspect-video w-48'}`}>
+        <div className={`relative mx-auto rounded-xl overflow-hidden bg-black border border-white/[0.08] shadow-inner group/img ${aspectRatio === '9:16' ? 'aspect-[9/16] w-28' : 'aspect-video w-48'}`}>
           {row.status === 'generating' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
@@ -438,40 +438,40 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6 bg-slate-900/90 backdrop-blur-md p-5 rounded-3xl border border-slate-800">
+      <div className="flex items-center justify-between mb-6 bg-black/60 backdrop-blur-md p-5 rounded-3xl border border-white/[0.08]">
         <div className="flex items-center gap-4">
-          <div className="w-1 h-10 bg-brand-500 rounded-full"></div>
+          <div className="w-0.5 h-10 bg-gradient-to-b from-cyan-400 to-blue-500 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.5)]"></div>
           <div>
             <h2 className="text-xl font-black text-white tracking-tight">Heaven 1.0 마스터 스토리보드</h2>
-            <p className="text-slate-500 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
+            <p className="text-white/25 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
           </div>
         </div>
         <div className="flex gap-2">
-            <button onClick={() => downloadMediaZip(data)} className="px-4 py-2.5 rounded-xl bg-violet-800 border border-violet-700 text-violet-300 font-bold text-[10px] hover:bg-violet-700 transition-all flex items-center gap-2">
+            <button onClick={() => downloadMediaZip(data)} className="px-4 py-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 font-bold text-[10px] hover:bg-violet-500/25 transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               이미지+음성 내보내기
             </button>
-            <button onClick={() => downloadProjectZip(data)} className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[10px] hover:bg-slate-700 transition-all flex items-center gap-2">
+            <button onClick={() => downloadProjectZip(data)} className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-white/70 font-bold text-[10px] hover:bg-white/[0.1] hover:text-white transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               전체 프로젝트 저장
             </button>
-            <button onClick={() => exportAssetsToZip(data, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`)} className="px-4 py-2.5 rounded-xl bg-emerald-800 border border-emerald-700 text-emerald-300 font-bold text-[10px] hover:bg-emerald-700 transition-all flex items-center gap-2">
+            <button onClick={() => exportAssetsToZip(data, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`)} className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-[10px] hover:bg-emerald-500/25 transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               엑셀+이미지 내보내기
             </button>
-            <button onClick={async () => await downloadSrt(data, `subtitles_${Date.now()}.srt`)} className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 font-bold text-[10px] hover:bg-slate-700 transition-all flex items-center gap-2">
+            <button onClick={async () => await downloadSrt(data, `subtitles_${Date.now()}.srt`)} className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-white/70 font-bold text-[10px] hover:bg-white/[0.1] hover:text-white transition-all flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               SRT 자막 다운로드
             </button>
-            <button onClick={() => onExportVideo?.(false)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-slate-700 text-white hover:bg-slate-600 border border-slate-600'}`}>
-                {isExporting ? <div className="w-3 h-3 border-2 border-slate-500 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
+            <button onClick={() => onExportVideo?.(false)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-white/[0.08] text-white hover:bg-white/[0.14] border border-white/[0.1]'}`}>
+                {isExporting ? <div className="w-3 h-3 border-2 border-white/20 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 X)
             </button>
-            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-brand-600 text-white hover:bg-brand-500 shadow-lg shadow-brand-900/20'}`}>
-                {isExporting ? <div className="w-3 h-3 border-2 border-slate-500 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
+            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_12px_rgba(6,182,212,0.3)]'}`}>
+                {isExporting ? <div className="w-3 h-3 border-2 border-white/30 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 O)
             </button>
-            <button onClick={() => setShowSubSettings((v: boolean) => !v)} className={`px-3 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center gap-1.5 border ${showSubSettings ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'}`} title="자막 설정">
+            <button onClick={() => setShowSubSettings((v: boolean) => !v)} className={`px-3 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center gap-1.5 border ${showSubSettings ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:text-white'}`} title="자막 설정">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
               자막
             </button>
@@ -480,10 +480,10 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
 
       {/* 자막 설정 패널 */}
       {showSubSettings && (
-        <div className="mb-4 bg-slate-900/90 backdrop-blur-md border border-violet-500/30 rounded-2xl p-5 space-y-4">
+        <div className="mb-4 bg-black/60 backdrop-blur-md border border-violet-500/25 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-violet-400 font-black text-xs uppercase tracking-widest">자막 설정</span>
-            <span className="text-slate-600 text-[10px]">MP4 (자막 O) 내보낼 때 적용됩니다</span>
+            <span className="text-white/25 text-[10px]">MP4 (자막 O) 내보낼 때 적용됩니다</span>
           </div>
 
           {/* 글자 수 */}
@@ -623,19 +623,19 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
         </div>
       )}
 
-      <div className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/20 backdrop-blur-sm">
+      <div className="overflow-hidden rounded-3xl border border-white/[0.07] bg-black/30 backdrop-blur-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[1200px] table-fixed">
-            <thead className="bg-slate-900/80 border-b border-slate-800">
+            <thead className="bg-black/60 border-b border-white/[0.07]">
               <tr>
-                <th className="py-4 px-6 text-[9px] font-black text-slate-500 uppercase tracking-widest w-16">번호</th>
-                <th className="py-4 px-6 text-[9px] font-black text-slate-500 uppercase tracking-widest w-[30%]">나레이션 / CEO 프로토콜</th>
-                <th className="py-4 px-6 text-[9px] font-black text-slate-500 uppercase tracking-widest w-[30%]">V9.2 통합 영문 프롬프트</th>
-                <th className="py-4 px-6 text-[9px] font-black text-slate-500 uppercase tracking-widest w-56 text-center">생성 결과물</th>
-                <th className="py-4 px-6 text-[9px] font-black text-slate-500 uppercase tracking-widest w-20 text-center">음성</th>
+                <th className="py-4 px-6 text-[9px] font-black text-white/30 uppercase tracking-widest w-16">번호</th>
+                <th className="py-4 px-6 text-[9px] font-black text-white/30 uppercase tracking-widest w-[30%]">나레이션</th>
+                <th className="py-4 px-6 text-[9px] font-black text-white/30 uppercase tracking-widest w-[30%]">영문 프롬프트</th>
+                <th className="py-4 px-6 text-[9px] font-black text-white/30 uppercase tracking-widest w-56 text-center">생성 결과물</th>
+                <th className="py-4 px-6 text-[9px] font-black text-white/30 uppercase tracking-widest w-20 text-center">음성</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/40">
+            <tbody className="divide-y divide-white/[0.04]">
               {data.map((row, index) => (
                 <TableRow
                   key={row.sceneNumber}
