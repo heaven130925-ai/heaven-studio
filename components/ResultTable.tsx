@@ -227,7 +227,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
       <td className="py-5 px-6 align-top font-mono text-slate-600 text-[10px]">#{row.sceneNumber.toString().padStart(2, '0')}</td>
       <td className="py-5 px-6 align-top">
         <div className="space-y-3">
-          <p className="text-slate-200 text-[11px] leading-relaxed font-medium tracking-tight">{row.narration}</p>
+          <p className="text-slate-200 text-sm leading-relaxed font-medium">{row.narration}</p>
           {row.analysis?.composition_type && (
             <div className="flex flex-wrap gap-1">
               <span className={`text-[7px] font-black px-1.5 py-0.5 rounded border uppercase ${
@@ -252,7 +252,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
             <textarea
               value={editPrompt}
               onChange={(e) => setEditPrompt(e.target.value)}
-              className="w-full h-36 bg-slate-950 rounded-lg p-3 border border-brand-500/50 text-[9px] text-slate-300 font-mono leading-tight resize-y focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
+              className="w-full h-36 bg-slate-950 rounded-lg p-3 border border-brand-500/50 text-xs text-slate-300 font-mono leading-relaxed resize-y focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400/30"
               placeholder="이미지 프롬프트를 수정하세요..."
             />
             <div className="flex gap-1.5">
@@ -273,7 +273,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
           </div>
         ) : (
           <div className="relative group/prompt">
-            <div className="bg-slate-950/30 rounded-lg p-3 border border-slate-800/50 text-[9px] text-slate-600 font-mono leading-tight whitespace-pre-wrap">
+            <div className="bg-slate-950/30 rounded-lg p-3 border border-slate-800/50 text-xs text-slate-400 font-mono leading-relaxed whitespace-pre-wrap">
               {row.visualPrompt}
             </div>
             <button

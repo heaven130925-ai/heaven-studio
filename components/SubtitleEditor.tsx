@@ -13,6 +13,8 @@ interface Props {
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
   onNarrationChange?: (index: number, narration: string) => void;
+  onExportVideo?: (enableSubtitles: boolean) => void;
+  isExporting?: boolean;
 }
 
 // videoService의 자막 렌더링 로직과 동일 (canvas 기반)
@@ -130,35 +132,67 @@ function renderSubtitleOnCanvas(
   }
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onExportVideo, isExporting }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  // 줌/패닝
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
 
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
-
-  // 씬 변경 시 오디오 리셋
-  useEffect(() => {
-    setIsPlaying(false);
-    setAudioProgress(0);
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-  }, [selectedIdx]);
 
   // audioData가 data:URL이면 그대로, raw base64면 prefix 붙이기
   const audioSrc = scene?.audioData
     ? (scene.audioData.startsWith('data:') ? scene.audioData : `data:audio/mpeg;base64,${scene.audioData}`)
     : null;
 
+  // 씬 변경 시 오디오 리셋 + 강제 로드
+  useEffect(() => {
+    setIsPlaying(false);
+    setAudioProgress(0);
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.load(); // 새 src 강제 로드
+  }, [selectedIdx]);
+
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !audioSrc) return;
-    if (isPlaying) { audio.pause(); setIsPlaying(false); }
-    else { audio.play(); setIsPlaying(true); }
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    }
   };
+
+  // 마우스 휠 줌 (Ctrl 없이도 동작)
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    setZoom(z => Math.min(3, Math.max(0.3, z - e.deltaY * 0.001)));
+  }, []);
+
+  // 드래그 패닝
+  const handleMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
+  };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current) return;
+    setPan({
+      x: dragRef.current.panX + (e.clientX - dragRef.current.startX),
+      y: dragRef.current.panY + (e.clientY - dragRef.current.startY),
+    });
+  };
+  const handleMouseUp = () => { dragRef.current = null; };
 
   // 캔버스 재렌더
   const redraw = useCallback(() => {
@@ -177,48 +211,62 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   return (
     <div className="flex h-full overflow-hidden">
       {/* ─── 왼쪽: 캔버스 미리보기 + 컨트롤 ─── */}
-      <div className="flex flex-col w-[58%] border-r border-slate-800 overflow-y-auto">
-        {/* 캔버스 미리보기 */}
-        <div className="relative bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
-          <canvas
-            ref={canvasRef}
-            width={960}
-            height={540}
-            className="w-full h-full"
-          />
+      <div className="flex flex-col w-[58%] border-r border-slate-700/50 overflow-y-auto">
+        {/* 줌/패닝 컨트롤 바 */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border-b border-slate-800 shrink-0">
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            className="text-[10px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
+            RESET
+          </button>
+          <button onClick={() => setZoom(z => Math.min(3, z + 0.2))}
+            className="w-6 h-6 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors">+</button>
+          <span className="text-[10px] text-slate-500 font-mono w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}
+            className="w-6 h-6 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors">−</button>
+          <span className="text-[10px] text-slate-600 ml-1">휠로 줌 · 드래그로 이동</span>
+          {onExportVideo && (
+            <div className="ml-auto flex gap-1.5">
+              <button
+                onClick={() => onExportVideo(false)}
+                disabled={isExporting}
+                className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold transition-colors disabled:opacity-40"
+              >
+                MP4 (자막X)
+              </button>
+              <button
+                onClick={() => onExportVideo(true)}
+                disabled={isExporting}
+                className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[10px] font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] disabled:opacity-40"
+              >
+                {isExporting ? '렌더링 중...' : 'MP4 렌더링 (자막O)'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* 캔버스 미리보기 — 줌/패닝 */}
+        <div
+          ref={canvasContainerRef}
+          className="relative bg-[#0a0a0f] overflow-hidden cursor-grab active:cursor-grabbing"
+          style={{ aspectRatio: '16/9' }}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        >
+          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
+            <canvas ref={canvasRef} width={960} height={540} className="w-full h-full" />
+          </div>
           {!scene?.imageData && (
-            <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm">
+            <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-xs pointer-events-none">
               이미지 생성 대기 중...
             </div>
           )}
         </div>
 
         {/* 오디오 플레이어 */}
-        <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800">
-          <button
-            onClick={togglePlay}
-            disabled={!audioSrc}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-colors shrink-0 ${
-              audioSrc ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-            }`}
-          >
-            {isPlaying ? '⏸' : '▶'}
-          </button>
-          <div className="flex-1 relative h-1.5 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
-            onClick={e => {
-              const audio = audioRef.current;
-              if (!audio || !audioSrc) return;
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              const ratio = (e.clientX - rect.left) / rect.width;
-              audio.currentTime = ratio * (audio.duration || 0);
-            }}
-          >
-            <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
-          </div>
-          <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right">
-            {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '오디오') : '오디오 없음'}
-          </span>
-          {/* 오디오 항상 렌더링 (ref 유지를 위해 조건부 제거) */}
+        <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
           <audio
             ref={audioRef}
             src={audioSrc || ''}
@@ -228,6 +276,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             }}
             onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
           />
+          <button
+            onClick={togglePlay}
+            disabled={!audioSrc}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
+              audioSrc ? 'bg-gradient-to-br from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+            }`}
+          >
+            {isPlaying ? '■' : '▶'}
+          </button>
+          <div className="flex-1 relative h-1.5 bg-slate-800 rounded-full overflow-hidden cursor-pointer"
+            onClick={e => {
+              const audio = audioRef.current;
+              if (!audio || !audioSrc) return;
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              audio.currentTime = ((e.clientX - rect.left) / rect.width) * (audio.duration || 0);
+            }}
+          >
+            <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
+          </div>
+          <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right font-mono">
+            {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●') : '—'}
+          </span>
         </div>
 
         {/* 자막 텍스트 편집 */}

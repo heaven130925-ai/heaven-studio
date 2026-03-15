@@ -908,24 +908,23 @@ const App: React.FC = () => {
       {showStoryboard && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col overflow-hidden">
           {/* 헤더 */}
-          {/* 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900 shrink-0">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 shrink-0">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-black transition-colors shadow-lg"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-cyan-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
               >
                 ← 메인으로
               </button>
-              {/* 탭 — 항상 표시 */}
-              <div className="flex bg-slate-800 rounded-xl p-0.5">
+              {/* 탭 */}
+              <div className="flex bg-slate-900 rounded-xl p-0.5 border border-slate-700/50">
                 <button onClick={() => setStoryboardTab('result')}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'result' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
                   스토리보드
                 </button>
                 <button onClick={() => setStoryboardTab('subtitle')}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'subtitle' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
-                  🎬 자막 편집
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
+                  자막 편집
                 </button>
               </div>
             </div>
@@ -967,6 +966,8 @@ const App: React.FC = () => {
                 scenes={generatedData}
                 subConfig={subConfig}
                 onSubConfigChange={handleSubConfigChange}
+                onExportVideo={triggerVideoExport}
+                isExporting={isVideoGenerating}
                 onNarrationChange={(idx, val) => {
                   const updated = [...generatedData];
                   updated[idx] = { ...updated[idx], narration: val };
