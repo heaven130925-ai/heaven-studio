@@ -142,6 +142,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // 줌/패닝
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
 
@@ -149,11 +151,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const narration = scene?.narration ?? '';
 
   // audioData가 data:URL이면 그대로, raw base64면 prefix 붙이기
-  const audioSrc = scene?.audioData
-    ? (scene.audioData.startsWith('data:') ? scene.audioData : `data:audio/mpeg;base64,${scene.audioData}`)
-    : null;
+  const getAudioSrc = (s: typeof scene) =>
+    s?.audioData
+      ? (s.audioData.startsWith('data:') ? s.audioData : `data:audio/mpeg;base64,${s.audioData}`)
+      : '';
+  const audioSrc = getAudioSrc(scene);
 
-  // 씬 변경 시 오디오 리셋 + 강제 로드
+  // 씬 변경 시 오디오 리셋 + src 직접 설정 + 강제 로드
   useEffect(() => {
     setIsPlaying(false);
     setAudioProgress(0);
@@ -161,7 +165,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
-    audio.load(); // 새 src 강제 로드
+    // React prop 타이밍 무시하고 직접 src 설정
+    const newSrc = getAudioSrc(scenes[selectedIdx]);
+    audio.src = newSrc;
+    audio.load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIdx]);
 
   const togglePlay = () => {
@@ -171,9 +179,30 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       audio.pause();
       setIsPlaying(false);
     } else {
-      audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+      audio.play().then(() => setIsPlaying(true)).catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
     }
   };
+
+  // 컨테이너 크기 추적 (경계선 계산용)
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setContainerSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+    });
+    ro.observe(el);
+    setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+
+  // 이미지 경계 감지 (끝에 닿으면 선 표시)
+  const maxPanX = containerSize.w * (zoom - 1) / 2;
+  const maxPanY = containerSize.h * (zoom - 1) / 2;
+  const snapThreshold = 8;
+  const atLeft   = zoom > 1 && pan.x >= maxPanX - snapThreshold;
+  const atRight  = zoom > 1 && pan.x <= -(maxPanX - snapThreshold);
+  const atTop    = zoom > 1 && pan.y >= maxPanY - snapThreshold;
+  const atBottom = zoom > 1 && pan.y <= -(maxPanY - snapThreshold);
 
   // 마우스 휠 줌 (Ctrl 없이도 동작)
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -184,6 +213,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // 드래그 패닝
   const handleMouseDown = (e: React.MouseEvent) => {
     dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
+    setIsDragging(true);
   };
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragRef.current) return;
@@ -192,7 +222,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       y: dragRef.current.panY + (e.clientY - dragRef.current.startY),
     });
   };
-  const handleMouseUp = () => { dragRef.current = null; };
+  const handleMouseUp = () => { dragRef.current = null; setIsDragging(false); };
 
   // 캔버스 재렌더
   const redraw = useCallback(() => {
@@ -211,34 +241,34 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   return (
     <div className="flex h-full overflow-hidden">
       {/* ─── 왼쪽: 캔버스 미리보기 + 컨트롤 ─── */}
-      <div className="flex flex-col w-[58%] border-r border-slate-700/50 overflow-y-auto">
+      <div className="flex flex-col w-[68%] border-r border-slate-700/50 overflow-y-auto">
         {/* 줌/패닝 컨트롤 바 */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/80 border-b border-slate-800 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 bg-slate-900/80 border-b border-slate-800 shrink-0">
           <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-            className="text-[10px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
+            className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
             RESET
           </button>
-          <button onClick={() => setZoom(z => Math.min(3, z + 0.2))}
-            className="w-6 h-6 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors">+</button>
-          <span className="text-[10px] text-slate-500 font-mono w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}
-            className="w-6 h-6 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors">−</button>
+          <button onClick={() => setZoom(z => Math.min(3, z + 0.01))}
+            className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-base font-bold transition-colors">+</button>
+          <span className="text-xs text-slate-400 font-mono w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.01))}
+            className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-base font-bold transition-colors">−</button>
           <span className="text-[10px] text-slate-600 ml-1">휠로 줌 · 드래그로 이동</span>
           {onExportVideo && (
             <div className="ml-auto flex gap-1.5">
               <button
                 onClick={() => onExportVideo(false)}
                 disabled={isExporting}
-                className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold transition-colors disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold transition-colors disabled:opacity-40"
               >
-                MP4 (자막X)
+                자막 없이 내보내기
               </button>
               <button
                 onClick={() => onExportVideo(true)}
                 disabled={isExporting}
-                className="px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[10px] font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] disabled:opacity-40"
               >
-                {isExporting ? '렌더링 중...' : 'MP4 렌더링 (자막O)'}
+                {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
             </div>
           )}
@@ -247,7 +277,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 캔버스 미리보기 — 줌/패닝 */}
         <div
           ref={canvasContainerRef}
-          className="relative bg-[#0a0a0f] overflow-hidden cursor-grab active:cursor-grabbing"
+          className="relative bg-[#0a0a0f] overflow-hidden cursor-grab active:cursor-grabbing select-none"
           style={{ aspectRatio: '16/9' }}
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
@@ -256,8 +286,23 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           onMouseLeave={handleMouseUp}
         >
           <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
-            <canvas ref={canvasRef} width={960} height={540} className="w-full h-full" />
+            <canvas ref={canvasRef} width={1280} height={720} className="w-full h-full" />
           </div>
+
+          {/* 중심 가이드라인 (드래그 중) */}
+          {isDragging && (
+            <>
+              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: 'calc(50% - 0.5px)', width: 1, background: 'rgba(6,182,212,0.55)' }} />
+              <div className="absolute left-0 right-0 pointer-events-none" style={{ top: 'calc(50% - 0.5px)', height: 1, background: 'rgba(6,182,212,0.55)' }} />
+            </>
+          )}
+
+          {/* 경계 스냅 선 (이미지 끝에 닿으면) */}
+          {atLeft   && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
+          {atRight  && <div className="absolute top-0 bottom-0 right-0 w-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
+          {atTop    && <div className="absolute left-0 right-0 top-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
+          {atBottom && <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
+
           {!scene?.imageData && (
             <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-xs pointer-events-none">
               이미지 생성 대기 중...
@@ -269,12 +314,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
           <audio
             ref={audioRef}
-            src={audioSrc || ''}
             onTimeUpdate={() => {
               const audio = audioRef.current;
               if (audio && audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
             }}
             onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
           />
           <button
             onClick={togglePlay}
