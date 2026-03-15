@@ -902,19 +902,17 @@ const App: React.FC = () => {
               >
                 ← 돌아가기
               </button>
-              {/* 탭 */}
-              {generatedData.length > 0 && (
-                <div className="flex bg-slate-800 rounded-xl p-0.5">
-                  <button onClick={() => setStoryboardTab('result')}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'result' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
-                    스토리보드
-                  </button>
-                  <button onClick={() => setStoryboardTab('subtitle')}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'subtitle' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
-                    자막 편집
-                  </button>
-                </div>
-              )}
+              {/* 탭 — 항상 표시 */}
+              <div className="flex bg-slate-800 rounded-xl p-0.5">
+                <button onClick={() => setStoryboardTab('result')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'result' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  스토리보드
+                </button>
+                <button onClick={() => setStoryboardTab('subtitle')}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-colors ${storyboardTab === 'subtitle' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  🎬 자막 편집
+                </button>
+              </div>
             </div>
             {/* 상태 표시 */}
             <div className="flex items-center gap-3">
