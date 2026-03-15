@@ -206,11 +206,13 @@ function renderSubtitle(
 
   // 자막 스타일 설정
   const lineHeight = config.fontSize * 1.4;
-  const padding = 20;
-  const safeMargin = 10; // 화면 경계 안전 여백
+  const padding = 16;
+  const safeMargin = 10;
+  const xPercent = config.xPercent ?? 50;
+  const align = config.textAlign ?? 'center';
 
   ctx.font = `${config.fontWeight ?? 700} ${config.fontSize}px ${config.fontFamily}`;
-  ctx.textAlign = 'center';
+  ctx.textAlign = align as CanvasTextAlign;
   ctx.textBaseline = 'top';
 
   // 전체 자막 영역 크기 계산
@@ -218,54 +220,59 @@ function renderSubtitle(
   let boxWidth = maxLineWidth + padding * 2;
   const boxHeight = lines.length * lineHeight + padding * 2;
 
-  // 화면 경계 체크 - 박스가 화면을 넘지 않도록
+  // 화면 경계 체크
   const maxBoxWidth = canvas.width - safeMargin * 2;
-  if (boxWidth > maxBoxWidth) {
-    boxWidth = maxBoxWidth;
-  }
+  if (boxWidth > maxBoxWidth) boxWidth = maxBoxWidth;
 
-  const boxX = Math.max(safeMargin, (canvas.width - boxWidth) / 2);
+  // 수평 위치 (xPercent: 0=왼쪽, 50=가운데, 100=오른쪽)
+  const usableWidth = canvas.width - boxWidth - safeMargin * 2;
+  let boxX = safeMargin + (xPercent / 100) * usableWidth;
+  if (boxX < safeMargin) boxX = safeMargin;
+  if (boxX + boxWidth > canvas.width - safeMargin) boxX = canvas.width - safeMargin - boxWidth;
+
+  // 수직 위치
   let boxY: number;
   if (config.yPercent !== undefined) {
     const usableHeight = canvas.height - boxHeight - safeMargin * 2;
     boxY = safeMargin + (config.yPercent / 100) * usableHeight;
   } else {
     const position = config.position ?? 'bottom';
-    if (position === 'top') {
-      boxY = config.bottomMargin;
-    } else if (position === 'middle') {
-      boxY = (canvas.height - boxHeight) / 2;
-    } else {
-      boxY = canvas.height - config.bottomMargin - boxHeight;
-    }
+    if (position === 'top') boxY = config.bottomMargin;
+    else if (position === 'middle') boxY = (canvas.height - boxHeight) / 2;
+    else boxY = canvas.height - config.bottomMargin - boxHeight;
   }
-
-  // 경계 체크
   if (boxY < safeMargin) boxY = safeMargin;
   if (boxY + boxHeight > canvas.height - safeMargin) boxY = canvas.height - safeMargin - boxHeight;
 
-  // 반투명 배경 박스
-  ctx.fillStyle = config.backgroundColor;
-  ctx.beginPath();
-  ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
-  ctx.fill();
+  // 텍스트 X 기준점 (align에 따라)
+  const textX = align === 'left' ? boxX + padding
+    : align === 'right' ? boxX + boxWidth - padding
+    : boxX + boxWidth / 2;
+
+  // 반투명 배경 박스 (투명도 0이면 생략)
+  if (config.backgroundColor && config.backgroundColor !== 'rgba(0, 0, 0, 0)' && config.backgroundColor !== 'transparent') {
+    ctx.fillStyle = config.backgroundColor;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+    ctx.fill();
+  }
 
   // 텍스트 렌더링
   lines.forEach((line, lineIndex) => {
     const textY = boxY + padding + lineIndex * lineHeight;
+    const sw = config.strokeWidth ?? 6;
 
     // 테두리 (strokeWidth > 0일 때만)
-    const sw = config.strokeWidth ?? 4;
     if (sw > 0) {
-      ctx.strokeStyle = config.strokeColor ?? 'rgba(0,0,0,0.8)';
+      ctx.strokeStyle = config.strokeColor ?? '#000000';
       ctx.lineWidth = sw;
       ctx.lineJoin = 'round';
-      ctx.strokeText(line, canvas.width / 2, textY);
+      ctx.strokeText(line, textX, textY);
     }
 
     // 텍스트
     ctx.fillStyle = config.textColor;
-    ctx.fillText(line, canvas.width / 2, textY);
+    ctx.fillText(line, textX, textY);
   });
 }
 
