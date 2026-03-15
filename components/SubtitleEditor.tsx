@@ -136,7 +136,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  // 오디오: React JSX 없이 직접 생성 (타이밍 문제 방지)
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   // 줌/패닝
@@ -157,6 +158,30 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       : '';
   const audioSrc = getAudioSrc(scene);
 
+  // 오디오 엘리먼트 마운트 시 한 번만 생성
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+    const onTimeUpdate = () => {
+      if (audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
+    };
+    const onEnded = () => { setIsPlaying(false); setAudioProgress(0); };
+    const onPlay  = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('play', onPlay);
+    audio.addEventListener('pause', onPause);
+    return () => {
+      audio.pause();
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('play', onPlay);
+      audio.removeEventListener('pause', onPause);
+      audioRef.current = null;
+    };
+  }, []);
+
   // 씬 변경 시 오디오 리셋 + src 직접 설정 + 강제 로드
   useEffect(() => {
     setIsPlaying(false);
@@ -165,21 +190,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
-    // React prop 타이밍 무시하고 직접 src 설정
     const newSrc = getAudioSrc(scenes[selectedIdx]);
-    audio.src = newSrc;
-    audio.load();
+    audio.src = newSrc || '';
+    if (newSrc) audio.load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIdx]);
+  }, [selectedIdx, scenes]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !audioSrc) return;
     if (isPlaying) {
       audio.pause();
-      setIsPlaying(false);
     } else {
-      audio.play().then(() => setIsPlaying(true)).catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
+      audio.play().catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
     }
   };
 
@@ -289,13 +312,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <canvas ref={canvasRef} width={1280} height={720} className="w-full h-full" />
           </div>
 
-          {/* 중심 가이드라인 (드래그 중) */}
-          {isDragging && (
-            <>
-              <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: 'calc(50% - 0.5px)', width: 1, background: 'rgba(6,182,212,0.55)' }} />
-              <div className="absolute left-0 right-0 pointer-events-none" style={{ top: 'calc(50% - 0.5px)', height: 1, background: 'rgba(6,182,212,0.55)' }} />
-            </>
-          )}
+          {/* 중심 가이드라인 (드래그 중) — 중앙 정렬 시 빨간색 */}
+          {isDragging && (() => {
+            const snapPx = 6;
+            const centeredX = Math.abs(pan.x) <= snapPx;
+            const centeredY = Math.abs(pan.y) <= snapPx;
+            return (
+              <>
+                <div className="absolute top-0 bottom-0 pointer-events-none" style={{
+                  left: 'calc(50% - 0.5px)',
+                  width: centeredX ? 2 : 1,
+                  background: centeredX ? 'rgba(239,68,68,0.95)' : 'rgba(6,182,212,0.45)',
+                  boxShadow: centeredX ? '0 0 6px rgba(239,68,68,0.7)' : 'none',
+                }} />
+                <div className="absolute left-0 right-0 pointer-events-none" style={{
+                  top: 'calc(50% - 0.5px)',
+                  height: centeredY ? 2 : 1,
+                  background: centeredY ? 'rgba(239,68,68,0.95)' : 'rgba(6,182,212,0.45)',
+                  boxShadow: centeredY ? '0 0 6px rgba(239,68,68,0.7)' : 'none',
+                }} />
+              </>
+            );
+          })()}
 
           {/* 경계 스냅 선 (이미지 끝에 닿으면) */}
           {atLeft   && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
@@ -312,16 +350,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
         {/* 오디오 플레이어 */}
         <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
-          <audio
-            ref={audioRef}
-            onTimeUpdate={() => {
-              const audio = audioRef.current;
-              if (audio && audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
-            }}
-            onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          />
           <button
             onClick={togglePlay}
             disabled={!audioSrc}

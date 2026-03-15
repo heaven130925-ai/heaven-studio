@@ -21,7 +21,6 @@ function pcmBase64ToWavUrl(base64Pcm: string): string {
 
 interface InputSectionProps {
   onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean) => void;
-  onExtractCharacters?: (script: string) => void;
   step: GenerationStep;
   activeTab: 'auto' | 'manual';
   onTabChange: (tab: 'auto' | 'manual') => void;
@@ -31,7 +30,7 @@ interface InputSectionProps {
   onThumbnailBaseImageChange?: (img: string | null) => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -77,7 +76,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const [elModelId, setElModelId] = useState<ElevenLabsModelId>('eleven_multilingual_v2');
   const [voices, setVoices] = useState<ElevenLabsVoice[]>([]);
   const [isLoadingVoices, setIsLoadingVoices] = useState(false);
-  const [showVoiceDropdown, setShowVoiceDropdown] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [genderFilter, setGenderFilter] = useState<VoiceGender | null>(null);
 
@@ -114,7 +112,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
   const characterFileInputRef = useRef<HTMLInputElement>(null);
   const styleFileInputRef = useRef<HTMLInputElement>(null);
-  const voiceDropdownRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -130,11 +127,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (voiceDropdownRef.current && !voiceDropdownRef.current.contains(e.target as Node)) setShowVoiceDropdown(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   useEffect(() => { return () => { audioRef.current?.pause(); audioRef.current = null; }; }, []);
 
@@ -149,7 +141,6 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
   const selectVoice = useCallback((voice: ElevenLabsVoice) => {
     setElVoiceId(voice.voice_id);
     localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.voice_id);
-    setShowVoiceDropdown(false);
   }, []);
 
   const PREVIEW_TEXT = "안녕하세요. 테스트 목소리입니다.";
@@ -187,16 +178,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
     } catch { setPlayingGeminiVoiceId(null); }
   };
 
-  const getSelectedVoiceInfo = useCallback(() => {
-    if (!elVoiceId) return { name: '기본값 (Adam)', description: '' };
-    const dv = ELEVENLABS_DEFAULT_VOICES.find(v => v.id === elVoiceId);
-    if (dv) return { name: dv.name, description: dv.description };
-    const av = voices.find(v => v.voice_id === elVoiceId);
-    if (av) return { name: av.name, description: av.labels?.description || av.category };
-    return { name: elVoiceId.slice(0, 12) + '...', description: '직접 입력' };
-  }, [elVoiceId, voices]);
-
-  const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, elVoiceId); setElevenLabsModelId(elModelId); };
+const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, elVoiceId); setElevenLabsModelId(elModelId); };
   const selectVoiceSpeed = (v: string) => { setVoiceSpeed(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_SPEED, v); };
   const changeVoiceStability = (v: number) => { setVoiceStability(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(v)); };
   const changeVoiceStyle = (v: number) => { setVoiceStyle(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(v)); };
@@ -362,14 +344,13 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
         <div className="flex-none w-1/3 bg-white/[0.03] border border-white/[0.08] rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
           {/* 비주얼 스타일 (항상 표시) */}
           <div className="p-3 border-b border-white/[0.07]">
-            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-2 px-1">Visual Style</p>
+            <p className="text-[10px] font-black text-white/55 uppercase tracking-widest mb-2 px-1">Visual Style</p>
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
                   className={`relative p-1.5 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1 overflow-hidden`}>
-                    <div className="w-4 h-4 rounded-full border-2 border-white/40" style={{ boxShadow: '0 0 8px rgba(255,255,255,0.3), inset 0 0 5px rgba(255,255,255,0.15)' }} />
-                    <span className="text-[9px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] text-center px-1 leading-tight">{style.name}</span>
+                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
+                    <span className="text-[11px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
                   </div>
                   {visualStyleId === style.id && (
                     <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
@@ -408,11 +389,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                 className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left ${
                   activePanel === id
                     ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
-                    : 'text-white/40 hover:bg-white/[0.06] hover:text-white/80 border border-transparent'
+                    : 'text-white/65 hover:bg-white/[0.06] hover:text-white border border-transparent'
                 }`}
               >
-                <span className="flex-none opacity-80">{icon}</span>
-                <span className="text-sm font-semibold">{label}</span>
+                <span className="flex-none">{icon}</span>
+                <span className="text-sm font-bold">{label}</span>
               </button>
             ))}
           </div>
@@ -552,25 +533,16 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
 
                 {/* 생성 버튼 */}
                 <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-40 text-white font-black py-4 rounded-2xl transition-all text-base tracking-wide shadow-lg shadow-cyan-900/30 disabled:shadow-none">
+                  className="w-full bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 disabled:opacity-40 text-white font-black py-4 rounded-2xl transition-all text-base tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.45)] hover:shadow-[0_0_28px_rgba(6,182,212,0.6)] disabled:shadow-none">
                   {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                 </button>
 
                 <div className="flex gap-2">
                   <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white text-sm font-semibold transition-all border border-emerald-600/40">
+                    className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-40 text-white text-sm font-bold transition-all shadow-[0_0_14px_rgba(16,185,129,0.35)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)] disabled:shadow-none">
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
                     이미지만 생성
                   </button>
-                  {onExtractCharacters && (
-                    <button type="button"
-                      onClick={() => { const txt = activeTab === 'auto' ? topic : manualScript; if (txt.trim()) onExtractCharacters(txt); }}
-                      disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white text-sm font-semibold transition-all border border-violet-600/40">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                      캐릭터 추출
-                    </button>
-                  )}
                 </div>
               </form>
             </div>
@@ -603,9 +575,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
                           className={`relative p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1.5 overflow-hidden`}>
-                            <div className="w-5 h-5 rounded-full border-2 border-white/40" style={{ boxShadow: '0 0 10px rgba(255,255,255,0.3), inset 0 0 7px rgba(255,255,255,0.15)' }} />
-                            <span className="text-[10px] font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
+                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
+                            <span className="text-[12px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
                           </div>
                           {visualStyleId === style.id && (
                             <div className="absolute top-1 right-1 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
@@ -782,42 +753,36 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onExtractCharac
                                 {isLoadingVoices ? '...' : '불러오기'}
                               </button>
                             </div>
-                            <div ref={voiceDropdownRef} className="relative">
-                              <button type="button" onClick={() => setShowVoiceDropdown(!showVoiceDropdown)}
-                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-left flex items-center justify-between hover:border-purple-500/50">
-                                <span className="text-sm text-white font-medium">{getSelectedVoiceInfo().name}</span>
-                                <svg className={`w-4 h-4 text-slate-500 transition-transform ${showVoiceDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                            {/* 성우 목록 — 인라인 스크롤 (absolute 드롭다운 제거) */}
+                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: '240px' }}>
+                              <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
+                                className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
+                                기본값 (Adam)
                               </button>
-                              {showVoiceDropdown && (
-                                <div className="absolute z-50 w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
-                                  <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); setShowVoiceDropdown(false); }}
-                                    className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-slate-800 border-b border-slate-800 ${!elVoiceId ? 'bg-purple-600/20' : ''}`}>기본값 (Adam)</button>
-                                  {filteredDefaultVoices.map(voice => (
-                                    <div key={voice.id} className={`flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 hover:bg-slate-800 ${elVoiceId === voice.id ? 'bg-purple-600/20' : ''}`}>
-                                      <button type="button" onClick={(e) => { e.stopPropagation(); playElevenLabsPreview(voice.id, voice.name); }}
-                                        className={`w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ${playingVoiceId === voice.id ? 'bg-purple-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-purple-600 hover:text-white'}`}>
-                                        {playingVoiceId === voice.id ? <PauseIcon /> : <PlayIcon />}
-                                      </button>
-                                      <button type="button" onClick={() => { setElVoiceId(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.id); setShowVoiceDropdown(false); }} className="flex-1 text-left">
-                                        <div className="text-sm text-white font-bold">{voice.name}</div>
-                                        <div className="text-xs text-slate-500">{voice.description}</div>
-                                      </button>
-                                    </div>
-                                  ))}
-                                  {filteredApiVoices.map(voice => (
-                                    <div key={voice.voice_id} className={`flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 hover:bg-slate-800 ${elVoiceId === voice.voice_id ? 'bg-purple-600/20' : ''}`}>
-                                      <button type="button" onClick={(e) => { e.stopPropagation(); playElevenLabsPreview(voice.voice_id, voice.name); }}
-                                        className={`w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ${playingVoiceId === voice.voice_id ? 'bg-purple-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-purple-600 hover:text-white'}`}>
-                                        {playingVoiceId === voice.voice_id ? <PauseIcon /> : <PlayIcon />}
-                                      </button>
-                                      <button type="button" onClick={() => selectVoice(voice)} className="flex-1 text-left">
-                                        <div className="text-sm text-white font-bold">{voice.name}</div>
-                                        <div className="text-xs text-slate-500">{voice.category}</div>
-                                      </button>
-                                    </div>
-                                  ))}
+                              {filteredDefaultVoices.map(voice => (
+                                <div key={voice.id} className={`flex items-center gap-2 px-3 py-2 border-b border-white/[0.05] hover:bg-white/[0.05] ${elVoiceId === voice.id ? 'bg-purple-600/20' : ''}`}>
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); playElevenLabsPreview(voice.id, voice.name); }}
+                                    className={`w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ${playingVoiceId === voice.id ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/[0.08] text-slate-400 hover:bg-purple-600 hover:text-white'}`}>
+                                    {playingVoiceId === voice.id ? <PauseIcon /> : <PlayIcon />}
+                                  </button>
+                                  <button type="button" onClick={() => { setElVoiceId(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.id); }} className="flex-1 text-left">
+                                    <div className="text-sm text-white font-bold">{voice.name}</div>
+                                    <div className="text-xs text-slate-500">{voice.description}</div>
+                                  </button>
                                 </div>
-                              )}
+                              ))}
+                              {filteredApiVoices.map(voice => (
+                                <div key={voice.voice_id} className={`flex items-center gap-2 px-3 py-2 border-b border-white/[0.05] hover:bg-white/[0.05] ${elVoiceId === voice.voice_id ? 'bg-purple-600/20' : ''}`}>
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); playElevenLabsPreview(voice.voice_id, voice.name); }}
+                                    className={`w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ${playingVoiceId === voice.voice_id ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/[0.08] text-slate-400 hover:bg-purple-600 hover:text-white'}`}>
+                                    {playingVoiceId === voice.voice_id ? <PauseIcon /> : <PlayIcon />}
+                                  </button>
+                                  <button type="button" onClick={() => selectVoice(voice)} className="flex-1 text-left">
+                                    <div className="text-sm text-white font-bold">{voice.name}</div>
+                                    <div className="text-xs text-slate-500">{voice.category}</div>
+                                  </button>
+                                </div>
+                              ))}
                             </div>
                             {/* 안정성/스타일 슬라이더 */}
                             <div className="space-y-2">
