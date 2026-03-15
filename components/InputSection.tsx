@@ -536,7 +536,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   {/* 네온 바 */}
                   <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
                   <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="w-full relative bg-red-500 hover:bg-red-400 active:bg-red-600 disabled:opacity-60 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide shadow-[0_4px_32px_rgba(239,68,68,0.7),0_0_80px_rgba(239,68,68,0.3)] hover:shadow-[0_4px_40px_rgba(239,68,68,0.9),0_0_100px_rgba(239,68,68,0.4)] disabled:shadow-none border border-red-400/40">
+                    className="w-full relative bg-red-500/20 hover:bg-red-500/30 disabled:opacity-60 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide border border-red-500/50 hover:border-red-400/70 shadow-[0_0_28px_rgba(239,68,68,0.35)] hover:shadow-[0_0_40px_rgba(239,68,68,0.5)] disabled:shadow-none">
                     {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}
@@ -544,7 +544,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 </div>
 
                 <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 disabled:opacity-60 text-white text-base font-bold transition-all shadow-[0_4px_24px_rgba(16,185,129,0.6)] hover:shadow-[0_4px_32px_rgba(16,185,129,0.8)] disabled:shadow-none border border-emerald-400/40">
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-emerald-500/50 hover:border-emerald-400/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] hover:shadow-[0_0_28px_rgba(16,185,129,0.4)] disabled:shadow-none">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
                   이미지만 생성
                 </button>

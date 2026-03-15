@@ -136,10 +136,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const blobUrlRef = useRef<string>('');
+  // WebAudio refs
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const durationRef = useRef<number>(0);
+  const progressTimerRef = useRef<number>(0);
   // 줌/패닝
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -150,68 +154,75 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
-
-  // base64 → Blob URL 변환 (data URL보다 브라우저 호환성 높음)
-  const makeBlobUrl = (audioData: string): string => {
-    if (audioData.startsWith('blob:')) return audioData;
-    const b64 = audioData.startsWith('data:') ? audioData.split(',')[1] : audioData;
-    try {
-      const binary = atob(b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      return URL.createObjectURL(new Blob([bytes], { type: 'audio/mpeg' }));
-    } catch { return `data:audio/mpeg;base64,${b64}`; }
-  };
-
   const hasAudio = !!(scene?.audioData);
-  const audioSrc = hasAudio ? '(loaded)' : ''; // 버튼 활성화 여부용
 
-  // 오디오 엘리먼트 마운트 시 DOM에 추가
-  useEffect(() => {
-    const audio = document.createElement('audio');
-    audio.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none;';
-    document.body.appendChild(audio);
-    audioRef.current = audio;
-    const onTimeUpdate = () => { if (audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100); };
-    const onEnded = () => { setIsPlaying(false); setAudioProgress(0); };
-    const onPlay  = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('ended', onEnded);
-    audio.addEventListener('play', onPlay);
-    audio.addEventListener('pause', onPause);
-    return () => {
-      audio.pause();
-      if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = ''; }
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('ended', onEnded);
-      audio.removeEventListener('play', onPlay);
-      audio.removeEventListener('pause', onPause);
-      if (audio.parentNode) audio.parentNode.removeChild(audio);
-      audioRef.current = null;
-    };
+  // base64 → AudioBuffer (MP3 or PCM16 fallback)
+  async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<AudioBuffer> {
+    const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    try {
+      return await ctx.decodeAudioData(bytes.buffer.slice(0));
+    } catch {
+      // PCM16 fallback (Gemini TTS raw PCM)
+      const pcm = new Int16Array(bytes.buffer);
+      const buf = ctx.createBuffer(1, pcm.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
+      return buf;
+    }
+  }
+
+  const stopAudio = useCallback(() => {
+    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
+    window.clearInterval(progressTimerRef.current);
+    setIsPlaying(false);
   }, []);
 
   // 씬 변경 시 정지
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) { audio.pause(); audio.src = ''; }
-    if (blobUrlRef.current) { URL.revokeObjectURL(blobUrlRef.current); blobUrlRef.current = ''; }
-    setIsPlaying(false);
+    stopAudio();
     setAudioProgress(0);
-  }, [selectedIdx]);
+  }, [selectedIdx, stopAudio]);
 
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio || !scene?.audioData) return;
-    if (isPlaying) { audio.pause(); return; }
-    // Blob URL 생성 (이미 만들었으면 재사용)
-    if (!blobUrlRef.current) {
-      blobUrlRef.current = makeBlobUrl(scene.audioData);
+  // 언마운트 정리
+  useEffect(() => {
+    return () => {
+      stopAudio();
+      if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
+    };
+  }, [stopAudio]);
+
+  const togglePlay = async () => {
+    if (isPlaying) { stopAudio(); return; }
+    if (!scene?.audioData) return;
+    try {
+      if (!audioCtxRef.current) {
+        const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+        audioCtxRef.current = new AC();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') await ctx.resume();
+      setIsPlaying(true);
+      const buffer = await decodeAudioBuffer(scene.audioData, ctx);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.onended = () => { setIsPlaying(false); setAudioProgress(0); window.clearInterval(progressTimerRef.current); };
+      source.start();
+      sourceRef.current = source;
+      startTimeRef.current = ctx.currentTime;
+      durationRef.current = buffer.duration;
+      progressTimerRef.current = window.setInterval(() => {
+        if (!audioCtxRef.current) return;
+        const elapsed = audioCtxRef.current.currentTime - startTimeRef.current;
+        setAudioProgress(Math.min(100, (elapsed / durationRef.current) * 100));
+      }, 100);
+    } catch (e) {
+      console.error('Audio error:', e);
+      setIsPlaying(false);
     }
-    audio.src = blobUrlRef.current;
-    audio.load();
-    audio.play().catch(e => { console.error('play error:', e.name, e.message); setIsPlaying(false); });
   };
 
   // 컨테이너 크기 추적 (경계선 계산용)
@@ -360,25 +371,18 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="flex items-center gap-3 px-4 py-2 bg-blue-950/90 border-b border-blue-900/40 shrink-0">
           <button
             onClick={togglePlay}
-            disabled={!audioSrc}
+            disabled={!hasAudio}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
-              audioSrc ? 'bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+              hasAudio ? 'bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
             {isPlaying ? '■' : '▶'}
           </button>
-          <div className="flex-1 relative h-1.5 bg-slate-800 rounded-full overflow-hidden cursor-pointer"
-            onClick={e => {
-              const audio = audioRef.current;
-              if (!audio || !audioSrc) return;
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              audio.currentTime = ((e.clientX - rect.left) / rect.width) * (audio.duration || 0);
-            }}
-          >
+          <div className="flex-1 relative h-1.5 bg-slate-800 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
           </div>
           <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right font-mono">
-            {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●') : '—'}
+            {hasAudio ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●') : '—'}
           </span>
         </div>
 

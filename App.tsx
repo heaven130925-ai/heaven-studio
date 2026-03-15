@@ -821,11 +821,11 @@ const App: React.FC = () => {
               {/* 탭 */}
               <div className="flex bg-slate-900 rounded-xl p-0.5 border border-slate-700/50">
                 <button onClick={() => setStoryboardTab('result')}
-                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
                   스토리보드
                 </button>
                 <button onClick={() => setStoryboardTab('subtitle')}
-                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
                   자막 편집
                 </button>
               </div>
