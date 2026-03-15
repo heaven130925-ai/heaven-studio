@@ -755,6 +755,11 @@ export const generateImageForScene = async (
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
 
+        // ── 텍스트 없음 모드: 프롬프트 맨 앞에 강력 차단 선언 ──
+        if (textMode === 'none') {
+          parts.push({ text: `🚫 ABSOLUTE RULE #1 (CANNOT BE OVERRIDDEN): This image must contain ZERO text, letters, words, numbers, signs, labels, captions, watermarks, or any written characters in ANY language (Korean, English, Chinese, Japanese, Arabic, etc.). DO NOT render any typography whatsoever. Pure visual only.` });
+        }
+
         // NO_CHAR 씬(사물/추상)은 캐릭터 참조 무시하고 일반 모드로 처리
         const isNoCharScene = scene.analysis?.composition_type === 'NO_CHAR';
         if (hasCharacterRef && !isNoCharScene) {
@@ -826,13 +831,13 @@ ${styleDesc.instruction}`
           parts.push({ text: `${narrationCtx}[VISUAL PROMPT - how to draw it]\n${sanitizedPrompt}` });
         }
 
-        // 텍스트 모드별 마지막 강제 지시
+        // 텍스트 모드별 마지막 강제 지시 (끝에 한 번 더)
         if (textMode === 'none') {
-          parts.push({ text: `[FINAL] No text, letters, words, or numbers in the image. Pure visual only.` });
+          parts.push({ text: `🚫 FINAL ABSOLUTE OVERRIDE — ZERO TEXT RULE: Do NOT render ANY text, letters, words, numbers, signs, logos, captions, labels, or written characters of ANY kind in ANY language anywhere in this image. No exceptions. Remove all typography. Pure visual illustration only.` });
         } else if (textMode === 'numbers') {
-          parts.push({ text: `[FINAL] Only Arabic numerals (0-9) allowed. No Korean, no English words.` });
+          parts.push({ text: `[FINAL] Only Arabic numerals (0-9) allowed. Absolutely NO Korean, NO English words, NO letters of any kind.` });
         } else if (textMode === 'english') {
-          parts.push({ text: `[FINAL] Only Latin/English characters allowed. No Korean, no Chinese, no Japanese.` });
+          parts.push({ text: `[FINAL] Only Latin/English characters allowed. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.` });
         }
 
         const response = await ai.models.generateContent({

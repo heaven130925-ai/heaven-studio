@@ -78,7 +78,8 @@ image_prompt_english: "A young woman with long black hair and fair skin sits at 
 export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = false, artStylePrompt?: string, textMode: string = 'auto', aspectRatio: string = '16:9') => {
   const basePrompt = scene.visualPrompt || "";
   const analysis = scene.analysis || {};
-  const keywords = scene.visual_keywords || "";
+  // none 모드에서는 keywords 완전 무시 (텍스트 렌더링 유발 방지)
+  const keywords = textMode === 'none' ? '' : (scene.visual_keywords || "");
   const type = analysis.composition_type || "STANDARD";
   const sentiment = analysis.sentiment || "NEUTRAL";
 
@@ -109,8 +110,8 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
   let textRule = '';
 
   if (textMode === 'none') {
-    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: Do NOT include any text, letters, words, or numbers anywhere in the image.\n\n';
-    textRule = '🚫 ABSOLUTE FINAL OVERRIDE - ZERO TEXT: Do NOT render ANY text, letters, words, numbers, labels, captions, signs, or written characters of ANY kind in ANY language. IGNORE any text instructions above. Pure visual imagery only. No exceptions.';
+    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: ZERO TEXT IN IMAGE. Do NOT include any text, letters, words, numbers, signs, logos, labels, captions, or written characters anywhere in the image. Pure visual only.\n\n';
+    textRule = '🚫 ZERO TEXT FINAL OVERRIDE: No text of any kind. No Korean, no English, no numbers, no signs, no labels anywhere in this image.';
   } else if (textMode === 'english') {
     textPrefix = '⚠️ TEXT RESTRICTION: English/Latin characters only. Korean/Chinese/Japanese forbidden.\n\n';
     textRule = keywords
