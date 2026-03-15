@@ -757,9 +757,11 @@ export const generateImageForScene = async (
 
         if (hasCharacterRef) {
           // ─── 캐릭터 일관성 모드 ───
-          const sceneAction = scene.narration
-            ? scene.narration.slice(0, 150)
-            : sanitizedPrompt.slice(0, 250);
+          const userEditedPrompt = scene.visualPrompt?.trim();
+          const sceneAction = [
+            scene.narration?.slice(0, 150),
+            userEditedPrompt ? `Visual direction: ${userEditedPrompt.slice(0, 300)}` : null
+          ].filter(Boolean).join('\n') || sanitizedPrompt.slice(0, 250);
 
           const styleHint = (() => {
             if (hasStyleRef) return '';
