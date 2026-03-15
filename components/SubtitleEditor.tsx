@@ -158,9 +158,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       : '';
   const audioSrc = getAudioSrc(scene);
 
-  // 오디오 엘리먼트 마운트 시 한 번만 생성
+  // 오디오 엘리먼트: DOM에 추가해야 일부 브라우저에서 재생 허용
   useEffect(() => {
-    const audio = new Audio();
+    const audio = document.createElement('audio');
+    audio.style.cssText = 'position:fixed;width:0;height:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(audio);
     audioRef.current = audio;
     const onTimeUpdate = () => {
       if (audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
@@ -178,36 +180,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
+      if (audio.parentNode) audio.parentNode.removeChild(audio);
       audioRef.current = null;
     };
   }, []);
 
-  // 씬 변경 시 오디오 리셋 + src 직접 설정 + 강제 로드
-  useEffect(() => {
-    setIsPlaying(false);
-    setAudioProgress(0);
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.currentTime = 0;
-    const newSrc = getAudioSrc(scenes[selectedIdx]);
-    audio.src = newSrc || '';
-    if (newSrc) audio.load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIdx, scenes]);
-
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
-      audio.pause();
-      return;
-    }
+    if (isPlaying) { audio.pause(); return; }
     const src = getAudioSrc(scene);
     if (!src) return;
-    // 매번 src를 직접 재설정 — useEffect 타이밍 의존 없이 항상 동작
     audio.src = src;
-    audio.play().catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
+    audio.play().catch(e => { console.error('play error:', e.name, e.message); setIsPlaying(false); });
   };
 
   // 컨테이너 크기 추적 (경계선 계산용)
@@ -293,7 +278,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <button
                 onClick={() => onExportVideo(true)}
                 disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold transition-all shadow-[0_0_12px_rgba(239,68,68,0.3)] disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-[0_0_12px_rgba(59,130,246,0.3)] disabled:opacity-40"
               >
                 {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
@@ -358,7 +343,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             onClick={togglePlay}
             disabled={!audioSrc}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
-              audioSrc ? 'bg-gradient-to-br from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+              audioSrc ? 'bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
             {isPlaying ? '■' : '▶'}
@@ -371,7 +356,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               audio.currentTime = ((e.clientX - rect.left) / rect.width) * (audio.duration || 0);
             }}
           >
-            <div className="h-full bg-gradient-to-r from-red-500 to-rose-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
+            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
           </div>
           <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right font-mono">
             {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●') : '—'}
