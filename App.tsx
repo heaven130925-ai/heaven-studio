@@ -898,9 +898,9 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-bold transition-colors"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-black transition-colors shadow-lg"
               >
-                ← 돌아가기
+                ← 메인으로
               </button>
               {/* 탭 — 항상 표시 */}
               <div className="flex bg-slate-800 rounded-xl p-0.5">
