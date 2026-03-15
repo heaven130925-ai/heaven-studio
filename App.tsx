@@ -891,7 +891,7 @@ const App: React.FC = () => {
 
       {/* 스토리보드 생성 화면 (새 창) */}
       {showStoryboard && (
-        <div className="fixed inset-0 z-40 bg-slate-950 flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col overflow-hidden">
           {/* 헤더 */}
           {/* 헤더 */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900 shrink-0">

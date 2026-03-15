@@ -780,21 +780,22 @@ You MUST reproduce this exact person. Zero deviation permitted.` });
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 텍스트 설명 + 시각 참조 이중 고정
+          // 장면 내용 우선 → 캐릭터 배치 순서
           const charDesc = referenceImages.characterDescription?.trim();
           parts.push({
-            text: `Draw this EXACT character in a new scene.
+            text: `=== SCENE TO ILLUSTRATE ===
+${sceneAction}
+${styleHint ? styleHint.trim() : ''}
 
-LOCKED FEATURES (must match reference 100%):
-• Face shape, eye shape & color, nose, lips, skin tone — copy exactly
-• Hair color, hair length, hair style — identical, no changes
-• Overall appearance — viewer must instantly recognize same person
-${charDesc ? `\nCHARACTER DETAIL (use this as additional anchor):\n${charDesc}\n` : ''}
-Scene: ${sceneAction}${styleHint}
-
-FORBIDDEN: inventing a new face, changing hair color, altering skin tone, changing gender.
-The character must look IDENTICAL to the reference image in every scene.
-OUTPUT: illustration with the reference character faithfully reproduced.`
+=== CHARACTER REFERENCE (LOCKED) ===
+The person in the reference image(s) above is THE CHARACTER who appears in this scene.
+${charDesc ? `CHARACTER DETAILS:\n${charDesc}\n` : ''}
+RULES:
+• Draw the scene described above FIRST (setting, action, objects, mood)
+• Place THE CHARACTER from the reference into that scene
+• Character face, hair, skin tone must match reference EXACTLY
+• FORBIDDEN: different face, different hair color, different gender
+• OUTPUT: full illustration of the described scene with the reference character in it`
           });
 
         } else {
