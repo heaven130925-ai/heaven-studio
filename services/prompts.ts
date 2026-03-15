@@ -167,14 +167,23 @@ export const getScriptGenerationPrompt = (
 - 도입 → 전개 → 결말 구조로 구성
 - 같은 내용 반복 금지
 
-## 시각화
-- 각 씬의 나레이션 내용을 이미지로 시각화할 영문 프롬프트 작성
+## 시각화 (image_prompt_english 작성 규칙)
+나레이션 문장의 핵심 내용을 구체적으로 시각화하라. 반드시 아래 요소를 포함:
+- **WHO**: 누가 등장하는가 (사람→THE CHARACTER 또는 사물/개념)
+- **WHAT**: 무엇을 하고 있는가 (구체적 행동/상태)
+- **WHERE**: 어디에서 (구체적 장소/배경)
+- **KEY OBJECTS**: 씬에 반드시 있어야 할 핵심 사물
+- **MOOD/LIGHTING**: 분위기, 조명
+- 나레이션에 나온 고유명사(삼성, NVIDIA, 서울 등)는 반드시 영문 프롬프트에 포함
 - 주어가 사람/인격체 → STANDARD, 주어가 사물/자연/추상 → NO_CHAR
+- 추상 개념(경제, 시장, 성장 등) → 그래프, 화살표, 상징적 오브젝트로 표현
 ${hasCharacterRef ? `
 ## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
-- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형 등)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이/성별 등)
 - 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
 - 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
+- 올바른 예: "THE CHARACTER stands in front of a large whiteboard presenting charts, modern office, bright lighting"
+- 잘못된 예: "A young woman with black hair stands..." ← 외모 묘사 절대 금지
 ` : ''}
 
 ## 브랜드/고유명사
@@ -227,9 +236,17 @@ ${sceneCountRule}
 - ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (수정 금지)
 - "나레이션"이라는 단어를 절대 출력하지 말 것
 
-## 시각화
-- 문장 의미를 그대로 이미지화
-- 수식어 반영 ("거대한"→크게)
+## 시각화 (image_prompt_english 작성 규칙)
+나레이션 문장의 핵심 내용을 구체적으로 시각화하라. 반드시 아래 요소를 포함:
+- **WHO**: 누가 등장하는가
+- **WHAT**: 구체적으로 무엇을 하고 있는가
+- **WHERE**: 구체적 장소/배경
+- **KEY OBJECTS**: 씬에 반드시 있어야 할 핵심 사물
+- **MOOD/LIGHTING**: 분위기, 조명
+- 수식어 반영 ("거대한"→크게, "어두운"→dark lighting)
+- 나레이션에 나온 고유명사는 반드시 포함
+- 주어가 사람/인격체 → STANDARD, 주어가 사물/자연/추상 → NO_CHAR
+- 추상 개념 → 그래프, 화살표, 상징적 오브젝트로 표현
 
 ## 브랜드/고유명사
 - 한국어 고유명사 → 한국어 그대로, 외국어 고유명사 → 원어 그대로
@@ -239,10 +256,11 @@ ${sceneCountRule}
 - 주어가 사물/자연현상/추상개념 → NO_CHAR
 ${hasCharacterRef ? `
 ## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
-- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이 등)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이/성별 등)
 - 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
 - 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
-- 예시: "THE CHARACTER walks through a busy market at sunset, carrying a shopping bag, warm golden lighting"
+- 올바른 예: "THE CHARACTER walks through a crowded market at sunset, carrying a shopping bag, warm golden lighting, bustling stalls around"
+- 잘못된 예: "A young woman with dark hair..." ← 외모 묘사 절대 금지
 ` : ''}
 [수동 대본] 원문 수정 금지, 씬 분할과 시각화만 수행
 

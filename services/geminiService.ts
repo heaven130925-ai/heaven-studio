@@ -780,7 +780,8 @@ You MUST reproduce this exact person. Zero deviation permitted.` });
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 핵심 지시 (텍스트 설명 제거 — 시각 참조만 사용)
+          // 텍스트 설명 + 시각 참조 이중 고정
+          const charDesc = referenceImages.characterDescription?.trim();
           parts.push({
             text: `Draw this EXACT character in a new scene.
 
@@ -788,10 +789,11 @@ LOCKED FEATURES (must match reference 100%):
 • Face shape, eye shape & color, nose, lips, skin tone — copy exactly
 • Hair color, hair length, hair style — identical, no changes
 • Overall appearance — viewer must instantly recognize same person
-
+${charDesc ? `\nCHARACTER DETAIL (use this as additional anchor):\n${charDesc}\n` : ''}
 Scene: ${sceneAction}${styleHint}
 
-FORBIDDEN: inventing a new face, changing hair, altering skin tone.
+FORBIDDEN: inventing a new face, changing hair color, altering skin tone, changing gender.
+The character must look IDENTICAL to the reference image in every scene.
 OUTPUT: illustration with the reference character faithfully reproduced.`
           });
 

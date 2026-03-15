@@ -135,10 +135,31 @@ function renderSubtitleOnCanvas(
 const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
 
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
+
+  // 씬 변경 시 오디오 리셋
+  useEffect(() => {
+    setIsPlaying(false);
+    setAudioProgress(0);
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+  }, [selectedIdx]);
+
+  const audioSrc = scene?.audioData
+    ? `data:audio/mpeg;base64,${scene.audioData}`
+    : null;
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio || !audioSrc) return;
+    if (isPlaying) { audio.pause(); setIsPlaying(false); }
+    else { audio.play(); setIsPlaying(true); }
+  };
 
   // 캔버스 재렌더
   const redraw = useCallback(() => {
@@ -183,6 +204,44 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm">
               이미지 생성 대기 중...
             </div>
+          )}
+        </div>
+
+        {/* 오디오 플레이어 */}
+        <div className="flex items-center gap-3 px-4 py-2 bg-slate-900 border-b border-slate-800">
+          <button
+            onClick={togglePlay}
+            disabled={!audioSrc}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-colors shrink-0 ${
+              audioSrc ? 'bg-brand-600 hover:bg-brand-500 text-white' : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            {isPlaying ? '⏸' : '▶'}
+          </button>
+          <div className="flex-1 relative h-1.5 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
+            onClick={e => {
+              const audio = audioRef.current;
+              if (!audio || !audioSrc) return;
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              const ratio = (e.clientX - rect.left) / rect.width;
+              audio.currentTime = ratio * (audio.duration || 0);
+            }}
+          >
+            <div className="h-full bg-brand-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
+          </div>
+          <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right">
+            {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '오디오') : '오디오 없음'}
+          </span>
+          {audioSrc && (
+            <audio
+              ref={audioRef}
+              src={audioSrc}
+              onTimeUpdate={() => {
+                const audio = audioRef.current;
+                if (audio && audio.duration) setAudioProgress((audio.currentTime / audio.duration) * 100);
+              }}
+              onEnded={() => { setIsPlaying(false); setAudioProgress(0); }}
+            />
           )}
         </div>
 
