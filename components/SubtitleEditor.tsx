@@ -198,12 +198,16 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio || !audioSrc) return;
+    if (!audio) return;
     if (isPlaying) {
       audio.pause();
-    } else {
-      audio.play().catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
+      return;
     }
+    const src = getAudioSrc(scene);
+    if (!src) return;
+    // 매번 src를 직접 재설정 — useEffect 타이밍 의존 없이 항상 동작
+    audio.src = src;
+    audio.play().catch((e) => { console.warn('play failed', e); setIsPlaying(false); });
   };
 
   // 컨테이너 크기 추적 (경계선 계산용)
@@ -289,7 +293,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <button
                 onClick={() => onExportVideo(true)}
                 disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)] disabled:opacity-40"
+                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold transition-all shadow-[0_0_12px_rgba(239,68,68,0.3)] disabled:opacity-40"
               >
                 {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
@@ -312,9 +316,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <canvas ref={canvasRef} width={1280} height={720} className="w-full h-full" />
           </div>
 
-          {/* 중심 가이드라인 (드래그 중) — 중앙 정렬 시 빨간색 */}
+          {/* 중심 가이드라인 (드래그 중) — 정가운데 ±2px 이내일 때만 빨간색 */}
           {isDragging && (() => {
-            const snapPx = 6;
+            const snapPx = 2;
             const centeredX = Math.abs(pan.x) <= snapPx;
             const centeredY = Math.abs(pan.y) <= snapPx;
             return (
@@ -322,14 +326,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 <div className="absolute top-0 bottom-0 pointer-events-none" style={{
                   left: 'calc(50% - 0.5px)',
                   width: centeredX ? 2 : 1,
-                  background: centeredX ? 'rgba(239,68,68,0.95)' : 'rgba(6,182,212,0.45)',
-                  boxShadow: centeredX ? '0 0 6px rgba(239,68,68,0.7)' : 'none',
+                  background: centeredX ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.2)',
+                  boxShadow: centeredX ? '0 0 6px rgba(239,68,68,0.8)' : 'none',
                 }} />
                 <div className="absolute left-0 right-0 pointer-events-none" style={{
                   top: 'calc(50% - 0.5px)',
                   height: centeredY ? 2 : 1,
-                  background: centeredY ? 'rgba(239,68,68,0.95)' : 'rgba(6,182,212,0.45)',
-                  boxShadow: centeredY ? '0 0 6px rgba(239,68,68,0.7)' : 'none',
+                  background: centeredY ? 'rgba(239,68,68,0.95)' : 'rgba(255,255,255,0.2)',
+                  boxShadow: centeredY ? '0 0 6px rgba(239,68,68,0.8)' : 'none',
                 }} />
               </>
             );
@@ -354,7 +358,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             onClick={togglePlay}
             disabled={!audioSrc}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-all shrink-0 ${
-              audioSrc ? 'bg-gradient-to-br from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+              audioSrc ? 'bg-gradient-to-br from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-[0_0_8px_rgba(239,68,68,0.4)]' : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
             {isPlaying ? '■' : '▶'}
@@ -367,7 +371,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               audio.currentTime = ((e.clientX - rect.left) / rect.width) * (audio.duration || 0);
             }}
           >
-            <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
+            <div className="h-full bg-gradient-to-r from-red-500 to-rose-500 rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
           </div>
           <span className="text-[10px] text-slate-500 shrink-0 w-16 text-right font-mono">
             {audioSrc ? (scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●') : '—'}

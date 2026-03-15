@@ -278,7 +278,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
             </div>
             <button
               onClick={() => { setEditPrompt(row.visualPrompt || ''); setIsEditOpen(true); }}
-              className="absolute top-1.5 right-1.5 opacity-0 group-hover/prompt:opacity-100 transition-opacity p-1.5 rounded-md bg-white/[0.08] hover:bg-cyan-500/30 border border-white/[0.1] hover:border-cyan-500/40 text-white/40 hover:text-white"
+              className="absolute top-1.5 right-1.5 opacity-0 group-hover/prompt:opacity-100 transition-opacity p-1.5 rounded-md bg-white/[0.08] hover:bg-cyan-500/30 border border-white/[0.1] hover:border-red-500/40 text-white/40 hover:text-white"
               title="프롬프트 편집"
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
@@ -296,7 +296,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
           ) : isAnimating ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-cyan-950/30">
               <div className="w-5 h-5 border-2 border-cyan-500 border-t-transparent animate-spin rounded-full"></div>
-              <span className="text-[7px] text-cyan-400 font-black uppercase tracking-widest">영상 변환 중</span>
+              <span className="text-[7px] text-red-400 font-black uppercase tracking-widest">영상 변환 중</span>
             </div>
           ) : row.status === 'error' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-red-950/30 border-2 border-dashed border-red-800/50 m-2 rounded-lg">
@@ -322,7 +322,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
                 <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
-                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 재생성">
+                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-red-400 transition-all" title="영상 재생성">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </button>
               </div>
@@ -360,7 +360,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
                 <button onClick={() => onRegenerateImage?.(index)} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all" title="이미지 재생성">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
-                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-cyan-400 transition-all" title="영상 변환">
+                <button onClick={() => onGenerateAnimation?.(index)} className="p-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/40 border border-cyan-500/30 text-red-400 transition-all" title="영상 변환">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </button>
                 <button onClick={() => downloadImage(row.imageData!, row.sceneNumber)} className="p-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/30 text-emerald-400 transition-all" title="이미지 다운로드">
@@ -440,7 +440,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
 
       <div className="flex items-center justify-between mb-6 bg-black/60 backdrop-blur-md p-5 rounded-3xl border border-white/[0.08]">
         <div className="flex items-center gap-4">
-          <div className="w-0.5 h-10 bg-gradient-to-b from-cyan-400 to-blue-500 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.5)]"></div>
+          <div className="w-0.5 h-10 bg-gradient-to-b from-red-500 to-rose-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
           <div>
             <h2 className="text-xl font-black text-white tracking-tight">Heaven 1.0 마스터 스토리보드</h2>
             <p className="text-white/25 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
@@ -467,7 +467,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
                 {isExporting ? <div className="w-3 h-3 border-2 border-white/20 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 X)
             </button>
-            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_12px_rgba(6,182,212,0.3)]'}`}>
+            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-gradient-to-r from-red-500 to-rose-600 text-white hover:from-red-500 hover:to-rose-500 shadow-[0_0_12px_rgba(239,68,68,0.3)]'}`}>
                 {isExporting ? <div className="w-3 h-3 border-2 border-white/30 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                 MP4 (자막 O)
             </button>

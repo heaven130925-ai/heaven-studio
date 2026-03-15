@@ -348,12 +348,12 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative p-1.5 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
+                  className={`relative p-1.5 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
                   <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
                     <span className="text-[11px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
                   </div>
                   {visualStyleId === style.id && (
-                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
+                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.6)]">
                       <CheckIcon />
                     </div>
                   )}
@@ -388,7 +388,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 onClick={() => setActivePanel(activePanel === id ? null : id)}
                 className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-left ${
                   activePanel === id
-                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 border border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
+                    ? 'bg-gradient-to-r from-red-500/20 to-rose-500/10 border border-red-500/40 text-red-300 shadow-[0_0_12px_rgba(239,68,68,0.15)]'
                     : 'text-white/65 hover:bg-white/[0.06] hover:text-white border border-transparent'
                 }`}
               >
@@ -409,11 +409,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-white/40 hover:text-white/70'}`}>
                   수동 대본
                 </button>
               </div>
@@ -450,7 +450,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         value={sceneCount === 0 ? '' : sceneCount}
                         onChange={(e) => { const v = parseInt(e.target.value, 10); setSceneCount(isNaN(v) || v < 0 ? 0 : v); }}
                         placeholder="자동"
-                        className="w-20 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/25 focus:border-cyan-500 focus:outline-none text-center" />
+                        className="w-20 bg-black/60 border border-white/10 rounded-lg px-2 py-2 text-sm text-white placeholder-white/25 focus:border-red-500 focus:outline-none text-center" />
                       <span className="text-sm text-white/40">{sceneCount > 0 ? `${sceneCount}씬 고정` : 'AI 자동 결정'}</span>
                     </div>
                   </div>
@@ -460,11 +460,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     <p className="text-sm font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-[0_0_8px_rgba(239,68,68,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         롱폼
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-[0_0_8px_rgba(6,182,212,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-1.5 rounded-lg text-sm font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-red-500 to-rose-600 text-white shadow-[0_0_8px_rgba(239,68,68,0.25)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         숏폼
                       </button>
                     </div>
@@ -472,7 +472,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                       <input type="number" min={1} max={60}
                         value={aspectRatio === '16:9' ? longformDuration : shortformDuration}
                         onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) { aspectRatio === '16:9' ? changeLongformDuration(v) : changeShortformDuration(v); }}}
-                        className="w-16 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-cyan-500 focus:outline-none" />
+                        className="w-16 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-red-500 focus:outline-none" />
                       <span className="text-sm text-white/40">{aspectRatio === '16:9' ? '분' : '초'}</span>
                     </div>
                   </div>
@@ -534,13 +534,13 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 생성 버튼 */}
                 <div className="relative">
                   {/* 네온 바 */}
-                  <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-80" />
+                  <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
                   <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="w-full relative bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-500 hover:from-cyan-300 hover:via-sky-300 hover:to-blue-400 disabled:opacity-40 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide shadow-[0_0_30px_rgba(6,182,212,0.6),0_0_60px_rgba(6,182,212,0.25)] hover:shadow-[0_0_40px_rgba(6,182,212,0.8),0_0_80px_rgba(6,182,212,0.35)] disabled:shadow-none border border-cyan-300/30">
+                    className="w-full relative bg-gradient-to-r from-red-500 via-red-400 to-rose-500 hover:from-red-400 hover:via-red-300 hover:to-rose-500 disabled:opacity-40 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide shadow-[0_0_30px_rgba(239,68,68,0.6),0_0_60px_rgba(239,68,68,0.25)] hover:shadow-[0_0_40px_rgba(239,68,68,0.8),0_0_80px_rgba(239,68,68,0.35)] disabled:shadow-none border border-red-500/30">
                     {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}
-                  <div className="absolute -bottom-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-blue-400 to-transparent opacity-60" />
+                  <div className="absolute -bottom-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-rose-400 to-transparent opacity-60" />
                 </div>
 
                 <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
@@ -578,12 +578,12 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     <div className="grid grid-cols-3 gap-2">
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                          className={`relative p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
+                          className={`relative p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
                           <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
                             <span className="text-[12px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
                           </div>
                           {visualStyleId === style.id && (
-                            <div className="absolute top-1 right-1 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(6,182,212,0.6)]">
+                            <div className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.6)]">
                               <CheckIcon />
                             </div>
                           )}

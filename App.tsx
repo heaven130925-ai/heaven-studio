@@ -658,7 +658,7 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 space-y-6">
           <div className="text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-cyan-600 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-900/30">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-600 to-rose-600 flex items-center justify-center shadow-lg shadow-red-900/30">
               <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
             </div>
             <h1 className="text-2xl font-black text-white">Heaven Studio</h1>
@@ -678,7 +678,7 @@ const App: React.FC = () => {
             </p>
           </div>
           <button
-            className="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black rounded-xl transition-all shadow-lg shadow-cyan-900/30"
+            className="w-full py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-xl transition-all shadow-lg shadow-red-900/30"
             onClick={() => {
               const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
               if (!input) { alert('API 키를 입력해주세요.'); return; }
@@ -709,20 +709,20 @@ const App: React.FC = () => {
             onClick={() => setViewMode('main')}
             className={`px-5 py-3.5 text-sm font-semibold transition-all relative ${
               viewMode === 'main'
-                ? 'text-cyan-400'
+                ? 'text-red-400'
                 : 'text-white/40 hover:text-white/80'
             }`}
           >
             스토리보드 생성
             {viewMode === 'main' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 to-rose-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
             )}
           </button>
           <button
             onClick={() => setViewMode('gallery')}
             className={`px-5 py-3.5 text-sm font-semibold transition-all relative flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-cyan-400'
+                ? 'text-red-400'
                 : 'text-white/40 hover:text-white/80'
             }`}
           >
@@ -733,7 +733,7 @@ const App: React.FC = () => {
               </span>
             )}
             {viewMode === 'gallery' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_6px_rgba(6,182,212,0.6)]" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 to-rose-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
             )}
           </button>
           <div className="ml-auto">
@@ -814,18 +814,18 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-cyan-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-red-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
               >
                 ← 메인으로
               </button>
               {/* 탭 */}
               <div className="flex bg-slate-900 rounded-xl p-0.5 border border-slate-700/50">
                 <button onClick={() => setStoryboardTab('result')}
-                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
                   스토리보드
                 </button>
                 <button onClick={() => setStoryboardTab('subtitle')}
-                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_12px_rgba(6,182,212,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]' : 'text-slate-400 hover:text-slate-200'}`}>
                   자막 편집
                 </button>
               </div>

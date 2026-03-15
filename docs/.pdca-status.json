@@ -1,0 +1,185 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-02-05T06:49:02.564Z",
+  "activeFeatures": [
+    "0205 자동화(컨텐츠)",
+    "falService.ts",
+    "imageService.ts",
+    "projectService.ts"
+  ],
+  "primaryFeature": "0205 자동화(컨텐츠)",
+  "features": {
+    "0205 자동화(컨텐츠)": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-05T06:45:47.357Z",
+        "lastUpdated": "2026-02-05T06:49:02.564Z"
+      },
+      "lastFile": "/Users/sunman113/Desktop/내프로젝트/🎬정기 유튜브/0205 자동화 프로젝트/0205 자동화(컨텐츠)/components/InputSection.tsx"
+    },
+    "falService.ts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-05T06:46:41.009Z",
+        "lastUpdated": "2026-02-05T06:46:41.009Z"
+      },
+      "lastFile": "/Users/sunman113/Desktop/내프로젝트/🎬정기 유튜브/0205 자동화 프로젝트/0205 자동화(컨텐츠)/services/falService.ts"
+    },
+    "imageService.ts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-05T06:47:23.991Z",
+        "lastUpdated": "2026-02-05T06:47:23.991Z"
+      },
+      "lastFile": "/Users/sunman113/Desktop/내프로젝트/🎬정기 유튜브/0205 자동화 프로젝트/0205 자동화(컨텐츠)/services/imageService.ts"
+    },
+    "projectService.ts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-05T06:47:28.517Z",
+        "lastUpdated": "2026-02-05T06:47:33.842Z"
+      },
+      "lastFile": "/Users/sunman113/Desktop/내프로젝트/🎬정기 유튜브/0205 자동화 프로젝트/0205 자동화(컨텐츠)/services/projectService.ts"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-02-05T06:39:57.657Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-02-05T06:49:02.564Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-02-05T06:45:47.357Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:45:53.390Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:46:04.547Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:46:10.167Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:46:18.464Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:46:41.009Z",
+      "feature": "falService.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:47:23.991Z",
+      "feature": "imageService.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:47:28.517Z",
+      "feature": "projectService.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:47:33.842Z",
+      "feature": "projectService.ts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:47:44.939Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:47:51.660Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:01.664Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:08.377Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:19.835Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:26.161Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:32.332Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:48:39.394Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-05T06:49:02.564Z",
+      "feature": "0205 자동화(컨텐츠)",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

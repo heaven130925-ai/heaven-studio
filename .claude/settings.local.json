@@ -5,7 +5,9 @@
       "Bash(ls:*)",
       "Bash(npm run dev)",
       "Bash(npm run build:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(find:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
