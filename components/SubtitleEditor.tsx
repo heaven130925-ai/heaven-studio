@@ -5,7 +5,7 @@
  * - 하단: 자막 스타일 컨트롤
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS } from '../types';
 
 interface Props {
@@ -130,15 +130,41 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const narration = scene?.narration ?? '';
   const hasAudio = !!(scene?.audioData);
 
+  // ── 단어 타임스탬프 → 디스플레이 그룹 (ElevenLabs words 기반, 드리프트 없음) ──
+  const wordGroups = useMemo(() => {
+    const words = scene?.subtitleData?.words;
+    if (!words || words.length === 0) return null;
+    const maxChars = subConfig.maxCharsPerChunk ?? 15;
+    const groups: { text: string; startTime: number; endTime: number }[] = [];
+    let cur = '';
+    let groupStart = words[0].start;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      const candidate = cur ? cur + ' ' + w.word : w.word;
+      if (candidate.length > maxChars && cur) {
+        groups.push({ text: cur, startTime: groupStart, endTime: w.start });
+        cur = w.word;
+        groupStart = w.start;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) {
+      groups.push({ text: cur, startTime: groupStart, endTime: Infinity });
+    } else if (groups.length > 0) {
+      groups[groups.length - 1].endTime = Infinity;
+    }
+    return groups;
+  }, [scene?.subtitleData?.words, subConfig.maxCharsPerChunk]);
+
   // ── 자막 텍스트 계산 ──
-  // meaningChunks가 있으면 타임스탬프 기반, 없으면 나레이션 길이 기반으로 균등 분할
+  // 1순위: ElevenLabs words 기반 그룹 (실제 타임스탬프, 드리프트 없음)
+  // 2순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
   const getSubtitleText = useCallback((t: number): string => {
-    const chunks = scene?.subtitleData?.meaningChunks;
-    if (chunks && chunks.length > 0) {
-      const chunk = chunks.find(c => t >= c.startTime && t < c.endTime);
-      if (chunk) return chunk.text;
-      // 끝 이후엔 마지막 청크 유지
-      return chunks[chunks.length - 1].text;
+    if (wordGroups && wordGroups.length > 0) {
+      if (t < wordGroups[0].startTime) return wordGroups[0].text;
+      const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
+      return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
     // Fallback: 나레이션을 maxChars 단위로 쪼개서 시간 균등 분배
     const dur = durationRef.current;
@@ -154,9 +180,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     }
     if (cur.trim()) textChunks.push(cur.trim());
     if (textChunks.length === 0) return narration;
-    const idx = Math.min(Math.floor(t / (dur / textChunks.length)), textChunks.length - 1);
-    return textChunks[idx] || narration;
-  }, [scene, narration, subConfig.maxCharsPerChunk]);
+    return textChunks[Math.min(Math.floor(t / (dur / textChunks.length)), textChunks.length - 1)] || narration;
+  }, [wordGroups, narration, subConfig.maxCharsPerChunk]);
 
   const displaySubtitleText = isPlaying ? getSubtitleText(currentSubTime) : narration;
 
