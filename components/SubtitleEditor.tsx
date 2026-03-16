@@ -117,6 +117,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const pausedAtRef = useRef<number>(0);    // 일시정지 위치 (초)
   const isManualPauseRef = useRef<boolean>(false);
   const progressTimerRef = useRef<number>(0);
+  const endTimeoutRef = useRef<number>(0);
 
   // 줌/패닝 — 기본 98.5% (양쪽 클리핑 방지)
   const [zoom, setZoom] = useState(0.985);
@@ -183,7 +184,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     return textChunks[Math.min(Math.floor(t / (dur / textChunks.length)), textChunks.length - 1)] || narration;
   }, [wordGroups, narration, subConfig.maxCharsPerChunk]);
 
-  const displaySubtitleText = isPlaying ? getSubtitleText(currentSubTime) : narration;
+  // 재생 중이거나 currentSubTime > 0 (일시정지/자연종료 후 잠시)면 자막 텍스트 표시
+  const displaySubtitleText = (isPlaying || currentSubTime > 0) ? getSubtitleText(currentSubTime) : narration;
 
   // ── 이미지 사전 로드 ──
   useEffect(() => {
@@ -222,6 +224,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const stopAudio = useCallback(() => {
     pausedAtRef.current = 0;
     isManualPauseRef.current = false;
+    window.clearTimeout(endTimeoutRef.current);
     if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
     window.clearInterval(progressTimerRef.current);
     setIsPlaying(false);
@@ -277,15 +280,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       source.onended = () => {
         const wasManual = isManualPauseRef.current;
         isManualPauseRef.current = false;
-        if (!wasManual) {
-          // 자연 종료 → 처음으로 리셋
-          pausedAtRef.current = 0;
-          setAudioProgress(0);
-          setCurrentSubTime(0);
-        }
-        setIsPlaying(false);
         window.clearInterval(progressTimerRef.current);
         sourceRef.current = null;
+        if (!wasManual) {
+          // 자연 종료 → 마지막 자막 유지 후 1.2초 뒤 리셋
+          setCurrentSubTime(durationRef.current);
+          setAudioProgress(100);
+          pausedAtRef.current = 0;
+          endTimeoutRef.current = window.setTimeout(() => {
+            setAudioProgress(0);
+            setCurrentSubTime(0);
+          }, 1200);
+        }
+        setIsPlaying(false);
       };
       source.start(0, offset);
       sourceRef.current = source;
@@ -366,7 +373,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   useEffect(() => { redraw(); }, [redraw]);
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden justify-center bg-slate-950">
+    <div className="flex h-full overflow-hidden w-full max-w-[1600px] min-w-0">
       {/* ─── 왼쪽 ─── */}
       <div className="flex flex-col w-[68%] border-r border-white/[0.07] overflow-y-auto">
 
@@ -377,19 +385,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             RESET
           </button>
           <button onClick={() => setZoom(z => Math.min(3, +(z + 0.01).toFixed(3)))}
-            className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-base font-bold transition-colors">+</button>
-          <span className="text-xs text-slate-300 font-mono w-12 text-center">{Math.round(zoom * 100)}%</span>
+            className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">+</button>
+          <span className="text-sm text-slate-200 font-mono w-14 text-center font-bold">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom(z => Math.max(0.3, +(z - 0.01).toFixed(3)))}
-            className="w-7 h-7 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-base font-bold transition-colors">−</button>
+            className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">−</button>
           <span className="text-[10px] text-slate-500 ml-1">휠로 줌 · 드래그로 이동 · Space 재생</span>
           {onExportVideo && (
             <div className="ml-auto flex gap-1.5">
               <button onClick={() => onExportVideo(false)} disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold transition-colors disabled:opacity-40">
+                className="px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-xs font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
                 자막 없이 내보내기
               </button>
               <button onClick={() => onExportVideo(true)} disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/50 hover:bg-blue-600/30 text-blue-200 text-xs font-bold transition-all disabled:opacity-40">
+                className="px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-xs font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
                 {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
             </div>
@@ -624,6 +632,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </button>
         ))}
       </div>
+    </div>
     </div>
   );
 };

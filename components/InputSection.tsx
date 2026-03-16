@@ -343,17 +343,29 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
         {/* ════ 왼쪽 사이드바 (1/3) ════ */}
         <div className="flex-none w-1/3 bg-white/[0.03] border border-white/[0.08] rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: '80vh' }}>
           {/* 비주얼 스타일 (항상 표시) */}
+          {(() => {
+            const STYLE_EN: Record<string, string> = {
+              cinematic: 'CINEMATIC', kdrama: 'K-DRAMA', noir: 'NOIR', webtoon: 'WEBTOON',
+              'comic-webtoon': 'COMIC', '3d-animation': '3D ANIMATION', claymation: 'CLAYMATION',
+              'fairy-tale': 'FAIRY TALE', 'wool-doll': 'WOOL FELT', diorama: 'DIORAMA',
+              historical: 'HISTORICAL', webnovel: 'WEB NOVEL', ghibli: 'GHIBLI',
+              stickman: 'STICKMAN', custom: 'CUSTOM',
+            };
+            return (
           <div className="p-3 border-b border-white/[0.07]">
-            <p className="text-[10px] font-black text-white/55 uppercase tracking-widest mb-2 px-1">Visual Style</p>
+            <p className="text-[10px] font-black text-white/55 uppercase tracking-widest mb-2 px-1">비주얼 스타일</p>
             <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative p-1.5 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                  <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
-                    <span className="text-[11px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center px-2 leading-tight">{style.name}</span>
-                  </div>
+                  className={`relative p-2.5 rounded-xl border transition-all duration-200 hover:scale-[1.05] active:scale-[0.97] text-left ${
+                    visualStyleId === style.id
+                      ? 'border-blue-400/70 bg-blue-900/30 shadow-[0_0_12px_rgba(59,130,246,0.35)]'
+                      : 'border-white/[0.08] bg-slate-800/50 hover:border-white/25 hover:bg-slate-800'
+                  }`}>
+                  <p className="text-[12px] font-black text-white leading-tight">{style.name}</p>
+                  <p className="text-[9px] text-slate-400 mt-0.5 font-bold tracking-wider">{STYLE_EN[style.id] || ''}</p>
                   {visualStyleId === style.id && (
-                    <div className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.6)]">
+                    <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-blue-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(59,130,246,0.6)]">
                       <CheckIcon />
                     </div>
                   )}
@@ -373,6 +385,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               <button type="button" onClick={() => selectVisualStyle('none')} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition-colors">선택 해제</button>
             )}
           </div>
+            );
+          })()}
 
           {/* 카테고리 버튼들 */}
           <div className="flex flex-col gap-1 p-2">
@@ -536,7 +550,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   {/* 네온 바 */}
                   <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
                   <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="w-full relative bg-red-500/20 hover:bg-red-500/30 disabled:opacity-60 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide border border-red-500/50 hover:border-red-400/70 shadow-[0_0_28px_rgba(239,68,68,0.35)] hover:shadow-[0_0_40px_rgba(239,68,68,0.5)] disabled:shadow-none">
+                    className="w-full relative bg-red-500/35 hover:bg-red-500/50 disabled:opacity-60 text-white font-black py-5 rounded-2xl transition-all text-xl tracking-wide border border-red-400/80 hover:border-red-300 shadow-[0_0_45px_rgba(239,68,68,0.6)] hover:shadow-[0_0_65px_rgba(239,68,68,0.8)] disabled:shadow-none">
                     {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}

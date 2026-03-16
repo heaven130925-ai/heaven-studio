@@ -184,7 +184,9 @@ const App: React.FC = () => {
     isProcessingRef.current = true;
     isAbortedRef.current = false;
 
-    setShowStoryboard(true);
+    // 자동 주제 모드(대본만 생성)는 메인화면에서 처리 → 스토리보드 창 안 열기
+    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly;
+    if (!isAutoTopicMode) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -649,7 +651,8 @@ const App: React.FC = () => {
     setCurrentTopic(project.topic);
     setStep(GenerationStep.COMPLETED);
     setProgressMessage(`"${project.name}" 프로젝트 불러옴`);
-    setViewMode('main'); // 메인 뷰로 전환
+    setViewMode('main');
+    setShowStoryboard(true); // 바로 스토리보드로 이동
   };
 
   // Gemini API 키 미설정 시 셋업 화면
@@ -705,36 +708,30 @@ const App: React.FC = () => {
 
       {/* 네비게이션 탭 */}
       <div className="border-b border-white/[0.07] bg-black/60 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 flex items-center gap-0.5">
+        <div className="max-w-7xl mx-auto px-4 flex items-center gap-2 py-2">
           <button
             onClick={() => setViewMode('main')}
-            className={`px-5 py-3.5 text-sm font-semibold transition-all relative ${
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border ${
               viewMode === 'main'
-                ? 'text-red-400'
-                : 'text-white/40 hover:text-white/80'
+                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
             }`}
           >
             스토리보드 생성
-            {viewMode === 'main' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 to-rose-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
-            )}
           </button>
           <button
             onClick={() => setViewMode('gallery')}
-            className={`px-5 py-3.5 text-sm font-semibold transition-all relative flex items-center gap-2 ${
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-red-400'
-                : 'text-white/40 hover:text-white/80'
+                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-white/[0.08] border border-white/10 text-xs rounded-full text-white/50">
+              <span className="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-xs rounded-full text-emerald-300 font-bold">
                 {savedProjects.length}
               </span>
-            )}
-            {viewMode === 'gallery' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-red-500 to-rose-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
             )}
           </button>
           <div className="ml-auto">

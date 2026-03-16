@@ -446,35 +446,32 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
             <p className="text-white/25 text-[9px] font-bold uppercase tracking-widest">Ultra-Detail Identity Sync Active</p>
           </div>
         </div>
-        <div className="flex gap-2">
-            <button onClick={() => downloadMediaZip(data)} className="px-4 py-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 font-bold text-[10px] hover:bg-violet-500/25 transition-all flex items-center gap-2">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              이미지+음성 내보내기
+        <div className="flex gap-1.5 flex-wrap">
+          {[
+            { label: '이미지+음성 내보내기', onClick: () => downloadMediaZip(data) },
+            { label: '전체 프로젝트 저장', onClick: () => downloadProjectZip(data) },
+            { label: '엑셀+이미지 내보내기', onClick: () => exportAssetsToZip(data, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`) },
+            { label: 'SRT 자막', onClick: async () => await downloadSrt(data, `subtitles_${Date.now()}.srt`) },
+          ].map(btn => (
+            <button key={btn.label} onClick={btn.onClick}
+              className="px-3.5 py-2 rounded-xl bg-blue-600/20 border border-blue-500/50 text-blue-200 font-bold text-[10px] hover:bg-blue-600/35 hover:border-blue-400/70 transition-all shadow-[0_0_8px_rgba(59,130,246,0.2)] flex items-center gap-1.5">
+              {btn.label}
             </button>
-            <button onClick={() => downloadProjectZip(data)} className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-white/70 font-bold text-[10px] hover:bg-white/[0.1] hover:text-white transition-all flex items-center gap-2">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              전체 프로젝트 저장
-            </button>
-            <button onClick={() => exportAssetsToZip(data, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`)} className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold text-[10px] hover:bg-emerald-500/25 transition-all flex items-center gap-2">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              엑셀+이미지 내보내기
-            </button>
-            <button onClick={async () => await downloadSrt(data, `subtitles_${Date.now()}.srt`)} className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/[0.1] text-white/70 font-bold text-[10px] hover:bg-white/[0.1] hover:text-white transition-all flex items-center gap-2">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              SRT 자막 다운로드
-            </button>
-            <button onClick={() => onExportVideo?.(false)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-white/[0.08] text-white hover:bg-white/[0.14] border border-white/[0.1]'}`}>
-                {isExporting ? <div className="w-3 h-3 border-2 border-white/20 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
-                MP4 (자막 X)
-            </button>
-            <button onClick={() => onExportVideo?.(true)} disabled={isExporting} className={`px-5 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-2 ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed' : 'bg-black/50 border border-red-500/40 text-red-300 hover:bg-red-500/10 hover:border-red-400/60 shadow-[0_0_8px_rgba(239,68,68,0.15)] hover:shadow-[0_0_14px_rgba(239,68,68,0.3)]'}`}>
-                {isExporting ? <div className="w-3 h-3 border-2 border-white/30 border-t-transparent animate-spin rounded-full"></div> : <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
-                MP4 (자막 O)
-            </button>
-            <button onClick={() => setShowSubSettings((v: boolean) => !v)} className={`px-3 py-2.5 rounded-xl transition-all font-black text-[10px] flex items-center gap-1.5 border ${showSubSettings ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/[0.05] border-white/[0.08] text-white/40 hover:text-white'}`} title="자막 설정">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><circle cx="12" cy="12" r="3" /></svg>
-              자막
-            </button>
+          ))}
+          <button onClick={() => onExportVideo?.(false)} disabled={isExporting}
+            className={`px-4 py-2 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-1.5 border ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed border-white/[0.05]' : 'bg-blue-600/20 border-blue-500/50 text-blue-200 hover:bg-blue-600/35 shadow-[0_0_8px_rgba(59,130,246,0.2)]'}`}>
+            {isExporting ? <div className="w-3 h-3 border-2 border-white/20 border-t-transparent animate-spin rounded-full" /> : <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
+            MP4 (자막 X)
+          </button>
+          <button onClick={() => onExportVideo?.(true)} disabled={isExporting}
+            className={`px-4 py-2 rounded-xl transition-all font-black text-[10px] flex items-center justify-center gap-1.5 border ${isExporting ? 'bg-white/[0.04] text-white/20 cursor-not-allowed border-white/[0.05]' : 'bg-blue-600/20 border-blue-500/50 text-blue-200 hover:bg-blue-600/35 shadow-[0_0_8px_rgba(59,130,246,0.2)]'}`}>
+            {isExporting ? <div className="w-3 h-3 border-2 border-white/30 border-t-transparent animate-spin rounded-full" /> : <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
+            MP4 (자막 O)
+          </button>
+          <button onClick={() => setShowSubSettings((v: boolean) => !v)}
+            className={`px-3 py-2 rounded-xl transition-all font-black text-[10px] flex items-center gap-1.5 border ${showSubSettings ? 'bg-blue-600/30 border-blue-400/70 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-blue-600/20 border-blue-500/50 text-blue-200 hover:bg-blue-600/35 shadow-[0_0_8px_rgba(59,130,246,0.2)]'}`}>
+            자막 설정
+          </button>
         </div>
       </div>
 
