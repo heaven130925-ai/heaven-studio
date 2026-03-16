@@ -9,7 +9,7 @@ import { CONFIG } from '../config';
 import { SavedProject, GeneratedAsset, CostBreakdown } from '../types';
 import { getSelectedImageModel } from './imageService';
 
-const DB_NAME = 'TubeGenAI';
+const DB_NAME = 'HeavenAI';
 const DB_VERSION = 1;
 const STORE_NAME = 'projects';
 

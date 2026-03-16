@@ -66,7 +66,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   );
 
   // API 키
-  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('tubegen_gemini_key') || '');
+  const [geminiApiKey, setGeminiApiKey] = useState(localStorage.getItem('heaven_gemini_key') || '');
   const [elApiKeyInput, setElApiKeyInput] = useState(
     localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY) || process.env.ELEVENLABS_API_KEY || ''
   );
@@ -83,7 +83,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   // 음성 공통
   const [voiceSpeed, setVoiceSpeed] = useState<string>(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const [voiceStability, setVoiceStability] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50'));
-  const [voiceMood, setVoiceMood] = useState<string>(localStorage.getItem('tubegen_voice_mood') || '');
+  const [voiceMood, setVoiceMood] = useState<string>(localStorage.getItem('heaven_voice_mood') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
   const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google') || 'elevenlabs'
@@ -659,7 +659,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {/* 이미지 글씨 */}
-                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                    <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 글씨</p>
                       <div className="grid grid-cols-4 gap-1.5">
                         {([{ id: 'none', label: '없음' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
@@ -730,7 +730,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {activePanel === 'voice' && (
                   <div className="space-y-5">
                     {/* 말하기 속도 */}
-                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                    <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                       <div className="flex gap-2">
                         {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
@@ -804,21 +804,46 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 </div>
                               ))}
                             </div>
+                            {/* 톤 프리셋 */}
+                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {([
+                                  { id: '낮은목소리', label: '낮은 톤', stability: 85, style: 5 },
+                                  { id: '차분한', label: '차분한', stability: 70, style: 10 },
+                                  { id: '밝은목소리', label: '밝은 톤', stability: 45, style: 45 },
+                                  { id: '활기찬', label: '활기찬', stability: 20, style: 75 },
+                                ] as { id: string; label: string; stability: number; style: number }[]).map(m => (
+                                  <button key={m.id} type="button" onClick={() => {
+                                    setVoiceMood(m.id);
+                                    setVoiceStability(m.stability);
+                                    setVoiceStyle(m.style);
+                                    localStorage.setItem('heaven_voice_mood', m.id);
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                  }}
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors ${voiceMood === m.id ? 'bg-purple-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                                    {m.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
                             {/* 안정성/스타일 슬라이더 */}
-                            <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)] space-y-2">
+                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)] space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
-                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStability}</span>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">스타일</span>
-                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStyle}</span>
                               </div>
                             </div>
                             {/* 분위기 프리셋 */}
-                            <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {([
@@ -835,7 +860,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     setVoiceMood(m.id);
                                     setVoiceStability(m.stability);
                                     setVoiceStyle(m.style);
-                                    localStorage.setItem('tubegen_voice_mood', m.id);
+                                    localStorage.setItem('heaven_voice_mood', m.id);
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                                   }}
@@ -845,7 +870,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 ))}
                               </div>
                               {voiceMood && (
-                                <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }}
+                                <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }}
                                   className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
                               )}
                             </div>
@@ -865,7 +890,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </button>
                           ))}
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5 max-h-96 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-1.5">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10' : 'border-slate-700 hover:border-slate-500'}`}
                               onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>

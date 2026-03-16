@@ -9,7 +9,7 @@ import { faceSwapCharacter } from "./falService";
  * Gemini API 클라이언트 초기화
  */
 const getGeminiApiKey = () =>
-  localStorage.getItem('tubegen_gemini_key') || process.env.GEMINI_API_KEY || '';
+  localStorage.getItem('heaven_gemini_key') || process.env.GEMINI_API_KEY || '';
 
 const getAI = () => new GoogleGenAI({ apiKey: getGeminiApiKey() });
 
@@ -606,7 +606,7 @@ const generateImageWithImagen3 = async (
 ): Promise<string | null> => {
   return retryGeminiRequest("Imagen3 Generation", async () => {
     const ai = getAI();
-    const ar = localStorage.getItem('tubegen_aspect_ratio') || '16:9';
+    const ar = localStorage.getItem('heaven_aspect_ratio') || '16:9';
     const response = await (ai.models as any).generateImages({
       model: modelId,
       prompt,

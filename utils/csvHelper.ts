@@ -54,7 +54,7 @@ export const downloadImagesAsZip = async (data: GeneratedAsset[]) => {
 
   try {
     const blob = await zip.generateAsync({ type: "blob" });
-    saveAs(blob, "tubegen_assets.zip");
+    saveAs(blob, "heaven_assets.zip");
   } catch (error) {
     console.error("Failed to generate zip", error);
     alert("ZIP 파일 생성 중 오류가 발생했습니다.");
@@ -142,7 +142,7 @@ export const downloadProjectZip = async (data: GeneratedAsset[]) => {
 
   try {
     const blob = await zip.generateAsync({ type: "blob" });
-    saveAs(blob, "tubegen_full_project.zip");
+    saveAs(blob, "heaven_full_project.zip");
   } catch (error) {
     console.error("Failed to zip project", error);
     alert("프로젝트 압축 중 오류가 발생했습니다.");

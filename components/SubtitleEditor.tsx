@@ -143,7 +143,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const progressDragRef = useRef(false);
 
   // 줌/패닝 — 기본 98.5% (양쪽 클리핑 방지)
-  const [zoom, setZoom] = useState(0.985);
+  const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
@@ -452,7 +452,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
         {/* 줌 컨트롤 바 */}
         <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-white/[0.07] shrink-0">
-          <button onClick={() => { setZoom(0.985); setPan({ x: 0, y: 0 }); }}
+          <button onClick={() => { setZoom(1.0); setPan({ x: 0, y: 0 }); }}
             className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
             RESET
           </button>
@@ -479,7 +479,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
           className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={{ aspectRatio: '16/9' }}
+          style={{ aspectRatio: '16/9', width: '100%', flexShrink: 0 }}
           onWheel={handleWheel} onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
@@ -489,7 +489,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
           {/* 중심 가이드라인 (드래그 중) */}
           {isDragging && (() => {
-            const snapPx = 2, cx = Math.abs(pan.x) <= snapPx, cy = Math.abs(pan.y) <= snapPx;
+            const snapPx = 0.5, cx = Math.abs(pan.x) <= snapPx, cy = Math.abs(pan.y) <= snapPx;
             return (<>
               <div className="absolute top-0 bottom-0 pointer-events-none" style={{
                 left: 'calc(50% - 0.5px)', width: cx ? 2 : 1,

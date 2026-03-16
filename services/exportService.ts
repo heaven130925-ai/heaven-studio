@@ -36,7 +36,7 @@ export async function exportAssetsToZip(
 ): Promise<void> {
   // ExcelJS 워크북 생성
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'TubeGen AI';
+  workbook.creator = 'Heaven AI';
   workbook.created = new Date();
 
   const worksheet = workbook.addWorksheet('스토리보드', {

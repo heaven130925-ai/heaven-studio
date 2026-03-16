@@ -1,6 +1,6 @@
 
 /**
- * TubeGen AI 전역 설정 파일
+ * Heaven AI 전역 설정 파일
  * 보안을 위해 민감한 API 키는 이곳에 직접 입력하지 마세요.
  * 앱 내의 [설정] 메뉴를 통해 입력하면 브라우저에 안전하게 보관됩니다.
  */
@@ -229,27 +229,27 @@ export const CONFIG = {
 
   // 로컬 스토리지 키 이름 (내부 관리용)
   STORAGE_KEYS: {
-    GEMINI_API_KEY: 'tubegen_gemini_key',      // Gemini API 키 (사용자 직접 입력)
-    ELEVENLABS_API_KEY: 'tubegen_el_key',
-    ELEVENLABS_VOICE_ID: 'tubegen_el_voice',
-    ELEVENLABS_MODEL: 'tubegen_el_model',
-    FAL_API_KEY: 'tubegen_fal_key',  // PixVerse 영상 변환용
-    IMAGE_MODEL: 'tubegen_image_model',
+    GEMINI_API_KEY: 'heaven_gemini_key',      // Gemini API 키 (사용자 직접 입력)
+    ELEVENLABS_API_KEY: 'heaven_el_key',
+    ELEVENLABS_VOICE_ID: 'heaven_el_voice',
+    ELEVENLABS_MODEL: 'heaven_el_model',
+    FAL_API_KEY: 'heaven_fal_key',  // PixVerse 영상 변환용
+    IMAGE_MODEL: 'heaven_image_model',
     // Gemini 전용 화풍 설정
-    GEMINI_STYLE: 'tubegen_gemini_style',
-    GEMINI_CUSTOM_STYLE: 'tubegen_gemini_custom_style',
-    IMAGE_TEXT_MODE: 'tubegen_image_text_mode',
-    SUBTITLE_CONFIG: 'tubegen_subtitle_config',
-    PROJECTS: 'tubegen_projects',
-    GEMINI_TTS_VOICE: 'tubegen_gemini_tts_voice',
-    TTS_PROVIDER: 'tubegen_tts_provider',  // 'elevenlabs' | 'google'
-    VOICE_SPEED: 'tubegen_voice_speed',          // '0.7' | '1.0' | '1.3'
-    VOICE_STABILITY: 'tubegen_voice_stability',   // '0'-'100' (ElevenLabs)
-    VOICE_STYLE: 'tubegen_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
-    ASPECT_RATIO: 'tubegen_aspect_ratio',         // '16:9' | '9:16'
-    VISUAL_STYLE_ID: 'tubegen_visual_style_id',   // VisualStyleId
-    LONGFORM_DURATION: 'tubegen_longform_duration',   // seconds per scene (longform)
-    SHORTFORM_DURATION: 'tubegen_shortform_duration', // seconds per scene (shortform)
+    GEMINI_STYLE: 'heaven_gemini_style',
+    GEMINI_CUSTOM_STYLE: 'heaven_gemini_custom_style',
+    IMAGE_TEXT_MODE: 'heaven_image_text_mode',
+    SUBTITLE_CONFIG: 'heaven_subtitle_config',
+    PROJECTS: 'heaven_projects',
+    GEMINI_TTS_VOICE: 'heaven_gemini_tts_voice',
+    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google'
+    VOICE_SPEED: 'heaven_voice_speed',          // '0.7' | '1.0' | '1.3'
+    VOICE_STABILITY: 'heaven_voice_stability',   // '0'-'100' (ElevenLabs)
+    VOICE_STYLE: 'heaven_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
+    ASPECT_RATIO: 'heaven_aspect_ratio',         // '16:9' | '9:16'
+    VISUAL_STYLE_ID: 'heaven_visual_style_id',   // VisualStyleId
+    LONGFORM_DURATION: 'heaven_longform_duration',   // seconds per scene (longform)
+    SHORTFORM_DURATION: 'heaven_shortform_duration', // seconds per scene (shortform)
   },
 
   // 애니메이션 설정

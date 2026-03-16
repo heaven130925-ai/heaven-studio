@@ -627,7 +627,7 @@ const App: React.FC = () => {
 
       if (result) {
         // 영상 저장 (자막은 영상에 하드코딩됨)
-        saveAs(result.videoBlob, `tubegen_v92_${suffix}_${timestamp}.mp4`);
+        saveAs(result.videoBlob, `heaven_ai_${suffix}_${timestamp}.mp4`);
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
       }
     } catch (error: any) {
@@ -658,7 +658,7 @@ const App: React.FC = () => {
   };
 
   // Gemini API 키 미설정 시 셋업 화면
-  const hasGeminiKey = !!(localStorage.getItem('tubegen_gemini_key') || process.env.GEMINI_API_KEY);
+  const hasGeminiKey = !!(localStorage.getItem('heaven_gemini_key') || process.env.GEMINI_API_KEY);
   if (!hasGeminiKey) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
@@ -688,7 +688,7 @@ const App: React.FC = () => {
             onClick={() => {
               const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
               if (!input) { alert('API 키를 입력해주세요.'); return; }
-              localStorage.setItem('tubegen_gemini_key', input);
+              localStorage.setItem('heaven_gemini_key', input);
               window.location.reload();
             }}
           >
@@ -915,9 +915,9 @@ const App: React.FC = () => {
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
             </div>
             {[
-              { label: 'Gemini API 키', key: 'tubegen_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
-              { label: 'ElevenLabs API 키', key: 'tubegen_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
-              { label: 'FAL API 키', key: 'tubegen_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
+              { label: 'Gemini API 키', key: 'heaven_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
+              { label: 'ElevenLabs API 키', key: 'heaven_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
+              { label: 'FAL API 키', key: 'heaven_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
             ].map(({ label, key, placeholder, link, hint }) => (
               <div key={key} className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</label>
