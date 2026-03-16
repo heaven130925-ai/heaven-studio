@@ -851,8 +851,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                   { id: '부드럽게', stability: 70, style: 20 },
                                   { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
                                   { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
-                                  { id: '전라도사투리', label: '전라도 사투리', stability: 30, style: 70 },
-                                  { id: '경상도사투리', label: '경상도 사투리', stability: 25, style: 80 },
+                                  { id: '심각하게', stability: 80, style: 5 },
+                                  { id: '울면서', stability: 10, style: 90 },
                                 ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
                                   <button key={m.id} type="button" onClick={() => {
                                     setVoiceMood(m.id);
@@ -950,8 +950,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               { id: '부드럽게', stability: 70, style: 20 },
                               { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
                               { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
-                              { id: '전라도사투리', label: '전라도 사투리', stability: 30, style: 70 },
-                              { id: '경상도사투리', label: '경상도 사투리', stability: 25, style: 80 },
+                              { id: '심각하게', stability: 80, style: 5 },
+                              { id: '울면서', stability: 10, style: 90 },
                             ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
                               <button key={m.id} type="button" onClick={() => {
                                 setVoiceMood(m.id);
