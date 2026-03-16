@@ -51,13 +51,20 @@ function renderSubtitleOnCanvas(
   if (!text.trim()) return;
 
   const fontSize = config.fontSize;
-  const lineSpacing = fontSize * 1.15;
-  const vPad = 6, hPad = 14, safeMargin = 10;
+  const hPad = 14, safeMargin = 10;
   const align = config.textAlign ?? 'center';
 
   ctx.font = `${config.fontWeight ?? 700} ${fontSize}px ${config.fontFamily}`;
-  ctx.textBaseline = 'middle';
+  ctx.textBaseline = 'alphabetic';
   ctx.textAlign = align as CanvasTextAlign;
+
+  // Measure actual Korean glyph metrics for precise vertical centering
+  const glyphMetrics = ctx.measureText('가나다라마바사');
+  const glyphAscent = glyphMetrics.actualBoundingBoxAscent || fontSize * 0.72;
+  const glyphDescent = glyphMetrics.actualBoundingBoxDescent || fontSize * 0.18;
+  const glyphHeight = glyphAscent + glyphDescent;
+  const vPad = Math.ceil(glyphHeight * 0.28);
+  const lineSpacing = fontSize * 1.35;
 
   const maxChars = config.maxCharsPerChunk ?? 15;
   const lines: string[] = [];
@@ -73,11 +80,19 @@ function renderSubtitleOnCanvas(
   const displayLines = lines.slice(0, config.maxLines ?? 2);
   const maxLineWidth = Math.max(...displayLines.map(l => ctx.measureText(l).width));
   let boxWidth = Math.min(maxLineWidth + hPad * 2, W - safeMargin * 2);
-  const boxHeight = displayLines.length * lineSpacing + vPad * 2;
+  // Box height: based on actual glyph height for precise centering
+  const boxInnerH = displayLines.length === 1
+    ? glyphHeight
+    : (displayLines.length - 1) * lineSpacing + glyphHeight;
+  const boxHeight = boxInnerH + vPad * 2;
   let boxX = Math.max(safeMargin, Math.min((W - boxWidth) / 2, W - safeMargin - boxWidth));
   const usableHeight = H - boxHeight - safeMargin * 2;
   let boxY = Math.max(safeMargin, Math.min(safeMargin + ((config.yPercent ?? 85) / 100) * usableHeight, H - safeMargin - boxHeight));
-  const textX = boxX + boxWidth / 2;
+
+  // Horizontal text position based on alignment
+  const textX = align === 'left' ? boxX + hPad
+              : align === 'right' ? boxX + boxWidth - hPad
+              : boxX + boxWidth / 2;
 
   const bg = config.backgroundColor ?? 'rgba(0,0,0,0)';
   if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
@@ -87,8 +102,14 @@ function renderSubtitleOnCanvas(
     ctx.fill();
   }
 
+  // First line glyph center Y = boxY + vPad + glyphHeight/2
+  // Alphabetic baseline = glyph center + (ascent - descent)/2
+  const baselineOffset = (glyphAscent - glyphDescent) / 2;
+  const firstGlyphCenterY = boxY + vPad + glyphHeight / 2;
+
   displayLines.forEach((line, i) => {
-    const textY = boxY + vPad + lineSpacing * (i + 0.5);
+    const glyphCenterY = firstGlyphCenterY + i * lineSpacing;
+    const textY = glyphCenterY + baselineOffset;
     const sw = config.strokeWidth ?? 6;
     if (sw > 0) {
       ctx.strokeStyle = config.strokeColor ?? '#000000';
@@ -393,7 +414,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   return (
     <div className="flex h-full overflow-hidden justify-center bg-slate-950">
-    <div className="flex h-full overflow-hidden w-full max-w-[1600px] min-w-0">
+    <div className="flex h-full overflow-hidden min-w-0" style={{ width: '100%', maxWidth: '1600px', margin: '0 auto' }}>
       {/* ─── 왼쪽 ─── */}
       <div className="flex flex-col w-[68%] border-r border-white/[0.07] overflow-y-auto">
 
