@@ -321,8 +321,20 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const { buffer, contentDuration } = await decodeAudioBuffer(scene.audioData, ctx);
       if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
       isManualPauseRef.current = false;
-      durationRef.current = contentDuration;
-      const offset = Math.min(pausedAtRef.current, Math.max(0, contentDuration - 0.05));
+
+      // 마지막 자막 word 끝 시간에서 멈춰 다음 씬 내용 블리드 방지
+      const words = scene?.subtitleData?.words;
+      const lastWordEnd = words && words.length > 0 ? words[words.length - 1].end : null;
+      const chunks = scene?.subtitleData?.meaningChunks;
+      const lastChunkEnd = chunks && chunks.length > 0 && isFinite(chunks[chunks.length - 1].endTime)
+        ? chunks[chunks.length - 1].endTime : null;
+      const subtitleEnd = lastChunkEnd ?? lastWordEnd;
+      const effectiveDuration = subtitleEnd
+        ? Math.min(contentDuration, subtitleEnd + 0.3)
+        : contentDuration;
+
+      durationRef.current = effectiveDuration;
+      const offset = Math.min(pausedAtRef.current, Math.max(0, effectiveDuration - 0.05));
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -344,7 +356,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         }
         setIsPlaying(false);
       };
-      source.start(0, offset);
+      const playDuration = effectiveDuration - offset;
+      source.start(0, offset, playDuration > 0 ? playDuration : undefined);
       sourceRef.current = source;
       // startTimeRef 조정: elapsed = ctx.currentTime - startTimeRef = offset (시작 직후)
       startTimeRef.current = ctx.currentTime - offset;
