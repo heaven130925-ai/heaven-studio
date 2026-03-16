@@ -586,7 +586,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               </div>
 
               {/* 패널 내용 */}
-              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              <div className={`flex-1 p-3 ${activePanel === 'voice' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto space-y-3'}`}>
 
                 {/* 🎨 비주얼 스타일 패널 */}
                 {activePanel === 'visual' && (
@@ -728,9 +728,9 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
 
                 {/* 🎙️ 음성 설정 패널 */}
                 {activePanel === 'voice' && (
-                  <div className="space-y-2">
+                  <div className="flex-1 flex flex-col min-h-0 gap-2">
                     {/* 말하기 속도 */}
-                    <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                    <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                       <div className="flex gap-2">
                         {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
@@ -743,7 +743,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {/* TTS 제공자 탭 */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 shrink-0">
                       <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
                         className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.35)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Google TTS
@@ -757,7 +757,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {voiceSubTab === 'elevenlabs' && (
-                      <div className="space-y-2">
+                      <div className="flex-1 overflow-y-auto space-y-2">
                         {!elApiKey && <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">API 키 없음 → Google TTS 사용</p>}
                             <div className="flex items-center gap-2">
                               {([null, 'male', 'female'] as const).map((g) => (
@@ -772,7 +772,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 전체 표시 */}
-                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)] max-h-40 overflow-y-auto">
+                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)] max-h-48 overflow-y-auto">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -877,8 +877,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     )}
 
                     {voiceSubTab === 'google' && (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
+                      <div className="flex-1 flex flex-col min-h-0 gap-2">
+                        <div className="flex gap-2 shrink-0">
                           {([null, 'male', 'female'] as const).map(g => (
                             <button key={String(g)} type="button" onClick={() => setGeminiTtsGenderFilter(g)}
                               className={`px-3 py-1 rounded-lg text-sm font-bold border ${geminiTtsGenderFilter === g ? (g === 'male' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : g === 'female' ? 'bg-pink-600/20 text-pink-200 border-pink-500/60 shadow-[0_0_8px_rgba(236,72,153,0.3)]' : 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_8px_rgba(20,184,166,0.3)]') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
@@ -887,7 +887,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           ))}
                         </div>
                         {/* 성우 목록 */}
-                        <div className="grid grid-cols-2 gap-1.5 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)] max-h-40 overflow-y-auto content-start">
+                        <div className="flex-1 min-h-0 grid grid-cols-2 gap-1.5 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)] overflow-y-auto content-start">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_8px_rgba(20,184,166,0.3)]' : 'border-slate-700/50 hover:border-teal-500/40'}`}
                               onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
@@ -903,7 +903,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           ))}
                         </div>
                         {/* 톤 프리셋 */}
-                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
                           <div className="grid grid-cols-4 gap-1.5">
                             {([
@@ -927,7 +927,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           </div>
                         </div>
                         {/* 안정성/스타일 슬라이더 */}
-                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)] space-y-2">
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)] space-y-2">
                           <div className="flex items-center gap-3">
                             <span className="text-sm text-slate-400 w-14">안정성</span>
                             <input type="range" min={0} max={100} value={voiceStability} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-teal-500" />
@@ -940,7 +940,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           </div>
                         </div>
                         {/* 분위기 프리셋 */}
-                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
                           <div className="grid grid-cols-2 gap-1.5">
                             {([
