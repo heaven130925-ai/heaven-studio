@@ -28,9 +28,10 @@ interface InputSectionProps {
   onManualScriptChange: (v: string) => void;
   thumbnailBaseImage?: string | null;
   onThumbnailBaseImageChange?: (img: string | null) => void;
+  onAspectRatioChange?: (ratio: '16:9' | '9:16') => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -185,7 +186,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
   const changeVoiceStyle = (v: number) => { setVoiceStyle(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(v)); };
   const selectImageModel = useCallback((id: ImageModelId) => { setImageModelId(id); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, id); }, []);
   const selectImageTextMode = useCallback((m: string) => { setImageTextMode(m); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE, m); }, []);
-  const selectAspectRatio = (r: '16:9' | '9:16') => { setAspectRatio(r); localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, r); };
+  const selectAspectRatio = (r: '16:9' | '9:16') => { setAspectRatio(r); localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, r); onAspectRatioChange?.(r); };
   const changeLongformDuration = (v: number) => { setLongformDuration(v); localStorage.setItem(CONFIG.STORAGE_KEYS.LONGFORM_DURATION, String(v)); };
   const changeShortformDuration = (v: number) => { setShortformDuration(v); localStorage.setItem(CONFIG.STORAGE_KEYS.SHORTFORM_DURATION, String(v)); };
   const selectVisualStyle = useCallback((id: VisualStyleId) => {
@@ -497,7 +498,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 <div className="grid grid-cols-2 gap-4">
                   {/* 캐릭터 */}
                   <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
-                    <p className="text-base font-bold text-slate-200 mb-2">캐릭터 참조</p>
+                    <p className="text-base font-bold text-slate-200 mb-1">캐릭터 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-violet-500/50">
@@ -522,7 +523,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
 
                   {/* 화풍 */}
                   <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
-                    <p className="text-base font-bold text-slate-200 mb-2">화풍 참조</p>
+                    <p className="text-base font-bold text-slate-200 mb-1">화풍 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-fuchsia-500/50">
@@ -658,7 +659,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {/* 이미지 글씨 */}
-                    <div>
+                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 글씨</p>
                       <div className="grid grid-cols-4 gap-1.5">
                         {([{ id: 'none', label: '없음' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
@@ -729,7 +730,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {activePanel === 'voice' && (
                   <div className="space-y-5">
                     {/* 말하기 속도 */}
-                    <div>
+                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                       <div className="flex gap-2">
                         {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
@@ -772,8 +773,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 {isLoadingVoices ? '...' : '불러오기'}
                               </button>
                             </div>
-                            {/* 성우 목록 — 전체 표시 (스크롤 없음) */}
-                            <div className="bg-black/40 border border-white/[0.1] rounded-xl">
+                            {/* 성우 목록 — 전체 표시 */}
+                            <div className="bg-black/40 border border-emerald-500/25 rounded-xl shadow-[0_0_8px_rgba(52,211,153,0.08)]">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -804,7 +805,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               ))}
                             </div>
                             {/* 안정성/스타일 슬라이더 */}
-                            <div className="space-y-2">
+                            <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)] space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
                                 <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }} className="flex-1 accent-purple-500" />
@@ -817,7 +818,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </div>
                             </div>
                             {/* 분위기 프리셋 */}
-                            <div>
+                            <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {([
@@ -988,7 +989,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     )}
 
                     {/* AI 생성 섹션 */}
-                    <div className="border-t border-slate-700 pt-4">
+                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">AI 썸네일 생성</p>
                       <button
                         type="button"

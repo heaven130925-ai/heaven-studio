@@ -98,6 +98,7 @@ export type GeminiStyleId = typeof GEMINI_STYLE_CATEGORIES[number]['styles'][num
 
 // ─── 비주얼 스타일 (이미지 생성기 빠른 선택) ─────────────────────────────────
 export const VISUAL_STYLES = [
+  { id: 'custom',       name: '커스텀',         emoji: '✏️', bg: 'from-slate-700 to-slate-800',   prompt: '' },
   { id: 'cinematic',    name: '시네마틱 실사',  emoji: '🎬', bg: 'from-slate-700 to-slate-900',   prompt: 'Cinematic photorealistic style, Hollywood blockbuster film aesthetic, professional cinematography, dramatic volumetric lighting, shallow depth of field, 8K ultra-detailed, rich cinematic color grading' },
   { id: 'kdrama',       name: 'K-드라마 실사',  emoji: '🌸', bg: 'from-pink-800 to-rose-900',     prompt: 'Korean drama photorealistic style, soft romantic lighting, clean modern Korean aesthetics, beautiful actors with natural makeup, elegant drama set design, warm golden hour lighting, Netflix Korean drama quality' },
   { id: 'noir',         name: '누아르',         emoji: '🌑', bg: 'from-gray-800 to-black',         prompt: 'Film noir style, dramatic black and white with deep moody shadows, 1940s detective noir aesthetic, high contrast chiaroscuro lighting, rain-soaked atmospheric streets, expressionist shadows and silhouettes' },
@@ -110,7 +111,6 @@ export const VISUAL_STYLES = [
   { id: 'diorama',      name: '디오라마',       emoji: '🏠', bg: 'from-green-800 to-teal-900',    prompt: 'Miniature diorama tabletop style, tiny handcrafted scale model world, tilt-shift photography blur effect, warm studio lighting on miniatures, detailed scale buildings and props, toy-like railway model aesthetic' },
   { id: 'historical',   name: '사극 일러스트',  emoji: '⚔️', bg: 'from-amber-900 to-stone-900',  prompt: 'Korean historical drama illustration style, Joseon dynasty period aesthetic, traditional Korean Hanbok costumes and architecture, classical East Asian ink painting influence, elegant brushwork, rich jewel tones with gold accents' },
   { id: 'webnovel',     name: '웹소설 시그니쳐',emoji: '📖', bg: 'from-violet-800 to-purple-900', prompt: 'Korean web novel signature cover illustration style, dramatic fantasy character portrait, flowing hair and clothing in dynamic wind, intense gaze, glowing magical light effects, rich saturated fantasy colors' },
-  { id: 'custom',       name: '커스텀',         emoji: '✏️', bg: 'from-slate-700 to-slate-800',   prompt: '' },
   { id: 'ghibli',       name: '지브리풍',       emoji: '🌿', bg: 'from-emerald-700 to-green-900', prompt: 'Studio Ghibli inspired animation style, hand-drawn watercolor painterly backgrounds with lush organic detail, warm nostalgic atmosphere, Hayao Miyazaki aesthetic, expressive simple characters, magical realism, soft natural color palette' },
   { id: 'stickman',     name: '스틱맨',         emoji: '🖊️', bg: 'from-slate-600 to-slate-800',  prompt: 'Simple stick figure illustration style, clean minimalist black line drawings on white background, xkcd-style stick figure characters, simple geometric shapes, hand-drawn marker whiteboard animation aesthetic' },
 ] as const;

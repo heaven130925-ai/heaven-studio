@@ -66,6 +66,7 @@ interface ResultTableProps {
   isExporting?: boolean;
   animatingIndices?: Set<number>;  // 현재 영상 변환 중인 인덱스들
   onSelectThumbnail?: (imageBase64: string) => void;
+  aspectRatio?: '16:9' | '9:16';
 }
 
 // 오디오 디코딩 함수 (컴포넌트 외부로 이동하여 재생성 방지)
@@ -392,10 +393,10 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
 
 TableRow.displayName = 'TableRow';
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices, onSelectThumbnail }) => {
+const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices, onSelectThumbnail, aspectRatio: aspectRatioProp }) => {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const onOpenPreview = useCallback((src: string) => setPreviewSrc(src), []);
-  const aspectRatio = (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9';
+  const aspectRatio = aspectRatioProp ?? ((localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9');
   const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => loadSubtitleConfig());
   const [showSubSettings, setShowSubSettings] = useState(false);
 

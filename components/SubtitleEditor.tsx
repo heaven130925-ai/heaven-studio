@@ -574,7 +574,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="px-4 py-3 space-y-3">
 
           {/* 폰트 선택 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">폰트</label>
             <div className="grid grid-cols-3 gap-1.5">
               {SUBTITLE_FONTS.map(f => (
@@ -592,7 +592,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 크기 + 굵기 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
@@ -614,7 +614,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 색상 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">글자색</label>
@@ -644,7 +644,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 배경 + 정렬 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">배경</label>
@@ -680,7 +680,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 세로 위치 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               세로 위치 <span className="text-slate-200 normal-case">{subConfig.yPercent ?? 85}%</span>
             </label>
@@ -690,7 +690,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 청크 글자 수 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               청크 글자 수 <span className="text-slate-200">{subConfig.maxCharsPerChunk ?? 15}자</span>
             </label>
@@ -700,7 +700,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* AI 의미 단위 자막 */}
-          <div className="p-3 rounded-xl border border-blue-500/20">
+          <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">
               AI 의미 단위 자막
               {!hasMeaningChunks && <span className="ml-1 text-slate-600 normal-case font-normal">(TTS 생성 후 활성화)</span>}

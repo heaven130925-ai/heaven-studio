@@ -44,6 +44,9 @@ const App: React.FC = () => {
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
   const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
   const [showApiModal, setShowApiModal] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
+  );
 
   // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
   const [showStoryboard, setShowStoryboard] = useState(false);
@@ -787,6 +790,7 @@ const App: React.FC = () => {
           onManualScriptChange={setInputManualScript}
           thumbnailBaseImage={thumbnailBaseImage}
           onThumbnailBaseImageChange={setThumbnailBaseImage}
+          onAspectRatioChange={setAspectRatio}
         />
 
         
@@ -894,6 +898,7 @@ const App: React.FC = () => {
                   animatingIndices={animatingIndices}
                   onGenerateAnimation={handleGenerateAnimation}
                   onSelectThumbnail={handleSelectThumbnail}
+                  aspectRatio={aspectRatio}
                 />
               </div>
             )}
