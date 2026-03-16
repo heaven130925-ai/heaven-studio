@@ -757,9 +757,9 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {voiceSubTab === 'elevenlabs' && (
-                      <div className="flex-1 overflow-y-auto space-y-2">
-                        {!elApiKey && <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">API 키 없음 → Google TTS 사용</p>}
-                            <div className="flex items-center gap-2">
+                      <div className="flex-1 flex flex-col min-h-0 gap-2">
+                        {!elApiKey && <p className="shrink-0 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">API 키 없음 → Google TTS 사용</p>}
+                            <div className="flex items-center gap-2 shrink-0">
                               {([null, 'male', 'female'] as const).map((g) => (
                                 <button key={String(g)} type="button" onClick={() => setGenderFilter(g)}
                                   className={`px-3 py-1 rounded-lg text-sm font-bold border ${genderFilter === g ? (g === 'male' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : g === 'female' ? 'bg-pink-600/20 text-pink-200 border-pink-500/60 shadow-[0_0_8px_rgba(236,72,153,0.3)]' : 'bg-slate-600/20 text-slate-200 border-slate-400/60') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
@@ -772,7 +772,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 전체 표시 */}
-                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)] max-h-48 overflow-y-auto">
+                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)]">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -802,8 +802,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 </div>
                               ))}
                             </div>
+                            {/* spacer — 톤/안정성/분위기를 하단으로 밀기 */}
+                            <div className="flex-1" />
                             {/* 톤 프리셋 */}
-                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                            <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
                               <div className="grid grid-cols-4 gap-1.5">
                                 {([
@@ -828,7 +830,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </div>
 
                             {/* 안정성/스타일 슬라이더 */}
-                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)] space-y-2">
+                            <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)] space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
                                 <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
@@ -841,7 +843,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </div>
                             </div>
                             {/* 분위기 프리셋 */}
-                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                            <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {([
@@ -872,7 +874,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                   className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
                               )}
                             </div>
-                            <button type="button" onClick={saveElSettings} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
+                            <button type="button" onClick={saveElSettings} className="shrink-0 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
                       </div>
                     )}
 
@@ -887,7 +889,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           ))}
                         </div>
                         {/* 성우 목록 */}
-                        <div className="flex-1 min-h-0 grid grid-cols-2 gap-1.5 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)] overflow-y-auto content-start">
+                        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)]">
+                        <div className="grid grid-cols-2 gap-1.5 p-3">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_8px_rgba(20,184,166,0.3)]' : 'border-slate-700/50 hover:border-teal-500/40'}`}
                               onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
@@ -902,6 +905,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </div>
                           ))}
                         </div>
+                        </div>{/* end voice list scroll wrapper */}
                         {/* 톤 프리셋 */}
                         <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
