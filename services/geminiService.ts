@@ -813,6 +813,9 @@ ${styleDesc.instruction}`
           parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
         }
 
+        // 단일 프레임 강제 (항상 적용)
+        parts.push({ text: `[FINAL LAYOUT] SINGLE FRAME ONLY. Do NOT create panels, comic strips, split screens, grids, or multiple cuts. The entire canvas must be ONE unified scene with no dividing borders or lines.` });
+
         // 텍스트 모드별 마지막 강제 지시
         if (textMode === 'none') {
           parts.push({ text: `[FINAL] No text, letters, words, or numbers in the image. Pure visual only.` });
