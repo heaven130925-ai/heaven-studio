@@ -16,6 +16,7 @@ import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
+import ThumbnailEditor from './components/ThumbnailEditor';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -46,7 +47,7 @@ const App: React.FC = () => {
 
   // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
   const [showStoryboard, setShowStoryboard] = useState(false);
-  const [storyboardTab, setStoryboardTab] = useState<'result' | 'subtitle'>('result');
+  const [storyboardTab, setStoryboardTab] = useState<'result' | 'subtitle' | 'thumbnail'>('result');
 
   // 자막 설정 (SubtitleEditor와 영상 렌더링 공유)
   const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => {
@@ -828,6 +829,10 @@ const App: React.FC = () => {
                   className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
                   자막 편집
                 </button>
+                <button onClick={() => setStoryboardTab('thumbnail')}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'thumbnail' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
+                  썸네일
+                </button>
               </div>
             </div>
             {/* 상태 표시 */}
@@ -863,6 +868,11 @@ const App: React.FC = () => {
                 <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
                 <p className="text-sm">{progressMessage || '생성 준비 중...'}</p>
               </div>
+            ) : storyboardTab === 'thumbnail' ? (
+              <ThumbnailEditor
+                scenes={generatedData}
+                topic={currentTopic}
+              />
             ) : storyboardTab === 'subtitle' ? (
               <SubtitleEditor
                 scenes={generatedData}
