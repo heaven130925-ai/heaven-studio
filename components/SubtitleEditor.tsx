@@ -139,6 +139,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const isManualPauseRef = useRef<boolean>(false);
   const progressTimerRef = useRef<number>(0);
   const endTimeoutRef = useRef<number>(0);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const progressDragRef = useRef(false);
 
   // 줌/패닝 — 기본 98.5% (양쪽 클리핑 방지)
   const [zoom, setZoom] = useState(0.985);
@@ -147,7 +149,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
-  const [useMeaningChunks, setUseMeaningChunks] = useState(false);
+  const [useMeaningChunks, setUseMeaningChunks] = useState(true);
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
@@ -354,6 +356,36 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     }
   }, [isPlaying, scene]);
 
+  // ── 프로그레스바 seek ──
+  const seekToFraction = useCallback((fraction: number) => {
+    if (!durationRef.current) return;
+    const seekTime = Math.max(0, Math.min(1, fraction)) * durationRef.current;
+    isManualPauseRef.current = true;
+    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
+    window.clearInterval(progressTimerRef.current);
+    window.clearTimeout(endTimeoutRef.current);
+    setIsPlaying(false);
+    pausedAtRef.current = seekTime;
+    setCurrentSubTime(seekTime);
+    setAudioProgress(fraction * 100);
+  }, []);
+
+  // ── 프로그레스바 드래그 ──
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!progressDragRef.current || !progressBarRef.current) return;
+      const rect = progressBarRef.current.getBoundingClientRect();
+      seekToFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
+    };
+    const handleMouseUp = () => { progressDragRef.current = false; };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [seekToFraction]);
+
   // ── 스페이스바 단축키 ──
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -504,22 +536,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             }
           </button>
           <div
+            ref={progressBarRef}
             className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
-            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+            onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
               if (!hasAudio || !durationRef.current) return;
+              progressDragRef.current = true;
               const rect = e.currentTarget.getBoundingClientRect();
-              const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-              const seekTime = fraction * durationRef.current;
-              // Stop current playback
-              isManualPauseRef.current = true;
-              if (sourceRef.current) { try { sourceRef.current.stop(); } catch (_) {} sourceRef.current = null; }
-              window.clearInterval(progressTimerRef.current);
-              window.clearTimeout(endTimeoutRef.current);
-              setIsPlaying(false);
-              // Set new position
-              pausedAtRef.current = seekTime;
-              setCurrentSubTime(seekTime);
-              setAudioProgress(fraction * 100);
+              seekToFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
             }}
           >
             <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
@@ -551,7 +574,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="px-4 py-3 space-y-3">
 
           {/* 폰트 선택 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">폰트</label>
             <div className="grid grid-cols-3 gap-1.5">
               {SUBTITLE_FONTS.map(f => (
@@ -569,7 +592,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 크기 + 굵기 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
@@ -591,7 +614,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 색상 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">글자색</label>
@@ -621,7 +644,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 배경 + 정렬 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">배경</label>
@@ -657,7 +680,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 세로 위치 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               세로 위치 <span className="text-slate-200 normal-case">{subConfig.yPercent ?? 85}%</span>
             </label>
@@ -667,7 +690,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 청크 글자 수 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               청크 글자 수 <span className="text-slate-200">{subConfig.maxCharsPerChunk ?? 15}자</span>
             </label>
@@ -677,7 +700,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* AI 의미 단위 자막 */}
-          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
+          <div className="p-3 rounded-xl border border-blue-500/20">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">
               AI 의미 단위 자막
               {!hasMeaningChunks && <span className="ml-1 text-slate-600 normal-case font-normal">(TTS 생성 후 활성화)</span>}
@@ -698,11 +721,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       </div>
 
       {/* ─── 오른쪽: 씬 목록 ─── */}
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto py-2 px-1">
         {scenes.map((s, i) => (
           <button key={i} onClick={() => setSelectedIdx(i)}
-            className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
-              i === selectedIdx ? 'bg-red-900/25 border-l-2 border-red-500 shadow-[inset_0_0_12px_rgba(239,68,68,0.08)]' : 'hover:bg-slate-800/60 border-l-2 border-transparent'
+            className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-all rounded-xl mb-0.5 ${
+              i === selectedIdx
+                ? 'border border-red-500/50 bg-red-900/15 shadow-[0_0_14px_rgba(239,68,68,0.3)]'
+                : 'hover:bg-slate-800/60 border border-transparent'
             }`}
           >
             <div className="w-20 h-12 rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">

@@ -175,7 +175,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes, topic }) => {
         </div>
 
         {/* 텍스트 오버레이 컨트롤 */}
-        <div className="bg-slate-900 rounded-xl p-4 space-y-4 border border-slate-800/80">
+        <div className="bg-slate-900/60 rounded-xl p-4 space-y-4 border border-emerald-500/20 shadow-[0_0_10px_rgba(52,211,153,0.08)]">
           <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">텍스트 오버레이</p>
 
           {/* 2줄 입력 */}

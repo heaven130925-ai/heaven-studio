@@ -338,7 +338,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
   // ═══════════════════════════════════════════════════════════
 
   return (
-    <div className="w-full px-4 my-2">
+    <div className="w-full px-4 my-2" style={{ maxWidth: '1600px', margin: '0 auto' }}>
       <div className="flex gap-0 items-stretch" style={{ minHeight: 'calc(100vh - 130px)' }}>
 
         {/* ════ 왼쪽 사이드바 ════ */}
@@ -354,7 +354,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
             };
             return (
           <div className="p-3 border-b border-white/[0.07]">
-            <p className="text-sm font-black text-white/80 uppercase tracking-widest mb-2 px-1">비주얼 스타일</p>
+            <p className="text-sm font-black text-white/80 uppercase tracking-widest mb-2 px-1 text-center">비주얼 스타일</p>
             <div className="grid grid-cols-3 gap-2">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
@@ -424,11 +424,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_16px_rgba(52,211,153,0.5)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_16px_rgba(52,211,153,0.5)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   수동 대본
                 </button>
               </div>
@@ -436,14 +436,14 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
                 {activeTab === 'auto' ? (
-                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(52,211,153,0.1)]">
+                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden">
                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} disabled={isProcessing}
                       placeholder="주제를 입력하세요 (예: 예수님 탄생, 우주의 신비, 한국의 역사...)"
                       className="block w-full bg-transparent text-white py-5 px-6 focus:ring-0 focus:outline-none placeholder-white/20 text-lg disabled:opacity-50" />
                     <div className="px-6 pb-4 text-sm text-white/25">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
                   </div>
                 ) : (
-                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 shadow-[0_0_20px_rgba(52,211,153,0.1)]">
+                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0">
                     <textarea value={manualScript} onChange={(e) => onManualScriptChange(e.target.value)} disabled={isProcessing}
                       placeholder={"여기에 대본을 붙여넣거나 직접 작성하세요.\n\n예)\n나레이션 1: 옛날 옛적...\n나레이션 2: ..."}
                       className="flex-1 bg-transparent text-white p-6 focus:ring-0 focus:outline-none placeholder-white/20 resize-none text-base" />
@@ -458,7 +458,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 씬 수 + 영상 포맷 */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* 씬 수 */}
-                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4 shadow-[0_0_10px_rgba(255,255,255,0.03)]">
+                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                     <p className="text-base font-bold text-white/60 mb-2">씬 수</p>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={500}
@@ -471,15 +471,15 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   </div>
 
                   {/* 영상 포맷 */}
-                  <div className="bg-white/[0.04] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_15px_rgba(59,130,246,0.08)]">
+                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                     <p className="text-base font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_10px_rgba(52,211,153,0.45)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
                         롱폼 16:9
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_10px_rgba(52,211,153,0.45)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
                         숏폼 9:16
                       </button>
                     </div>
@@ -496,7 +496,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 참조 이미지 (캐릭터 + 화풍) */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* 캐릭터 */}
-                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4">
+                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                     <p className="text-base font-bold text-slate-200 mb-2">캐릭터 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
@@ -521,7 +521,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   </div>
 
                   {/* 화풍 */}
-                  <div className="bg-white/[0.04] border border-white/[0.08] rounded-xl p-4">
+                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
                     <p className="text-base font-bold text-slate-200 mb-2">화풍 참조</p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
@@ -772,8 +772,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 {isLoadingVoices ? '...' : '불러오기'}
                               </button>
                             </div>
-                            {/* 성우 목록 — 인라인 스크롤 (absolute 드롭다운 제거) */}
-                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: 'calc(100vh - 360px)' }}>
+                            {/* 성우 목록 — 전체 표시 (스크롤 없음) */}
+                            <div className="bg-black/40 border border-white/[0.1] rounded-xl">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)

@@ -707,7 +707,7 @@ const App: React.FC = () => {
 
       {/* 네비게이션 탭 */}
       <div className="border-b border-white/[0.07] bg-black/60 backdrop-blur-sm">
-        <div className="px-6 flex items-center gap-2 py-2">
+        <div className="px-6 flex items-center gap-2 py-2" style={{ maxWidth: '1600px', margin: '0 auto' }}>
           <button
             onClick={() => setViewMode('main')}
             className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border ${

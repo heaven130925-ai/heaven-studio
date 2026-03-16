@@ -410,7 +410,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
   if (data.length === 0) return null;
 
   return (
-    <div className="w-full max-w-[98%] mx-auto pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full pb-32 animate-in fade-in slide-in-from-bottom-4 duration-500" style={{ maxWidth: '1600px', margin: '0 auto' }}>
       {/* 이미지 미리보기 모달 */}
       {previewSrc && (
         <div
