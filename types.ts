@@ -98,6 +98,16 @@ export interface SubtitleConfig {
   maxCharsPerChunk?: number;  // 자막 청크당 최대 글자 수 (기본 15, 숏폼은 10 권장)
 }
 
+// 자막 폰트 목록
+export const SUBTITLE_FONTS = [
+  { label: 'Noto Sans KR', value: '"Noto Sans KR", "Malgun Gothic", sans-serif', weight: 700 },
+  { label: '맑은 고딕', value: '"Malgun Gothic", sans-serif', weight: 700 },
+  { label: '나눔고딕', value: '"Nanum Gothic", sans-serif', weight: 700 },
+  { label: '나눔명조', value: '"Nanum Myeongjo", serif', weight: 700 },
+  { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif', weight: 900 },
+  { label: 'Impact', value: 'Impact, "Arial Narrow", sans-serif', weight: 900 },
+];
+
 // 기본 자막 설정
 export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   wordsPerLine: 5,

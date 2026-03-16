@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt, extractCharactersFromScript, generateCharacterImage, CharacterInfo } from './services/geminiService';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
@@ -15,6 +15,8 @@ import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage }
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
+import SubtitleEditor from './components/SubtitleEditor';
+import ThumbnailEditor from './components/ThumbnailEditor';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -43,6 +45,23 @@ const App: React.FC = () => {
   const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
   const [showApiModal, setShowApiModal] = useState(false);
 
+  // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
+  const [showStoryboard, setShowStoryboard] = useState(false);
+  const [storyboardTab, setStoryboardTab] = useState<'result' | 'subtitle' | 'thumbnail'>('result');
+
+  // 자막 설정 (SubtitleEditor와 영상 렌더링 공유)
+  const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => {
+    try {
+      const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG);
+      if (saved) return { ...DEFAULT_SUBTITLE_CONFIG, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_SUBTITLE_CONFIG;
+  });
+  const handleSubConfigChange = useCallback((cfg: SubtitleConfig) => {
+    setSubConfig(cfg);
+    try { localStorage.setItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG, JSON.stringify(cfg)); } catch {}
+  }, []);
+
   // 갤러리 뷰 관련
   const [viewMode, setViewMode] = useState<ViewMode>('main');
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
@@ -51,10 +70,6 @@ const App: React.FC = () => {
   // 비용 추적
   const [currentCost, setCurrentCost] = useState<CostBreakdown | null>(null);
 
-  // 캐릭터 추출 상태
-  const [characters, setCharacters] = useState<CharacterInfo[]>([]);
-  const [isExtractingCharacters, setIsExtractingCharacters] = useState(false);
-  const [regeneratingCharIdx, setRegeneratingCharIdx] = useState<number | null>(null);
   const costRef = useRef<CostBreakdown>({
     images: 0, tts: 0, videos: 0, total: 0,
     imageCount: 0, ttsCharacters: 0, videoCount: 0
@@ -150,6 +165,7 @@ const App: React.FC = () => {
     setGeneratedData([]);
     setInputManualScript('');
     setInputActiveTab('auto');
+    setShowStoryboard(false);
     setStep(GenerationStep.IDLE);
     setProgressMessage('');
     resetCost();
@@ -168,8 +184,9 @@ const App: React.FC = () => {
     isProcessingRef.current = true;
     isAbortedRef.current = false;
 
-    // 이전 대본 초기화
-    setInputManualScript('');
+    // 자동 주제 모드(대본만 생성)는 메인화면에서 처리 → 스토리보드 창 안 열기
+    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly;
+    if (!isAutoTopicMode) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -187,6 +204,7 @@ const App: React.FC = () => {
 
       // 참조 이미지 존재 여부 계산
       const hasRefImages = (refImgs.character?.length || 0) + (refImgs.style?.length || 0) > 0;
+      const hasCharacterRef = (refImgs.character?.length || 0) > 0;
       console.log(`[App] 참조 이미지 - 캐릭터: ${refImgs.character?.length || 0}개, 스타일: ${refImgs.style?.length || 0}개`);
 
       let targetTopic = topic;
@@ -217,12 +235,11 @@ const App: React.FC = () => {
           targetTopic,
           hasRefImages,
           sourceText!,
-          2500, // 청크당 2500자
-          setProgressMessage, // 진행 상황 콜백
+          2500,
+          setProgressMessage,
           sceneCount || undefined
         );
       } else {
-        // 일반 대본: 기존 방식
         scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
       }
       if (isAbortedRef.current) return;
@@ -595,12 +612,8 @@ const App: React.FC = () => {
       const suffix = enableSubtitles ? 'sub' : 'nosub';
       const timestamp = Date.now();
 
-      // localStorage에서 자막 설정 읽기
-      let subtitleConfig: Partial<SubtitleConfig> = {};
-      try {
-        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG);
-        if (saved) subtitleConfig = { ...DEFAULT_SUBTITLE_CONFIG, ...JSON.parse(saved) };
-      } catch {}
+      // subConfig 상태 사용 (SubtitleEditor에서 수정된 값)
+      const subtitleConfig: Partial<SubtitleConfig> = subConfig;
 
       const result = await generateVideo(
         assetsRef.current,
@@ -627,54 +640,7 @@ const App: React.FC = () => {
     await refreshProjects();
   };
 
-  // 캐릭터 추출 핸들러
-  const handleExtractCharacters = useCallback(async (script: string) => {
-    if (isExtractingCharacters) return;
-    setIsExtractingCharacters(true);
-    setCharacters([]);
-    try {
-      const extracted = await extractCharactersFromScript(script);
-      if (extracted.length === 0) {
-        alert('등장인물을 찾을 수 없습니다. 대본에 구체적인 인물이 포함되어 있는지 확인하세요.');
-        return;
-      }
-      // 플레이스홀더로 먼저 표시
-      setCharacters(extracted.map(c => ({ ...c, imageData: null })));
-      // 각 캐릭터 이미지 생성
-      for (let i = 0; i < extracted.length; i++) {
-        try {
-          const img = await generateCharacterImage(extracted[i]);
-          setCharacters(prev => {
-            const next = [...prev];
-            next[i] = { ...next[i], imageData: img };
-            return next;
-          });
-        } catch (e) {
-          console.error(`캐릭터 ${extracted[i].name} 이미지 생성 실패:`, e);
-        }
-      }
-    } catch (e: any) {
-      alert(`캐릭터 추출 실패: ${e.message}`);
-    } finally {
-      setIsExtractingCharacters(false);
-    }
-  }, [isExtractingCharacters]);
 
-  // 캐릭터 개별 이미지 재생성 핸들러
-  const handleRegenerateCharacter = useCallback(async (idx: number) => {
-    const char = characters[idx];
-    if (!char || regeneratingCharIdx !== null) return;
-    setRegeneratingCharIdx(idx);
-    setCharacters(prev => { const n = [...prev]; n[idx] = { ...n[idx], imageData: null }; return n; });
-    try {
-      const img = await generateCharacterImage(char);
-      setCharacters(prev => { const n = [...prev]; n[idx] = { ...n[idx], imageData: img }; return n; });
-    } catch (e: any) {
-      alert(`이미지 재생성 실패: ${e.message}`);
-    } finally {
-      setRegeneratingCharIdx(null);
-    }
-  }, [characters, regeneratingCharIdx]);
 
   // 프로젝트 불러오기 핸들러
   const handleLoadProject = (project: SavedProject) => {
@@ -684,7 +650,8 @@ const App: React.FC = () => {
     setCurrentTopic(project.topic);
     setStep(GenerationStep.COMPLETED);
     setProgressMessage(`"${project.name}" 프로젝트 불러옴`);
-    setViewMode('main'); // 메인 뷰로 전환
+    setViewMode('main');
+    setShowStoryboard(true); // 바로 스토리보드로 이동
   };
 
   // Gemini API 키 미설정 시 셋업 화면
@@ -694,7 +661,9 @@ const App: React.FC = () => {
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 space-y-6">
           <div className="text-center">
-            <div className="text-4xl mb-3">🔑</div>
+            <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-red-600 to-rose-600 flex items-center justify-center shadow-lg shadow-red-900/30">
+              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            </div>
             <h1 className="text-2xl font-black text-white">Heaven Studio</h1>
             <p className="text-slate-400 text-sm mt-2">시작하기 전에 Gemini API 키를 입력하세요</p>
           </div>
@@ -712,7 +681,7 @@ const App: React.FC = () => {
             </p>
           </div>
           <button
-            className="w-full py-3 bg-brand-600 hover:bg-brand-500 text-white font-black rounded-xl transition-colors"
+            className="w-full py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black rounded-xl transition-all shadow-lg shadow-red-900/30"
             onClick={() => {
               const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
               if (!input) { alert('API 키를 입력해주세요.'); return; }
@@ -733,46 +702,40 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
       <Header />
 
       {/* 네비게이션 탭 */}
-      <div className="border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-4 flex items-center gap-1">
+      <div className="border-b border-white/[0.07] bg-black/60 backdrop-blur-sm">
+        <div className="px-6 flex items-center gap-2 py-2">
           <button
             onClick={() => setViewMode('main')}
-            className={`px-4 py-3 text-sm font-bold transition-colors relative ${
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border ${
               viewMode === 'main'
-                ? 'text-brand-400'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
             }`}
           >
             스토리보드 생성
-            {viewMode === 'main' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
-            )}
           </button>
           <button
             onClick={() => setViewMode('gallery')}
-            className={`px-4 py-3 text-sm font-bold transition-colors relative flex items-center gap-2 ${
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-brand-400'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-slate-700 text-xs rounded-full">
+              <span className="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-xs rounded-full text-emerald-300 font-bold">
                 {savedProjects.length}
               </span>
             )}
-            {viewMode === 'gallery' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-500" />
-            )}
           </button>
           <div className="ml-auto">
-            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-sm font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700 flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               API 키
             </button>
           </div>
@@ -799,10 +762,24 @@ const App: React.FC = () => {
 
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
-      <main className="py-8">
+      <main className="py-2">
+        {/* 기존 스토리보드로 돌아가기 배너 */}
+        {generatedData.length > 0 && !showStoryboard && (
+          <div className="max-w-7xl mx-auto px-4 mb-6">
+            <button
+              onClick={() => setShowStoryboard(true)}
+              className="w-full flex items-center justify-between px-5 py-3 rounded-xl bg-brand-600/20 border border-brand-500/40 hover:bg-brand-600/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
+                <span className="text-sm font-bold text-brand-300">이전에 생성된 스토리보드가 있습니다 ({generatedData.length}개 씬)</span>
+              </div>
+              <span className="text-sm font-black text-brand-400">스토리보드 보기 →</span>
+            </button>
+          </div>
+        )}
         <InputSection
           onGenerate={handleGenerate}
-          onExtractCharacters={handleExtractCharacters}
           step={step}
           activeTab={inputActiveTab}
           onTabChange={setInputActiveTab}
@@ -812,89 +789,116 @@ const App: React.FC = () => {
           onThumbnailBaseImageChange={setThumbnailBaseImage}
         />
 
-        {/* 캐릭터 카드 */}
-        {(isExtractingCharacters || characters.length > 0) && (
-          <div className="max-w-7xl mx-auto px-4 mb-10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-black text-slate-200 flex items-center gap-2">
-                <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                등장인물
-                {isExtractingCharacters && <span className="text-xs text-violet-400 font-normal animate-pulse">이미지 생성 중...</span>}
-              </h2>
-              <button onClick={() => setCharacters([])} className="text-[10px] text-slate-500 hover:text-red-400 transition-colors">초기화</button>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {characters.map((char, i) => (
-                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
-                  <div className="aspect-square bg-slate-800 flex items-center justify-center relative">
-                    {char.imageData ? (
-                      <img src={`data:image/jpeg;base64,${char.imageData}`} alt={char.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent animate-spin rounded-full" />
-                    )}
-                  </div>
-                  <div className="p-3 flex flex-col gap-2">
-                    <p className="text-sm font-black text-white truncate">{char.name}</p>
-                    <textarea
-                      value={char.description}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCharacters((prev: CharacterInfo[]) => {
-                        const n = [...prev];
-                        n[i] = { ...n[i], description: e.target.value };
-                        return n;
-                      })}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-300 resize-none focus:outline-none focus:border-violet-500"
-                      rows={3}
-                    />
-                    <button
-                      onClick={() => handleRegenerateCharacter(i)}
-                      disabled={regeneratingCharIdx !== null}
-                      className="w-full py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1"
-                    >
-                      {regeneratingCharIdx === i ? (
-                        <><span className="w-3 h-3 border border-white border-t-transparent animate-spin rounded-full" /> 생성 중...</>
-                      ) : '🔄 이미지 재생성'}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         
-        {step !== GenerationStep.IDLE && (
+        {/* SCRIPT_READY 상태: 대본 완성 안내 */}
+        {step === GenerationStep.SCRIPT_READY && (
           <div className="max-w-7xl mx-auto px-4 text-center mb-6">
-             <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
-                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) ? (
-                  <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
-                ) : <div className={`w-2 h-2 rounded-full ${step === GenerationStep.ERROR ? 'bg-red-500' : step === GenerationStep.SCRIPT_READY ? 'bg-yellow-400' : 'bg-green-500'}`}></div>}
-                <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
-                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
-                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black uppercase tracking-widest border border-red-500/30">Stop</button>
-                )}
-                {/* 대본 완성: 아래 대본창에서 확인 후 스토리보드 생성 버튼 안내 */}
-                {step === GenerationStep.SCRIPT_READY && (
-                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
-                )}
-                {(step === GenerationStep.COMPLETED || step === GenerationStep.ERROR) && generatedData.length > 0 && (
-                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 hover:border-red-500/30 transition-colors">전체 리셋</button>
-                )}
-             </div>
+            <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
+              <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
+              <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
+              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
+            </div>
           </div>
-        )}
-
-        {generatedData.length > 0 && (
-          <ResultTable
-              data={generatedData}
-              onRegenerateImage={handleRegenerateImage}
-              onRegenerateWithPrompt={handleRegenerateWithPrompt}
-              onExportVideo={triggerVideoExport}
-              isExporting={isVideoGenerating}
-              animatingIndices={animatingIndices}
-              onGenerateAnimation={handleGenerateAnimation}
-              onSelectThumbnail={handleSelectThumbnail}
-          />
         )}
       </main>
+      )}
+
+      {/* 스토리보드 생성 화면 (새 창) */}
+      {showStoryboard && (
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col overflow-hidden">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 shrink-0">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-red-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
+              >
+                ← 메인으로
+              </button>
+              {/* 탭 */}
+              <div className="flex bg-slate-900 rounded-xl p-0.5 border border-slate-700/50">
+                <button onClick={() => setStoryboardTab('result')}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'result' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
+                  스토리보드
+                </button>
+                <button onClick={() => setStoryboardTab('subtitle')}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
+                  자막 편집
+                </button>
+                <button onClick={() => setStoryboardTab('thumbnail')}
+                  className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'thumbnail' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
+                  썸네일
+                </button>
+              </div>
+            </div>
+            {/* 상태 표시 */}
+            <div className="flex items-center gap-3">
+              {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
+                <>
+                  <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
+                  <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
+                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black border border-red-500/30">Stop</button>
+                </>
+              )}
+              {step === GenerationStep.COMPLETED && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">전체 리셋</button>
+                </>
+              )}
+              {step === GenerationStep.ERROR && (
+                <>
+                  <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                  <span className="text-sm font-bold text-red-400 hidden sm:block">{progressMessage}</span>
+                  <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 컨텐츠 */}
+          <div className="flex-1 overflow-hidden">
+            {generatedData.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
+                <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
+                <p className="text-sm">{progressMessage || '생성 준비 중...'}</p>
+              </div>
+            ) : storyboardTab === 'thumbnail' ? (
+              <ThumbnailEditor
+                scenes={generatedData}
+                topic={currentTopic}
+              />
+            ) : storyboardTab === 'subtitle' ? (
+              <SubtitleEditor
+                scenes={generatedData}
+                subConfig={subConfig}
+                onSubConfigChange={handleSubConfigChange}
+                onExportVideo={triggerVideoExport}
+                isExporting={isVideoGenerating}
+                onNarrationChange={(idx, val) => {
+                  const updated = [...generatedData];
+                  updated[idx] = { ...updated[idx], narration: val };
+                  assetsRef.current = updated;
+                  setGeneratedData(updated);
+                }}
+              />
+            ) : (
+              <div className="h-full overflow-y-auto py-6">
+                <ResultTable
+                  data={generatedData}
+                  onRegenerateImage={handleRegenerateImage}
+                  onRegenerateWithPrompt={handleRegenerateWithPrompt}
+                  onExportVideo={triggerVideoExport}
+                  isExporting={isVideoGenerating}
+                  animatingIndices={animatingIndices}
+                  onGenerateAnimation={handleGenerateAnimation}
+                  onSelectThumbnail={handleSelectThumbnail}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* API 키 설정 모달 */}
@@ -902,7 +906,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
           <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-white">🔑 API 키 설정</h2>
+              <h2 className="text-lg font-black text-white">API 키 설정</h2>
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
             </div>
             {[

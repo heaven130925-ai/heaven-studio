@@ -50,7 +50,26 @@ export const SYSTEM_INSTRUCTIONS = {
 - 같은 개념은 같은 모습으로 그려라
 `,
 
-  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`
+  REFERENCE_MATCH: `참조 이미지의 화풍을 따르되 졸라맨 규칙을 적용하라.`,
+
+  CHARACTER_CONSISTENT_DIRECTOR: `
+당신은 캐릭터 일관성 전문 스토리보드 작가입니다.
+사용자가 캐릭터 참조 이미지를 제공했습니다. 이 캐릭터의 외모는 참조 이미지로 고정됩니다.
+
+## 핵심 규칙
+- image_prompt_english에 캐릭터의 외모를 절대 묘사하지 말 것 (머리색, 눈색, 피부색, 체형, 나이, 성별 등 일체 금지)
+- 캐릭터가 등장하는 씬에서는 반드시 "THE CHARACTER" 로 표현할 것
+- 씬의 배경(location), 행동(action), 주변 사물(objects), 감정(mood), 조명(lighting)에만 집중할 것
+- 대본 내용 수정 금지, 씬 분할과 시각화만 수행
+- 문장 의미를 그대로 이미지화하되 캐릭터 외모 묘사는 모두 생략
+
+## 올바른 예시
+나레이션: "김지영은 조용한 카페에서 커피를 마시고 있었다"
+image_prompt_english: "THE CHARACTER sits at a small table in a quiet cozy café, holding a coffee cup, warm soft lighting, calm atmosphere, wooden interior"
+
+## 잘못된 예시 (금지)
+image_prompt_english: "A young woman with long black hair and fair skin sits at a café..." ← 외모 묘사 금지
+`
 };
 
 /**
@@ -59,7 +78,8 @@ export const SYSTEM_INSTRUCTIONS = {
 export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = false, artStylePrompt?: string, textMode: string = 'auto', aspectRatio: string = '16:9') => {
   const basePrompt = scene.visualPrompt || "";
   const analysis = scene.analysis || {};
-  const keywords = scene.visual_keywords || "";
+  // none 모드에서는 keywords 완전 무시 (텍스트 렌더링 유발 방지)
+  const keywords = textMode === 'none' ? '' : (scene.visual_keywords || "");
   const type = analysis.composition_type || "STANDARD";
   const sentiment = analysis.sentiment || "NEUTRAL";
 
@@ -90,8 +110,8 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
   let textRule = '';
 
   if (textMode === 'none') {
-    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: Do NOT include any text, letters, words, or numbers anywhere in the image.\n\n';
-    textRule = '🚫 ABSOLUTE FINAL OVERRIDE - ZERO TEXT: Do NOT render ANY text, letters, words, numbers, labels, captions, signs, or written characters of ANY kind in ANY language. IGNORE any text instructions above. Pure visual imagery only. No exceptions.';
+    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: ZERO TEXT IN IMAGE. Do NOT include any text, letters, words, numbers, signs, logos, labels, captions, or written characters anywhere in the image. Pure visual only.\n\n';
+    textRule = '🚫 ZERO TEXT FINAL OVERRIDE: No text of any kind. No Korean, no English, no numbers, no signs, no labels anywhere in this image.';
   } else if (textMode === 'english') {
     textPrefix = '⚠️ TEXT RESTRICTION: English/Latin characters only. Korean/Chinese/Japanese forbidden.\n\n';
     textRule = keywords
@@ -128,7 +148,8 @@ export const getScriptGenerationPrompt = (
   topic: string,
   sourceContext?: string | null,
   maxScenes?: number,
-  preSegmented?: boolean   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
+  preSegmented?: boolean,   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
+  hasCharacterRef?: boolean  // 캐릭터 참조 이미지 여부
 ) => {
   const isManual = !!sourceContext;
 
@@ -147,9 +168,24 @@ export const getScriptGenerationPrompt = (
 - 도입 → 전개 → 결말 구조로 구성
 - 같은 내용 반복 금지
 
-## 시각화
-- 각 씬의 나레이션 내용을 이미지로 시각화할 영문 프롬프트 작성
+## 시각화 (image_prompt_english 작성 규칙)
+나레이션 문장의 핵심 내용을 구체적으로 시각화하라. 반드시 아래 요소를 포함:
+- **WHO**: 누가 등장하는가 (사람→THE CHARACTER 또는 사물/개념)
+- **WHAT**: 무엇을 하고 있는가 (구체적 행동/상태)
+- **WHERE**: 어디에서 (구체적 장소/배경)
+- **KEY OBJECTS**: 씬에 반드시 있어야 할 핵심 사물
+- **MOOD/LIGHTING**: 분위기, 조명
+- 나레이션에 나온 고유명사(삼성, NVIDIA, 서울 등)는 반드시 영문 프롬프트에 포함
 - 주어가 사람/인격체 → STANDARD, 주어가 사물/자연/추상 → NO_CHAR
+- 추상 개념(경제, 시장, 성장 등) → 그래프, 화살표, 상징적 오브젝트로 표현
+${hasCharacterRef ? `
+## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이/성별 등)
+- 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
+- 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
+- 올바른 예: "THE CHARACTER stands in front of a large whiteboard presenting charts, modern office, bright lighting"
+- 잘못된 예: "A young woman with black hair stands..." ← 외모 묘사 절대 금지
+` : ''}
 
 ## 브랜드/고유명사
 - 한국어 고유명사 → 한국어 그대로, 외국어 → 원어 그대로
@@ -195,24 +231,55 @@ export const getScriptGenerationPrompt = (
   return `
 # Task: 대본 → 스토리보드 변환 (주제: "${topic}")
 
-## 씬 분할 규칙
+## ━━ STEP 1: 대본 완전 분석 (DEEP READ) ━━
+아래 [입력 대본]을 스토리보드로 변환하기 전에 반드시 전체 내용을 완벽하게 파악하라.
+분석 시 다음을 파악해야 한다:
+- **핵심 주제**: 이 대본이 전달하고자 하는 중심 메시지는 무엇인가?
+- **등장인물/주체**: 대본에 나오는 사람, 기업, 사물, 개념의 목록
+- **서사 흐름**: 도입 → 전개 → 결말의 흐름과 각 문장의 역할
+- **감정/톤**: 각 문장의 감정 (긍정/부정/중립)과 강도
+- **고유명사**: 브랜드, 인명, 지명, 수치 등 반드시 이미지에 반영해야 할 요소
+- **수식어/강조**: "거대한", "충격적인", "최초로" 등 시각적으로 강조해야 할 표현
+
+이 분석을 바탕으로 각 씬의 시각화가 대본 내용과 100% 일치하도록 보장하라.
+대본 내용을 파악하지 못한 채 generic한 이미지를 생성하는 것은 절대 금지.
+
+## ━━ STEP 2: 씬 분할 ━━
 ${sceneCountRule}
 - 같은 내용 반복 금지
-- ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (수정 금지)
+- ⚠️ narration 필드: 입력된 대본 문장을 그대로 복사 (수정/요약/변형 절대 금지)
 - "나레이션"이라는 단어를 절대 출력하지 말 것
 
-## 시각화
-- 문장 의미를 그대로 이미지화
-- 수식어 반영 ("거대한"→크게)
+## ━━ STEP 3: 시각화 (image_prompt_english) ━━
+각 씬의 나레이션 문장을 깊이 이해한 뒤 영문 이미지 프롬프트를 작성하라.
+반드시 아래 5가지 요소를 포함:
+- **WHO**: 누가 등장하는가 (사람 → "THE CHARACTER" 또는 구체적 사물/브랜드명)
+- **WHAT**: 구체적으로 무엇을 하고 있는가 (행동/상태를 동사로 명확히)
+- **WHERE**: 구체적 장소/배경 (추상적 설명 금지 — "office" 대신 "glass-walled boardroom")
+- **KEY OBJECTS**: 나레이션에 언급된 핵심 사물/브랜드/수치를 반드시 포함
+- **MOOD/LIGHTING**: 분위기와 조명 (나레이션의 감정 톤을 시각적으로 반영)
+
+추가 규칙:
+- 수식어를 시각에 반영 ("거대한"→크게, "어두운"→dark dramatic lighting, "충격적"→sharp contrast)
+- 고유명사(삼성, NVIDIA, 미국 연준 등)는 반드시 이미지 프롬프트에 포함
+- 추상 개념(경제 성장, 인플레이션 등) → 구체적 그래프, 화살표, 숫자 게이지로 표현
+- 주어가 사람/인격체 → STANDARD, 주어가 사물/자연현상/수치/시스템 → NO_CHAR
 
 ## 브랜드/고유명사
 - 한국어 고유명사 → 한국어 그대로, 외국어 고유명사 → 원어 그대로
 
 ## 캐릭터
 - 주어가 사람/인격체 → STANDARD
-- 주어가 사물/자연현상/추상개념 → NO_CHAR
-
-[수동 대본] 원문 수정 금지, 씬 분할과 시각화만 수행
+- 주어가 사물/자연현상/추상개념/수치/시스템 → NO_CHAR
+${hasCharacterRef ? `
+## ⚠️ 캐릭터 참조 이미지 모드 (CRITICAL)
+- image_prompt_english에 캐릭터 외모를 절대 묘사 금지 (머리색/눈색/피부/체형/나이/성별 등)
+- 사람이 등장하는 씬: 반드시 "THE CHARACTER" 로만 표현
+- 씬의 배경, 행동, 사물, 분위기, 조명에만 집중
+- 올바른 예: "THE CHARACTER walks through a crowded market at sunset, carrying a shopping bag, warm golden lighting, bustling stalls around"
+- 잘못된 예: "A young woman with dark hair..." ← 외모 묘사 절대 금지
+` : ''}
+[수동 대본] 원문 수정 금지. STEP 1 분석 → STEP 2 씬 분할 → STEP 3 시각화 순서로 처리.
 
 [입력 대본]
 ${content}
@@ -227,12 +294,14 @@ ${content}
       "sentiment": "POSITIVE 또는 NEGATIVE 또는 NEUTRAL 중 하나",
       "composition_type": "MICRO 또는 STANDARD 또는 MACRO 또는 NO_CHAR 중 하나"
     },
-    "image_prompt_english": "씬을 묘사하는 영문 프롬프트"
+    "image_prompt_english": "씬을 묘사하는 구체적이고 상세한 영문 프롬프트 (최소 30단어 이상)"
   }]
 }
 
-### 중요 ###
-- narration: 입력 텍스트의 각 문장을 그대로 사용할 것!
-- "나레이션"이라는 단어를 절대 출력하지 말 것
+### 최종 체크리스트 ###
+- narration: 입력 텍스트의 각 문장을 그대로 사용 (수정 절대 금지)
+- image_prompt_english: 나레이션 내용과 100% 일치하는 구체적 시각 묘사
+- 고유명사/브랜드/수치 누락 금지
+- "나레이션"이라는 단어 절대 출력 금지
 `;
 };
