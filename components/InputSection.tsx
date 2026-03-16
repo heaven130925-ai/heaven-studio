@@ -425,11 +425,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   수동 대본
                 </button>
               </div>
@@ -437,14 +437,14 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
                 {activeTab === 'auto' ? (
-                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden">
+                  <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden">
                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} disabled={isProcessing}
                       placeholder="주제를 입력하세요 (예: 예수님 탄생, 우주의 신비, 한국의 역사...)"
                       className="block w-full bg-transparent text-white py-5 px-6 focus:ring-0 focus:outline-none placeholder-white/20 text-lg disabled:opacity-50" />
                     <div className="px-6 pb-4 text-sm text-white/25">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
                   </div>
                 ) : (
-                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0">
+                  <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0">
                     <textarea value={manualScript} onChange={(e) => onManualScriptChange(e.target.value)} disabled={isProcessing}
                       placeholder={"여기에 대본을 붙여넣거나 직접 작성하세요.\n\n예)\n나레이션 1: 옛날 옛적...\n나레이션 2: ..."}
                       className="flex-1 bg-transparent text-white p-6 focus:ring-0 focus:outline-none placeholder-white/20 resize-none text-base" />
@@ -459,7 +459,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 씬 수 + 영상 포맷 */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* 씬 수 */}
-                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
                     <p className="text-base font-bold text-white/60 mb-2">씬 수</p>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={500}
@@ -472,15 +472,15 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   </div>
 
                   {/* 영상 포맷 */}
-                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
                     <p className="text-base font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
                         롱폼 16:9
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-emerald-600/20 border border-emerald-500/50 text-emerald-200 shadow-[0_0_10px_rgba(52,211,153,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1] border border-transparent'}`}>
                         숏폼 9:16
                       </button>
                     </div>
@@ -497,7 +497,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 참조 이미지 (캐릭터 + 화풍) */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* 캐릭터 */}
-                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
                     <p className="text-base font-bold text-slate-200 mb-1">캐릭터 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
@@ -522,7 +522,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   </div>
 
                   {/* 화풍 */}
-                  <div className="bg-white/[0.02] border border-emerald-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
                     <p className="text-base font-bold text-slate-200 mb-1">화풍 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
@@ -560,7 +560,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 </div>
 
                 <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-emerald-500/50 hover:border-emerald-400/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] hover:shadow-[0_0_28px_rgba(16,185,129,0.4)] disabled:shadow-none">
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-blue-500/50 hover:border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.25)] hover:shadow-[0_0_28px_rgba(59,130,246,0.4)] disabled:shadow-none">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
                   이미지만 생성
                 </button>
@@ -659,12 +659,12 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     </div>
 
                     {/* 이미지 글씨 */}
-                    <div className="p-3 rounded-xl border border-emerald-500/60 shadow-[0_0_14px_rgba(52,211,153,0.3)]">
+                    <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 글씨</p>
                       <div className="grid grid-cols-4 gap-1.5">
                         {([{ id: 'none', label: '없음' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
                           <button key={id} type="button" onClick={() => selectImageTextMode(id)}
-                            className={`py-2 rounded-xl text-sm font-bold transition-colors ${imageTextMode === id ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                            className={`py-2 rounded-xl text-sm font-bold transition-colors border ${imageTextMode === id ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                             {label}
                           </button>
                         ))}
@@ -730,12 +730,12 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {activePanel === 'voice' && (
                   <div className="space-y-5">
                     {/* 말하기 속도 */}
-                    <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
+                    <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                       <div className="flex gap-2">
                         {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
                           <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
-                            className={`flex-1 py-2 rounded-xl text-sm font-bold ${voiceSpeed === val ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                            className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                             {label}
                           </button>
                         ))}
@@ -762,7 +762,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             <div className="flex items-center gap-2">
                               {([null, 'male', 'female'] as const).map((g) => (
                                 <button key={String(g)} type="button" onClick={() => setGenderFilter(g)}
-                                  className={`px-3 py-1 rounded-lg text-sm font-bold ${genderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white' : g === 'female' ? 'bg-pink-600 text-white' : 'bg-slate-600 text-white') : 'bg-slate-800 text-slate-400'}`}>
+                                  className={`px-3 py-1 rounded-lg text-sm font-bold border ${genderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white border-blue-400' : g === 'female' ? 'bg-pink-600 text-white border-pink-400' : 'bg-slate-600 text-white border-slate-400') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
                                   {g === null ? '전체' : g === 'male' ? '남성' : '여성'}
                                 </button>
                               ))}
@@ -772,7 +772,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 전체 표시 */}
-                            <div className="bg-black/40 border border-emerald-500/25 rounded-xl shadow-[0_0_8px_rgba(52,211,153,0.08)]">
+                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)]">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -803,7 +803,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               ))}
                             </div>
                             {/* 톤 프리셋 */}
-                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
+                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
                               <div className="grid grid-cols-4 gap-1.5">
                                 {([
@@ -828,7 +828,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </div>
 
                             {/* 안정성/스타일 슬라이더 */}
-                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)] space-y-2">
+                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)] space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
                                 <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
@@ -841,7 +841,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </div>
                             </div>
                             {/* 분위기 프리셋 */}
-                            <div className="p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.15)]">
+                            <div className="p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {([
@@ -881,12 +881,81 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         <div className="flex gap-2">
                           {([null, 'male', 'female'] as const).map(g => (
                             <button key={String(g)} type="button" onClick={() => setGeminiTtsGenderFilter(g)}
-                              className={`px-3 py-1 rounded-lg text-sm font-bold ${geminiTtsGenderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white' : g === 'female' ? 'bg-pink-600 text-white' : 'bg-teal-600 text-white') : 'bg-slate-800 text-slate-400'}`}>
+                              className={`px-3 py-1 rounded-lg text-sm font-bold border ${geminiTtsGenderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white border-blue-400' : g === 'female' ? 'bg-pink-600 text-white border-pink-400' : 'bg-teal-600 text-white border-teal-400') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
                               {g === null ? '전체' : g === 'male' ? '남성' : '여성'}
                             </button>
                           ))}
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5 p-3 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(52,211,153,0.12)]">
+                        {/* 톤 프리셋 */}
+                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {([
+                              { id: '낮은목소리', label: '낮은 톤', stability: 85, style: 5 },
+                              { id: '차분한', label: '차분한', stability: 70, style: 10 },
+                              { id: '밝은목소리', label: '밝은 톤', stability: 45, style: 45 },
+                              { id: '활기찬', label: '활기찬', stability: 20, style: 75 },
+                            ] as { id: string; label: string; stability: number; style: number }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                setVoiceMood(m.id);
+                                setVoiceStability(m.stability);
+                                setVoiceStyle(m.style);
+                                localStorage.setItem('heaven_voice_mood', m.id);
+                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)] border-teal-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* 안정성/스타일 슬라이더 */}
+                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)] space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-400 w-14">안정성</span>
+                            <input type="range" min={0} max={100} value={voiceStability} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-teal-500" />
+                            <span className="text-sm text-teal-400 w-8 text-right">{voiceStability}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-slate-400 w-14">스타일</span>
+                            <input type="range" min={0} max={100} value={voiceStyle} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-teal-500" />
+                            <span className="text-sm text-teal-400 w-8 text-right">{voiceStyle}</span>
+                          </div>
+                        </div>
+                        {/* 분위기 프리셋 */}
+                        <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {([
+                              { id: '친근하게', stability: 35, style: 55 },
+                              { id: '따뜻하게', stability: 55, style: 35 },
+                              { id: '뉴스형식', stability: 82, style: 8 },
+                              { id: '부드럽게', stability: 70, style: 20 },
+                              { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
+                              { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
+                              { id: '전라도사투리', label: '전라도 사투리', stability: 30, style: 70 },
+                              { id: '경상도사투리', label: '경상도 사투리', stability: 25, style: 80 },
+                            ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                setVoiceMood(m.id);
+                                setVoiceStability(m.stability);
+                                setVoiceStyle(m.style);
+                                localStorage.setItem('heaven_voice_mood', m.id);
+                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)] border-teal-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                {m.label || m.id}
+                              </button>
+                            ))}
+                          </div>
+                          {voiceMood && (
+                            <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }}
+                              className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)]">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_8px_rgba(20,184,166,0.3)]' : 'border-slate-700/50 hover:border-teal-500/40'}`}
                               onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
@@ -1010,13 +1079,13 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     )}
 
                     {/* AI 생성 섹션 */}
-                    <div className="p-3 rounded-xl border border-emerald-500/20 shadow-[0_0_8px_rgba(52,211,153,0.06)]">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">AI 썸네일 생성</p>
+                    <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+                      <p className="text-xs font-bold text-blue-300 uppercase tracking-wider mb-3">AI 썸네일 생성</p>
                       <button
                         type="button"
                         onClick={handleGenerateThumbnail}
                         disabled={isProcessing || isThumbnailGenerating}
-                        className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white font-bold rounded-xl transition-all text-sm border border-slate-600"
+                        className="w-full py-2.5 bg-blue-600/20 hover:bg-blue-600/35 disabled:opacity-40 text-blue-200 font-bold rounded-xl transition-all text-sm border border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.25)]"
                       >
                         {isThumbnailGenerating ? '생성 중...' : 'AI로 썸네일 이미지 생성'}
                       </button>

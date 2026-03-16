@@ -255,8 +255,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
       decoded = buf;
     }
-    // MP3 인코더 지연으로 끝이 잘리는 현상 방지 — 0.6s 무음 패딩 추가
-    const PAD = 0.6;
+    // MP3 인코더 지연으로 끝이 잘리는 현상 방지 — 무음 패딩 추가
+    const PAD = 1.5;
     const sr = decoded.sampleRate;
     const padSamples = Math.ceil(sr * PAD);
     const padded = ctx.createBuffer(decoded.numberOfChannels, decoded.length + padSamples, sr);
@@ -428,10 +428,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const atTop    = zoom > 1 && pan.y >= maxPanY - snapThreshold;
   const atBottom = zoom > 1 && pan.y <= -(maxPanY - snapThreshold);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom(z => Math.min(3, Math.max(0.3, z - e.deltaY * 0.001)));
-  }, []);
   const handleMouseDown = (e: React.MouseEvent) => {
     dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
     setIsDragging(true);
@@ -456,21 +452,25 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     <div className="flex h-full overflow-hidden justify-center bg-slate-950">
     <div className="flex h-full overflow-hidden min-w-0" style={{ width: '100%', maxWidth: '1600px', margin: '0 auto' }}>
       {/* ─── 왼쪽 ─── */}
-      <div className="flex flex-col w-[60%] border-r border-white/[0.07] overflow-y-auto">
+      <div className="flex flex-col w-[38%] border-r border-white/[0.07] overflow-y-auto">
 
-        {/* 줌 컨트롤 바 */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-white/[0.07] shrink-0">
-          <button onClick={() => { setZoom(1.0); setPan({ x: 0, y: 0 }); }}
-            className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
-            RESET
-          </button>
-          <button onClick={() => setZoom(z => Math.max(0.3, +(z - 0.01).toFixed(3)))}
-            className="w-9 h-9 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-2xl font-bold transition-colors">−</button>
-          <span className="text-base text-slate-200 font-mono w-16 text-center font-bold">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(3, +(z + 0.01).toFixed(3)))}
-            className="w-9 h-9 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-2xl font-bold transition-colors">+</button>
-          <span className="text-[10px] text-slate-500 ml-1">휠로 줌 · 드래그로 이동 · Space 재생</span>
-          <div className="ml-auto flex gap-1.5 flex-wrap justify-end">
+        {/* 헤더 영역 */}
+        <div className="bg-slate-900 border-b border-white/[0.07] shrink-0">
+          {/* 줌 컨트롤 행 */}
+          <div className="flex items-center gap-2 px-3 pt-2 pb-1">
+            <button onClick={() => { setZoom(1.0); setPan({ x: 0, y: 0 }); }}
+              className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
+              RESET
+            </button>
+            <button onClick={() => setZoom(z => Math.max(0.3, +(z - 0.01).toFixed(3)))}
+              className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">−</button>
+            <span className="text-sm text-slate-200 font-mono w-14 text-center font-bold">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(z => Math.min(3, +(z + 0.01).toFixed(3)))}
+              className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">+</button>
+            <span className="text-[10px] text-slate-500 ml-1">드래그로 이동 · Space 재생</span>
+          </div>
+          {/* 저장 버튼 행 */}
+          <div className="flex gap-1.5 px-3 pb-1.5">
             {[
               { label: '전체 저장', onClick: () => downloadProjectZip(scenes) },
               { label: '이미지+음성', onClick: () => downloadMediaZip(scenes) },
@@ -478,28 +478,31 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               { label: 'SRT', onClick: async () => await downloadSrt(scenes, `subtitles_${Date.now()}.srt`) },
             ].map(btn => (
               <button key={btn.label} onClick={btn.onClick}
-                className="px-3 py-1.5 rounded-lg bg-blue-600/20 border border-blue-500/50 text-blue-200 font-bold text-[10px] hover:bg-blue-600/35 hover:border-blue-400/70 transition-all shadow-[0_0_8px_rgba(59,130,246,0.25)] flex items-center gap-1">
+                className="flex-1 py-2 rounded-lg bg-blue-600/20 border border-blue-500/60 text-blue-200 font-bold text-xs hover:bg-blue-600/35 hover:border-blue-400/80 transition-all shadow-[0_0_10px_rgba(59,130,246,0.3)]">
                 {btn.label}
               </button>
             ))}
-            {onExportVideo && (<>
+          </div>
+          {/* 내보내기 버튼 행 */}
+          {onExportVideo && (
+            <div className="flex gap-1.5 px-3 pb-2">
               <button onClick={() => onExportVideo(false)} disabled={isExporting}
-                className="px-4 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-[10px] font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
-                자막 없이
+                className="flex-1 py-2.5 rounded-lg bg-red-600/25 border border-red-500/60 hover:bg-red-600/40 text-red-200 text-sm font-black transition-all disabled:opacity-40 shadow-[0_0_14px_rgba(239,68,68,0.35)]">
+                자막 없이 내보내기
               </button>
               <button onClick={() => onExportVideo(true)} disabled={isExporting}
-                className="px-4 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-[10px] font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
-                {isExporting ? '렌더링 중...' : '자막 포함'}
+                className="flex-1 py-2.5 rounded-lg bg-red-600/25 border border-red-500/60 hover:bg-red-600/40 text-red-200 text-sm font-black transition-all disabled:opacity-40 shadow-[0_0_14px_rgba(239,68,68,0.35)]">
+                {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
-            </>)}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
           className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
           style={{ aspectRatio: '16/9', width: '100%', flexShrink: 0 }}
-          onWheel={handleWheel} onMouseDown={handleMouseDown}
+          onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
           <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
@@ -674,8 +677,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                   { label: '불투명', val: 'rgba(0,0,0,0.9)' },
                 ].map(o => (
                   <button key={o.val} onClick={() => set({ backgroundColor: o.val })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)] border-blue-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {o.label}
                   </button>
@@ -687,8 +690,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               <div className="flex gap-1.5">
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button key={a} onClick={() => set({ textAlign: a })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)] border-blue-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {a === 'left' ? '좌' : a === 'center' ? '중' : '우'}
                   </button>
