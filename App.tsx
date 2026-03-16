@@ -715,8 +715,8 @@ const App: React.FC = () => {
             onClick={() => setViewMode('main')}
             className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border ${
               viewMode === 'main'
-                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
-                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
+                ? 'text-blue-200 bg-blue-600/20 border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-blue-500/40 hover:bg-blue-600/10'
             }`}
           >
             스토리보드 생성
@@ -725,13 +725,13 @@ const App: React.FC = () => {
             onClick={() => setViewMode('gallery')}
             className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
-                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
+                ? 'text-blue-200 bg-blue-600/20 border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-blue-500/40 hover:bg-blue-600/10'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-xs rounded-full text-emerald-300 font-bold">
+              <span className="px-1.5 py-0.5 bg-blue-500/20 border border-blue-500/30 text-xs rounded-full text-blue-300 font-bold">
                 {savedProjects.length}
               </span>
             )}

@@ -359,13 +359,13 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
             <div className="grid grid-cols-3 gap-2">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative p-3 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] text-left ${
+                  className={`relative p-2 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
                     visualStyleId === style.id
                       ? 'border-red-400/80 bg-red-900/30 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
                       : 'border-white/[0.1] bg-slate-800/70 hover:border-white/30 hover:bg-slate-700/70'
                   }`}>
                   <p className="text-sm font-black text-white leading-tight">{style.name}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 font-bold tracking-wider">{STYLE_EN[style.id] || ''}</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5 font-bold tracking-wider">{STYLE_EN[style.id] || ''}</p>
                   {visualStyleId === style.id && (
                     <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
                       <CheckIcon />
@@ -664,7 +664,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                       <div className="grid grid-cols-4 gap-1.5">
                         {([{ id: 'none', label: '없음' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
                           <button key={id} type="button" onClick={() => selectImageTextMode(id)}
-                            className={`py-2 rounded-xl text-sm font-bold transition-colors border ${imageTextMode === id ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
+                            className={`py-2 rounded-xl text-sm font-bold transition-colors border ${imageTextMode === id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                             {label}
                           </button>
                         ))}
@@ -735,7 +735,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                       <div className="flex gap-2">
                         {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
                           <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
-                            className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
+                            className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                             {label}
                           </button>
                         ))}
@@ -745,12 +745,12 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     {/* TTS 제공자 탭 */}
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 ${voiceSubTab === 'google' ? 'bg-teal-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.35)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Google TTS
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
                       </button>
                       <button type="button" onClick={() => { setVoiceSubTab('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'elevenlabs'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.35)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         ElevenLabs
                         <span className={`w-1.5 h-1.5 rounded-full ${elApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
@@ -762,7 +762,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             <div className="flex items-center gap-2">
                               {([null, 'male', 'female'] as const).map((g) => (
                                 <button key={String(g)} type="button" onClick={() => setGenderFilter(g)}
-                                  className={`px-3 py-1 rounded-lg text-sm font-bold border ${genderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white border-blue-400' : g === 'female' ? 'bg-pink-600 text-white border-pink-400' : 'bg-slate-600 text-white border-slate-400') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
+                                  className={`px-3 py-1 rounded-lg text-sm font-bold border ${genderFilter === g ? (g === 'male' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : g === 'female' ? 'bg-pink-600/20 text-pink-200 border-pink-500/60 shadow-[0_0_8px_rgba(236,72,153,0.3)]' : 'bg-slate-600/20 text-slate-200 border-slate-400/60') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
                                   {g === null ? '전체' : g === 'male' ? '남성' : '여성'}
                                 </button>
                               ))}
@@ -772,7 +772,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 전체 표시 */}
-                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)]">
+                            <div className="bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)] max-h-48 overflow-y-auto">
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -820,7 +820,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                                   }}
-                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors ${voiceMood === m.id ? 'bg-purple-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                     {m.label}
                                   </button>
                                 ))}
@@ -862,7 +862,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                     localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                                   }}
-                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors ${voiceMood === m.id ? 'bg-purple-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                     {m.label || m.id}
                                   </button>
                                 ))}
@@ -881,7 +881,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         <div className="flex gap-2">
                           {([null, 'male', 'female'] as const).map(g => (
                             <button key={String(g)} type="button" onClick={() => setGeminiTtsGenderFilter(g)}
-                              className={`px-3 py-1 rounded-lg text-sm font-bold border ${geminiTtsGenderFilter === g ? (g === 'male' ? 'bg-blue-600 text-white border-blue-400' : g === 'female' ? 'bg-pink-600 text-white border-pink-400' : 'bg-teal-600 text-white border-teal-400') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
+                              className={`px-3 py-1 rounded-lg text-sm font-bold border ${geminiTtsGenderFilter === g ? (g === 'male' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_8px_rgba(59,130,246,0.3)]' : g === 'female' ? 'bg-pink-600/20 text-pink-200 border-pink-500/60 shadow-[0_0_8px_rgba(236,72,153,0.3)]' : 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_8px_rgba(20,184,166,0.3)]') : 'bg-slate-800 text-slate-400 border-blue-500/30'}`}>
                               {g === null ? '전체' : g === 'male' ? '남성' : '여성'}
                             </button>
                           ))}
@@ -904,7 +904,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                 localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                               }}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)] border-teal-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label}
                               </button>
                             ))}
@@ -945,7 +945,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                 localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                               }}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)] border-teal-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label || m.id}
                               </button>
                             ))}

@@ -452,7 +452,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     <div className="flex h-full overflow-hidden justify-center bg-slate-950">
     <div className="flex h-full overflow-hidden min-w-0" style={{ width: '100%', maxWidth: '1600px', margin: '0 auto' }}>
       {/* ─── 왼쪽 ─── */}
-      <div className="flex flex-col w-[38%] border-r border-white/[0.07] overflow-y-auto">
+      <div className="flex flex-col w-[66%] border-r border-white/[0.07] overflow-y-auto">
 
         {/* 헤더 영역 */}
         <div className="bg-slate-900 border-b border-white/[0.07] shrink-0">
@@ -603,7 +603,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 <button key={f.value}
                   onClick={() => set({ fontFamily: f.value, fontWeight: f.weight })}
                   className={`py-2.5 px-2 rounded-lg text-sm font-bold transition-colors text-center border ${
-                    subConfig.fontFamily === f.value ? 'bg-blue-600 text-white border-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-slate-800 text-slate-200 border-blue-500/30 hover:bg-slate-700 hover:border-blue-400/50'
+                    subConfig.fontFamily === f.value ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-200 border-blue-500/30 hover:bg-slate-700 hover:border-blue-400/50'
                   }`}
                   style={{ fontFamily: f.value }}
                 >
@@ -678,7 +678,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 ].map(o => (
                   <button key={o.val} onClick={() => set({ backgroundColor: o.val })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)] border-blue-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
+                      subConfig.backgroundColor === o.val ? 'bg-blue-600/20 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.4)] border-blue-500/60' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {o.label}
                   </button>
@@ -691,7 +691,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button key={a} onClick={() => set({ textAlign: a })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
-                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)] border-blue-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
+                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600/20 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.4)] border-blue-500/60' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {a === 'left' ? '좌' : a === 'center' ? '중' : '우'}
                   </button>
@@ -752,7 +752,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 : 'hover:bg-slate-800/60 border border-transparent'
             }`}
           >
-            <div className="w-28 h-16 rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">
+            <div className="w-32 h-[72px] rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">
               {s.imageData
                 ? <img src={`data:image/jpeg;base64,${s.imageData}`} className="w-full h-full object-cover" alt="" />
                 : <div className="w-4 h-4 border border-slate-600 border-t-transparent animate-spin rounded-full" />
