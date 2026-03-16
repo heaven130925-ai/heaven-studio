@@ -126,10 +126,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
+  const [useMeaningChunks, setUseMeaningChunks] = useState(false);
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
   const hasAudio = !!(scene?.audioData);
+  const meaningChunks = scene?.subtitleData?.meaningChunks;
+  const hasMeaningChunks = !!(meaningChunks && meaningChunks.length > 0);
 
   // ── 단어 타임스탬프 → 디스플레이 그룹 (ElevenLabs words 기반, 드리프트 없음) ──
   const wordGroups = useMemo(() => {
@@ -159,9 +162,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   }, [scene?.subtitleData?.words, subConfig.maxCharsPerChunk]);
 
   // ── 자막 텍스트 계산 ──
-  // 1순위: ElevenLabs words 기반 그룹 (실제 타임스탬프, 드리프트 없음)
-  // 2순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
+  // 1순위: AI 의미 단위 (meaningChunks)
+  // 2순위: ElevenLabs words 기반 그룹 (실제 타임스탬프, 드리프트 없음)
+  // 3순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
   const getSubtitleText = useCallback((t: number): string => {
+    if (useMeaningChunks && meaningChunks && meaningChunks.length > 0) {
+      if (t < meaningChunks[0].startTime) return meaningChunks[0].text;
+      const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => t >= chunk.startTime && t < chunk.endTime);
+      return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
+    }
     if (wordGroups && wordGroups.length > 0) {
       if (t < wordGroups[0].startTime) return wordGroups[0].text;
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
@@ -202,22 +211,32 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     img.src = `data:image/jpeg;base64,${scene.imageData}`;
   }, [scene?.imageData]); // eslint-disable-line
 
-  // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) ──
-  async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<AudioBuffer> {
+  // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) — 끝 0.6s 패딩 추가 ──
+  async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
     const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
     const binary = atob(b64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    let decoded: AudioBuffer;
     try {
-      return await ctx.decodeAudioData(bytes.buffer.slice(0));
+      decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
     } catch {
       // Gemini TTS PCM16 24kHz
       const pcm = new Int16Array(bytes.buffer);
       const buf = ctx.createBuffer(1, pcm.length, 24000);
       const ch = buf.getChannelData(0);
       for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
-      return buf;
+      decoded = buf;
     }
+    // MP3 인코더 지연으로 끝이 잘리는 현상 방지 — 0.6s 무음 패딩 추가
+    const PAD = 0.6;
+    const sr = decoded.sampleRate;
+    const padSamples = Math.ceil(sr * PAD);
+    const padded = ctx.createBuffer(decoded.numberOfChannels, decoded.length + padSamples, sr);
+    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+      padded.getChannelData(ch).set(decoded.getChannelData(ch), 0);
+    }
+    return { buffer: padded, contentDuration: decoded.duration };
   }
 
   // ── stopAudio: 완전 중지 + 위치 초기화 ──
@@ -270,9 +289,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       if (ctx.state === 'suspended') await ctx.resume();
       setIsPlaying(true);
 
-      const buffer = await decodeAudioBuffer(scene.audioData, ctx);
-      durationRef.current = buffer.duration;
-      const offset = Math.min(pausedAtRef.current, Math.max(0, buffer.duration - 0.05));
+      const { buffer, contentDuration } = await decodeAudioBuffer(scene.audioData, ctx);
+      durationRef.current = contentDuration;
+      const offset = Math.min(pausedAtRef.current, Math.max(0, contentDuration - 0.05));
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -384,20 +403,20 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             className="text-[10px] text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 transition-colors font-mono">
             RESET
           </button>
-          <button onClick={() => setZoom(z => Math.min(3, +(z + 0.01).toFixed(3)))}
-            className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">+</button>
-          <span className="text-sm text-slate-200 font-mono w-14 text-center font-bold">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom(z => Math.max(0.3, +(z - 0.01).toFixed(3)))}
-            className="w-8 h-8 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xl font-bold transition-colors">−</button>
+            className="w-9 h-9 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-2xl font-bold transition-colors">−</button>
+          <span className="text-base text-slate-200 font-mono w-16 text-center font-bold">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.min(3, +(z + 0.01).toFixed(3)))}
+            className="w-9 h-9 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-2xl font-bold transition-colors">+</button>
           <span className="text-[10px] text-slate-500 ml-1">휠로 줌 · 드래그로 이동 · Space 재생</span>
           {onExportVideo && (
             <div className="ml-auto flex gap-1.5">
               <button onClick={() => onExportVideo(false)} disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-xs font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
+                className="px-5 py-2 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-sm font-bold transition-all disabled:opacity-40 shadow-[0_0_14px_rgba(239,68,68,0.35)]">
                 자막 없이 내보내기
               </button>
               <button onClick={() => onExportVideo(true)} disabled={isExporting}
-                className="px-3 py-1.5 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-xs font-bold transition-all disabled:opacity-40 shadow-[0_0_10px_rgba(239,68,68,0.25)]">
+                className="px-5 py-2 rounded-lg bg-red-600/20 border border-red-500/50 hover:bg-red-600/35 text-red-200 text-sm font-bold transition-all disabled:opacity-40 shadow-[0_0_14px_rgba(239,68,68,0.35)]">
                 {isExporting ? '렌더링 중...' : '자막 포함 내보내기'}
               </button>
             </div>
@@ -450,7 +469,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           <button
             onClick={togglePlay}
             disabled={!hasAudio}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all shrink-0 ${
+            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
               hasAudio
                 ? isPlaying
                   ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]'
@@ -458,7 +477,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
-            {isPlaying ? '■' : '▶'}
+            {isPlaying
+              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
+              : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
+            }
           </button>
           <div className="flex-1 relative h-2 bg-slate-700 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full"
@@ -607,6 +629,25 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             <input type="range" min={5} max={30} step={1}
               value={subConfig.maxCharsPerChunk ?? 15} onChange={e => set({ maxCharsPerChunk: +e.target.value })}
               className="w-full accent-blue-500" />
+          </div>
+
+          {/* AI 의미 단위 자막 */}
+          <div>
+            <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">
+              AI 의미 단위 자막
+              {!hasMeaningChunks && <span className="ml-1 text-slate-600 normal-case font-normal">(TTS 생성 후 활성화)</span>}
+            </label>
+            <button
+              onClick={() => setUseMeaningChunks(v => !v)}
+              disabled={!hasMeaningChunks}
+              className={`w-full py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                useMeaningChunks
+                  ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(59,130,246,0.4)]'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {useMeaningChunks ? 'AI 의미 단위 ON' : '글자수 기준 (AI 의미 단위 OFF)'}
+            </button>
           </div>
         </div>
       </div>

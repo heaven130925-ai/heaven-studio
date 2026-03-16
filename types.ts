@@ -96,6 +96,7 @@ export interface SubtitleConfig {
   position: 'top' | 'middle' | 'bottom';  // 자막 위치 (하위호환)
   yPercent?: number;  // 수직 위치 0(상단)~100(하단), position보다 우선
   maxCharsPerChunk?: number;  // 자막 청크당 최대 글자 수 (기본 15, 숏폼은 10 권장)
+  textAlign?: 'left' | 'center' | 'right';  // 텍스트 정렬
 }
 
 // 자막 폰트 목록
