@@ -690,7 +690,7 @@ export const generateImageForScene = async (
   // 캐릭터 참조가 있으면 Imagen은 이미지 입력 불가 → Gemini Flash Image로 처리 (시각적 참조 필수)
   // 캐릭터 참조가 없으면 Imagen 직접 사용
   if (isImagenModel && !hasCharacterRef) {
-    const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
+    const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none';
     const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
     console.log(`[Image Gen] Imagen 사용 (참조 없음): ${selectedModel}, 비율: ${ar}`);
     try {
@@ -715,7 +715,7 @@ export const generateImageForScene = async (
   // 스타일 참조 이미지가 없을 때만 선택된 화풍 적용 (스타일 참조 우선)
   // 화풍 프롬프트를 캐릭터에도 적용하기 위해 getFinalVisualPrompt에 전달
   const geminiStylePrompt = hasStyleRef ? undefined : getSelectedGeminiStylePrompt();
-  const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
+  const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none';
   const basePrompt = getFinalVisualPrompt(scene, hasCharacterRef, geminiStylePrompt, textMode, ar);
 
   if (geminiStylePrompt) {

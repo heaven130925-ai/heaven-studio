@@ -503,8 +503,26 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
             }
           </button>
-          <div className="flex-1 relative h-2 bg-slate-700 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full"
+          <div
+            className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+              if (!hasAudio || !durationRef.current) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const fraction = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+              const seekTime = fraction * durationRef.current;
+              // Stop current playback
+              isManualPauseRef.current = true;
+              if (sourceRef.current) { try { sourceRef.current.stop(); } catch (_) {} sourceRef.current = null; }
+              window.clearInterval(progressTimerRef.current);
+              window.clearTimeout(endTimeoutRef.current);
+              setIsPlaying(false);
+              // Set new position
+              pausedAtRef.current = seekTime;
+              setCurrentSubTime(seekTime);
+              setAudioProgress(fraction * 100);
+            }}
+          >
+            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
               style={{ width: `${audioProgress}%`, transition: 'width 0.05s linear' }} />
           </div>
           <span className="text-[10px] text-slate-400 shrink-0 w-20 text-right font-mono">
@@ -530,17 +548,17 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         )}
 
         {/* 자막 스타일 컨트롤 */}
-        <div className="px-4 py-3 space-y-4">
+        <div className="px-4 py-3 space-y-3">
 
           {/* 폰트 선택 */}
-          <div>
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">폰트</label>
             <div className="grid grid-cols-3 gap-1.5">
               {SUBTITLE_FONTS.map(f => (
                 <button key={f.value}
                   onClick={() => set({ fontFamily: f.value, fontWeight: f.weight })}
                   className={`py-2.5 px-2 rounded-lg text-sm font-bold transition-colors text-center ${
-                    subConfig.fontFamily === f.value ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    subConfig.fontFamily === f.value ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.45)]' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                   style={{ fontFamily: f.value }}
                 >
@@ -551,6 +569,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 크기 + 굵기 */}
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
@@ -569,8 +588,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 className="w-full accent-blue-500" />
             </div>
           </div>
+          </div>
 
           {/* 색상 */}
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">글자색</label>
@@ -597,8 +618,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 className="w-full accent-blue-500" />
             </div>
           </div>
+          </div>
 
           {/* 배경 + 정렬 */}
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">배경</label>
@@ -610,7 +633,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 ].map(o => (
                   <button key={o.val} onClick={() => set({ backgroundColor: o.val })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      subConfig.backgroundColor === o.val ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     }`}>
                     {o.label}
                   </button>
@@ -623,7 +646,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button key={a} onClick={() => set({ textAlign: a })}
                     className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     }`}>
                     {a === 'left' ? '좌' : a === 'center' ? '중' : '우'}
                   </button>
@@ -631,9 +654,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               </div>
             </div>
           </div>
+          </div>
 
           {/* 세로 위치 */}
-          <div>
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               세로 위치 <span className="text-slate-200 normal-case">{subConfig.yPercent ?? 85}%</span>
             </label>
@@ -643,7 +667,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 청크 글자 수 */}
-          <div>
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1">
               청크 글자 수 <span className="text-slate-200">{subConfig.maxCharsPerChunk ?? 15}자</span>
             </label>
@@ -653,7 +677,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* AI 의미 단위 자막 */}
-          <div>
+          <div className="p-3 rounded-xl border border-blue-500/20 bg-blue-900/5">
             <label className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block mb-1.5">
               AI 의미 단위 자막
               {!hasMeaningChunks && <span className="ml-1 text-slate-600 normal-case font-normal">(TTS 생성 후 활성화)</span>}
@@ -678,7 +702,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {scenes.map((s, i) => (
           <button key={i} onClick={() => setSelectedIdx(i)}
             className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
-              i === selectedIdx ? 'bg-blue-900/30 border-l-2 border-blue-500' : 'hover:bg-slate-800/60 border-l-2 border-transparent'
+              i === selectedIdx ? 'bg-red-900/25 border-l-2 border-red-500 shadow-[inset_0_0_12px_rgba(239,68,68,0.08)]' : 'hover:bg-slate-800/60 border-l-2 border-transparent'
             }`}
           >
             <div className="w-20 h-12 rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">

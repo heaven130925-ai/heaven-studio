@@ -82,6 +82,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   // 음성 공통
   const [voiceSpeed, setVoiceSpeed] = useState<string>(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const [voiceStability, setVoiceStability] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50'));
+  const [voiceMood, setVoiceMood] = useState<string>(localStorage.getItem('tubegen_voice_mood') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
   const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google') || 'elevenlabs'
@@ -353,7 +354,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
             };
             return (
           <div className="p-3 border-b border-white/[0.07]">
-            <p className="text-xs font-black text-white/55 uppercase tracking-widest mb-2 px-1">비주얼 스타일</p>
+            <p className="text-sm font-black text-white/80 uppercase tracking-widest mb-2 px-1">비주얼 스타일</p>
             <div className="grid grid-cols-3 gap-2">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
@@ -423,11 +424,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
                 <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_16px_rgba(52,211,153,0.5)]' : 'text-white/40 hover:text-white/70'}`}>
                   주제 자동생성
                 </button>
                 <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_12px_rgba(59,130,246,0.4)]' : 'text-white/40 hover:text-white/70'}`}>
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_16px_rgba(52,211,153,0.5)]' : 'text-white/40 hover:text-white/70'}`}>
                   수동 대본
                 </button>
               </div>
@@ -435,14 +436,14 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
                 {activeTab === 'auto' ? (
-                  <div className="bg-black/50 border border-red-500/20 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(239,68,68,0.08)]">
+                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(52,211,153,0.1)]">
                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} disabled={isProcessing}
                       placeholder="주제를 입력하세요 (예: 예수님 탄생, 우주의 신비, 한국의 역사...)"
                       className="block w-full bg-transparent text-white py-5 px-6 focus:ring-0 focus:outline-none placeholder-white/20 text-lg disabled:opacity-50" />
                     <div className="px-6 pb-4 text-sm text-white/25">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
                   </div>
                 ) : (
-                  <div className="bg-black/50 border border-red-500/20 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 shadow-[0_0_20px_rgba(239,68,68,0.08)]">
+                  <div className="bg-black/50 border border-emerald-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0 shadow-[0_0_20px_rgba(52,211,153,0.1)]">
                     <textarea value={manualScript} onChange={(e) => onManualScriptChange(e.target.value)} disabled={isProcessing}
                       placeholder={"여기에 대본을 붙여넣거나 직접 작성하세요.\n\n예)\n나레이션 1: 옛날 옛적...\n나레이션 2: ..."}
                       className="flex-1 bg-transparent text-white p-6 focus:ring-0 focus:outline-none placeholder-white/20 resize-none text-base" />
@@ -474,11 +475,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     <p className="text-base font-bold text-white/60 mb-2">영상 포맷</p>
                     <div className="flex gap-1.5 mb-2">
                       <button type="button" onClick={() => selectAspectRatio('16:9')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '16:9' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_10px_rgba(52,211,153,0.45)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         롱폼 16:9
                       </button>
                       <button type="button" onClick={() => selectAspectRatio('9:16')}
-                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_8px_rgba(59,130,246,0.35)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
+                        className={`flex-1 py-2 rounded-lg text-base font-bold transition-all ${aspectRatio === '9:16' ? 'bg-gradient-to-r from-emerald-600 to-green-600 text-white shadow-[0_0_10px_rgba(52,211,153,0.45)]' : 'bg-white/[0.06] text-white/40 hover:text-white/70 hover:bg-white/[0.1]'}`}>
                         숏폼 9:16
                       </button>
                     </div>
@@ -550,7 +551,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   {/* 네온 바 */}
                   <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
                   <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                    className="w-full relative bg-red-500/75 hover:bg-red-500/90 disabled:opacity-60 text-white font-black py-6 rounded-2xl transition-all text-2xl tracking-wide border border-red-300/90 hover:border-red-200 shadow-[0_0_60px_rgba(239,68,68,0.8)] hover:shadow-[0_0_90px_rgba(239,68,68,1.0)] disabled:shadow-none">
+                    className="w-full relative bg-red-500/60 hover:bg-red-500/75 disabled:opacity-60 text-white font-black py-6 rounded-2xl transition-all text-2xl tracking-wide border border-red-300/60 hover:border-red-200/80 shadow-[0_0_35px_rgba(239,68,68,0.5)] hover:shadow-[0_0_55px_rgba(239,68,68,0.7)] disabled:shadow-none">
                     {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}
@@ -772,7 +773,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             </div>
                             {/* 성우 목록 — 인라인 스크롤 (absolute 드롭다운 제거) */}
-                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: '420px' }}>
+                            <div className="bg-black/40 border border-white/[0.1] rounded-xl overflow-y-auto" style={{ maxHeight: 'calc(100vh - 360px)' }}>
                               <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
@@ -806,14 +807,46 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             <div className="space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
-                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => changeVoiceStability(Number(e.target.value))} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStability}</span>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">스타일</span>
-                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => changeVoiceStyle(Number(e.target.value))} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStyle}</span>
                               </div>
+                            </div>
+                            {/* 분위기 프리셋 */}
+                            <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
+                              <div className="grid grid-cols-2 gap-1.5">
+                                {([
+                                  { id: '친근하게', stability: 35, style: 55 },
+                                  { id: '따뜻하게', stability: 55, style: 35 },
+                                  { id: '뉴스형식', stability: 82, style: 8 },
+                                  { id: '부드럽게', stability: 70, style: 20 },
+                                  { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
+                                  { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
+                                  { id: '전라도사투리', label: '전라도 사투리', stability: 30, style: 70 },
+                                  { id: '경상도사투리', label: '경상도 사투리', stability: 25, style: 80 },
+                                ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
+                                  <button key={m.id} type="button" onClick={() => {
+                                    setVoiceMood(m.id);
+                                    setVoiceStability(m.stability);
+                                    setVoiceStyle(m.style);
+                                    localStorage.setItem('tubegen_voice_mood', m.id);
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                  }}
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors ${voiceMood === m.id ? 'bg-purple-600 text-white shadow-[0_0_8px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
+                                    {m.label || m.id}
+                                  </button>
+                                ))}
+                              </div>
+                              {voiceMood && (
+                                <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('tubegen_voice_mood'); }}
+                                  className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
+                              )}
                             </div>
                             <button type="button" onClick={saveElSettings} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
                           </>
