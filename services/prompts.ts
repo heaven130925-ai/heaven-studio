@@ -134,6 +134,7 @@ ${charPrompt}
 ${style}
 ${char}
 ${VAR_MOOD_ENFORCER}
+SINGLE FRAME ONLY: One continuous scene. NO panels, NO comic strips, NO split screens, NO grids, NO multiple cuts, NO borders dividing the image. The entire canvas is ONE unified scene.
 QUALITY: Sharp lines, clean composition, consistent art style across all scenes. No blurry or low-quality elements.
 ${textRule ? `\n${textRule}` : ''}
 `.trim();
