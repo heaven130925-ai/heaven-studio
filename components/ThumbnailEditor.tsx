@@ -81,6 +81,18 @@ function drawMultiLine(
   return y + lineHeight;
 }
 
+/** 캔버스 렌더 전 폰트 프리로드 */
+async function preloadFonts(size: number) {
+  try {
+    await Promise.all([
+      document.fonts.load(`900 ${size}px "Black Han Sans"`),
+      document.fonts.load(`400 ${size}px "Jua"`),
+      document.fonts.load(`400 ${size}px "Do Hyeon"`),
+      document.fonts.load(`900 ${size}px "Noto Sans KR"`),
+    ]);
+  } catch { /* 폰트 미로드 시 시스템폰트로 폴백 */ }
+}
+
 /** 캔버스로 배경이미지 + 한글 텍스트 합성 (테마별 스타일 적용) */
 async function applyTextOverlay(
   bgBase64: string,
@@ -89,9 +101,12 @@ async function applyTextOverlay(
   ratio: '16:9' | '9:16',
   theme: TextTheme
 ): Promise<string> {
+  const W = ratio === '9:16' ? 1080 : 1280;
+  const H = ratio === '9:16' ? 1920 : 720;
+  const mainSize = Math.round(W * 0.088);
+  await preloadFonts(mainSize);
+
   return new Promise((resolve) => {
-    const W = ratio === '9:16' ? 1080 : 1280;
-    const H = ratio === '9:16' ? 1920 : 720;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -109,132 +124,123 @@ async function applyTextOverlay(
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
       ctx.lineJoin     = 'round';
+      ctx.lineCap      = 'round';
 
-      const mainSize  = Math.round(W * 0.092);
-      const subSize   = Math.round(W * 0.052);
-      const topY      = Math.round(H * 0.04);
-      const maxW      = W * 0.88;
+      const subSize = Math.round(W * 0.05);
+      const topY    = Math.round(H * 0.035);
+      const maxW    = W * 0.9;
 
       if (theme === 'war') {
-        // ── 전쟁/충격: Impact + 빨간 박스 배경 ──────────────────
-        const mainFont = `900 ${mainSize}px Impact,"Arial Black","Noto Sans KR",sans-serif`;
-        const subFont  = `700 ${subSize}px Impact,"Arial Black","Noto Sans KR",sans-serif`;
+        // ── 전쟁/충격: Black Han Sans + 빨간 박스 배경 ────────────
+        // (한국 유튜브 썸네일 표준 스타일)
+        const mainFont = `400 ${mainSize}px "Black Han Sans","Noto Sans KR",sans-serif`;
+        const subFont  = `400 ${subSize}px "Black Han Sans","Noto Sans KR",sans-serif`;
 
         const drawWarLine = (text: string, y: number, size: number, isMain: boolean) => {
-          const font = isMain ? mainFont : subFont;
-          ctx.font = font;
-          const tw = ctx.measureText(text).width;
-          const pad = size * 0.22;
-          const bh  = size * 1.38;
+          ctx.font = isMain ? mainFont : subFont;
+          const tw  = ctx.measureText(text).width;
+          const pad = size * 0.18;
+          const bh  = size * 1.32;
           // 배경 박스
-          ctx.fillStyle = isMain ? '#CC0000' : 'rgba(0,0,0,0.78)';
-          ctx.fillRect(W / 2 - tw / 2 - pad, y - size * 0.12, tw + pad * 2, bh);
-          // 텍스트
-          ctx.lineWidth   = size * 0.05;
-          ctx.strokeStyle = '#000000';
-          ctx.strokeText(text, W / 2, y);
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillText(text, W / 2, y);
-        };
-
-        ctx.font = mainFont;
-        let nextY = topY;
-        if (mainText) {
-          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawWarLine(line, y, mainSize, true));
-        }
-        if (subText) {
-          ctx.font = subFont;
-          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => {
-            drawWarLine(line, y, subSize, false);
-            // 서브는 노란 텍스트
-            ctx.font = subFont;
-            ctx.fillStyle = '#FFE600';
-            ctx.fillText(line, W / 2, y);
-          });
-        }
-
-      } else if (theme === 'cute') {
-        // ── 귀여운/동물: 핑크 글로우 + 흰 텍스트 ───────────────
-        const mainFont = `900 ${mainSize}px "Arial Rounded MT Bold","Noto Sans KR","맑은 고딕",sans-serif`;
-        const subFont  = `700 ${subSize}px "Arial Rounded MT Bold","Noto Sans KR","맑은 고딕",sans-serif`;
-
-        const drawCuteLine = (text: string, y: number, size: number, isMain: boolean) => {
-          const font = isMain ? mainFont : subFont;
-          ctx.font = font;
-          // 핑크 글로우 외곽
-          ctx.shadowColor   = isMain ? '#FF69B4' : '#FF1493';
-          ctx.shadowBlur    = size * 0.5;
-          ctx.lineWidth     = size * 0.11;
-          ctx.strokeStyle   = isMain ? '#FF69B4' : '#FF1493';
-          ctx.strokeText(text, W / 2, y);
-          ctx.shadowBlur = 0;
-          // 흰 텍스트
+          ctx.fillStyle = isMain ? '#CC0000' : 'rgba(0,0,0,0.82)';
+          ctx.fillRect(W / 2 - tw / 2 - pad, y - size * 0.1, tw + pad * 2, bh);
+          // 얇은 검정 아웃라인
           ctx.lineWidth   = size * 0.04;
-          ctx.strokeStyle = '#FFFFFF';
+          ctx.strokeStyle = '#000000';
           ctx.strokeText(text, W / 2, y);
           ctx.fillStyle = isMain ? '#FFFFFF' : '#FFE600';
           ctx.fillText(text, W / 2, y);
         };
 
-        ctx.font = mainFont;
         let nextY = topY;
         if (mainText) {
-          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawCuteLine(line, y, mainSize, true));
+          ctx.font = mainFont;
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.38, (line, y) => drawWarLine(line, y, mainSize, true));
         }
         if (subText) {
           ctx.font = subFont;
-          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawCuteLine(line, y, subSize, false));
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.25, maxW, subSize * 1.32, (line, y) => drawWarLine(line, y, subSize, false));
+        }
+
+      } else if (theme === 'cute') {
+        // ── 귀여운/동물: Jua + 핑크 아웃라인 글로우 ────────────
+        const mainFont = `400 ${mainSize}px "Jua","Noto Sans KR",sans-serif`;
+        const subFont  = `400 ${subSize}px "Jua","Noto Sans KR",sans-serif`;
+
+        const drawCuteLine = (text: string, y: number, size: number, isMain: boolean) => {
+          ctx.font = isMain ? mainFont : subFont;
+          // 외곽 핑크 글로우
+          ctx.shadowColor = isMain ? '#FF69B4' : '#FF1493';
+          ctx.shadowBlur  = size * 0.45;
+          ctx.lineWidth   = size * 0.1;
+          ctx.strokeStyle = isMain ? '#FF3399' : '#CC0066';
+          ctx.strokeText(text, W / 2, y);
+          ctx.shadowBlur  = 0;
+          // 흰 내부 아웃라인
+          ctx.lineWidth   = size * 0.035;
+          ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeText(text, W / 2, y);
+          ctx.fillStyle = isMain ? '#FFFFFF' : '#FFEE44';
+          ctx.fillText(text, W / 2, y);
+        };
+
+        let nextY = topY;
+        if (mainText) {
+          ctx.font = mainFont;
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.38, (line, y) => drawCuteLine(line, y, mainSize, true));
+        }
+        if (subText) {
+          ctx.font = subFont;
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.25, maxW, subSize * 1.32, (line, y) => drawCuteLine(line, y, subSize, false));
         }
         ctx.shadowBlur = 0;
 
       } else if (theme === 'news') {
-        // ── 뉴스/정보: 깔끔 + 파란 서브 ─────────────────────────
-        const mainFont = `700 ${mainSize}px "Noto Sans KR","맑은 고딕","Arial",sans-serif`;
-        const subFont  = `400 ${subSize}px "Noto Sans KR","맑은 고딕","Arial",sans-serif`;
+        // ── 뉴스/정보: Do Hyeon + 깔끔한 검정 아웃라인 ─────────
+        const mainFont = `400 ${mainSize}px "Do Hyeon","Noto Sans KR",sans-serif`;
+        const subFont  = `400 ${subSize}px "Do Hyeon","Noto Sans KR",sans-serif`;
 
         const drawNewsLine = (text: string, y: number, size: number, isMain: boolean) => {
-          const font = isMain ? mainFont : subFont;
-          ctx.font = font;
-          ctx.lineWidth   = size * 0.07;
-          ctx.strokeStyle = '#000022';
+          ctx.font = isMain ? mainFont : subFont;
+          ctx.lineWidth   = size * 0.065;
+          ctx.strokeStyle = '#000000';
           ctx.strokeText(text, W / 2, y);
-          ctx.fillStyle = isMain ? '#FFFFFF' : '#87CEEB';
+          ctx.fillStyle = isMain ? '#FFFFFF' : '#7EC8E3';
           ctx.fillText(text, W / 2, y);
         };
 
-        ctx.font = mainFont;
         let nextY = topY;
         if (mainText) {
-          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawNewsLine(line, y, mainSize, true));
+          ctx.font = mainFont;
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.38, (line, y) => drawNewsLine(line, y, mainSize, true));
         }
         if (subText) {
           ctx.font = subFont;
-          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawNewsLine(line, y, subSize, false));
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.25, maxW, subSize * 1.32, (line, y) => drawNewsLine(line, y, subSize, false));
         }
 
       } else {
-        // ── 기본: 흰색 메인 + 노란 서브 + 검정 스트로크 ─────────
-        const mainFont = `900 ${mainSize}px "Noto Sans KR","맑은 고딕","Arial Black",sans-serif`;
-        const subFont  = `900 ${subSize}px "Noto Sans KR","맑은 고딕","Arial Black",sans-serif`;
+        // ── 기본: Black Han Sans + 흰색/노란 + 두꺼운 아웃라인 ──
+        const mainFont = `400 ${mainSize}px "Black Han Sans","Noto Sans KR",sans-serif`;
+        const subFont  = `900 ${subSize}px "Noto Sans KR","맑은 고딕",sans-serif`;
 
         const drawDefaultLine = (text: string, y: number, size: number, isMain: boolean) => {
-          const font = isMain ? mainFont : subFont;
-          ctx.font = font;
-          ctx.lineWidth   = size * 0.09;
+          ctx.font = isMain ? mainFont : subFont;
+          ctx.lineWidth   = size * 0.085;
           ctx.strokeStyle = '#000000';
           ctx.strokeText(text, W / 2, y);
           ctx.fillStyle = isMain ? '#FFFFFF' : '#FFE600';
           ctx.fillText(text, W / 2, y);
         };
 
-        ctx.font = mainFont;
         let nextY = topY;
         if (mainText) {
-          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawDefaultLine(line, y, mainSize, true));
+          ctx.font = mainFont;
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.38, (line, y) => drawDefaultLine(line, y, mainSize, true));
         }
         if (subText) {
           ctx.font = subFont;
-          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawDefaultLine(line, y, subSize, false));
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.25, maxW, subSize * 1.32, (line, y) => drawDefaultLine(line, y, subSize, false));
         }
       }
 
@@ -289,9 +295,11 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
   // Step 6
   const [isGenerating, setIsGenerating] = useState(false);
+  const [bgImage, setBgImage] = useState<string | null>(null);       // AI 배경 (텍스트 없음)
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [editRequest, setEditRequest] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [isTextUpdating, setIsTextUpdating] = useState(false);
 
   const getCharacterDetails = () => {
     if (!charEnabled) return '';
@@ -337,6 +345,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     }
   };
 
+  // AI 배경 생성 + 텍스트 합성
   const runGenerate = async (editReq?: string) => {
     try {
       const { generateThumbnailV2 } = await import('../services/geminiService');
@@ -356,12 +365,25 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         editRequest: editReq,
       });
       if (bgBase64) {
+        const raw = bgBase64.startsWith('data:') ? bgBase64 : `data:image/jpeg;base64,${bgBase64}`;
+        setBgImage(raw);  // 배경 원본 저장
         const theme = detectTextTheme(topic, charType, charEnabled);
-        const composited = await applyTextOverlay(bgBase64, mainText, subText, thumbnailRatio, theme);
+        const composited = await applyTextOverlay(raw, mainText, subText, thumbnailRatio, theme);
         setGeneratedImage(composited);
         onImageGenerated?.(composited);
       }
     } catch (e) { console.error(e); }
+  };
+
+  // 텍스트만 재합성 (AI 배경 재사용, API 호출 없음)
+  const handleTextUpdate = async () => {
+    if (!bgImage) return;
+    setIsTextUpdating(true);
+    const theme = detectTextTheme(topic, charType, charEnabled);
+    const composited = await applyTextOverlay(bgImage, mainText, subText, thumbnailRatio, theme);
+    setGeneratedImage(composited);
+    onImageGenerated?.(composited);
+    setIsTextUpdating(false);
   };
 
   const handleGenerate = async () => {
@@ -371,6 +393,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setIsGenerating(false);
   };
 
+  // AI 이미지 수정 (배경 재생성)
   const handleEdit = async () => {
     if (!editRequest.trim()) return;
     setIsEditing(true);
@@ -395,6 +418,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setCharType('person');
     setTargetAudience('');
     setStrategy(null);
+    setBgImage(null);
     setGeneratedImage(null);
     setEditRequest('');
     setBorderStyle('none');
@@ -729,20 +753,46 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                   ⬇️ 다운로드 (JPG)
                 </button>
 
-                {/* 수정 요청 */}
+                {/* ① 텍스트만 수정 (API 호출 없음) */}
                 <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">🪄 수정 요청 (AI Inpainting)</p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">✏️ 텍스트 수정</p>
+                  <input
+                    value={mainText}
+                    onChange={e => setMainText(e.target.value)}
+                    placeholder="메인 문구"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm font-bold text-center focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    value={subText}
+                    onChange={e => setSubText(e.target.value)}
+                    placeholder="서브 문구"
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    onClick={handleTextUpdate}
+                    disabled={isTextUpdating || !bgImage}
+                    className="w-full py-2 rounded-xl bg-emerald-700/30 border border-emerald-500/50 text-emerald-300 text-sm font-bold hover:bg-emerald-700/50 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isTextUpdating
+                      ? <><span className="w-3 h-3 border border-emerald-400 border-t-transparent animate-spin rounded-full" /> 적용 중...</>
+                      : '텍스트 적용'}
+                  </button>
+                </div>
+
+                {/* ② 배경 이미지 수정 (AI 재생성) */}
+                <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">🪄 배경 이미지 수정 (AI)</p>
                   <div className="flex gap-2">
                     <input
                       value={editRequest}
                       onChange={e => setEditRequest(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleEdit()}
-                      placeholder="예: 텍스트를 노란색으로 바꿔줘, 표정을 더 놀라게 해줘"
+                      placeholder="예: 더 어두운 분위기로, 폭발 장면 추가"
                       className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
                     />
                     <button onClick={handleEdit} disabled={isEditing || !editRequest.trim()}
                       className="px-4 py-2 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-300 text-sm font-bold hover:bg-blue-600/35 disabled:opacity-40 transition-colors min-w-[52px]">
-                      {isEditing ? <span className="flex items-center gap-1"><span className="w-3 h-3 border border-blue-400 border-t-transparent animate-spin rounded-full inline-block" /></span> : '수정'}
+                      {isEditing ? <span className="w-3 h-3 border border-blue-400 border-t-transparent animate-spin rounded-full inline-block" /> : '수정'}
                     </button>
                   </div>
                 </div>
