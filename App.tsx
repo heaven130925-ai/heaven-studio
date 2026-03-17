@@ -233,76 +233,77 @@ const App: React.FC = () => {
         await (window as any).aistudio.openSelectKey();
       }
 
+      // audioOnly + 기존 씬 있으면 스크립트 생성 없이 오디오만 재생성
+      const preexistingNarrations = audioOnly ? assetsRef.current.filter(a => a.narration?.trim()) : [];
+
       setGeneratedData([]);
       assetsRef.current = [];
       setCurrentReferenceImages(refImgs);
-      setCurrentTopic(topic); // 저장용 토픽 기록
-      resetCost(); // 비용 초기화
+      setCurrentTopic(topic);
+      resetCost();
 
-      // 참조 이미지 존재 여부 계산
       const hasRefImages = (refImgs.character?.length || 0) + (refImgs.style?.length || 0) > 0;
       const hasCharacterRef = (refImgs.character?.length || 0) > 0;
       console.log(`[App] 참조 이미지 - 캐릭터: ${refImgs.character?.length || 0}개, 스타일: ${refImgs.style?.length || 0}개`);
 
+      let initialAssets: GeneratedAsset[];
       let targetTopic = topic;
 
-      if (topic === "Manual Script Input" && sourceText) {
-        setProgressMessage('대본 분석 및 시각화 설계 중...');
-      } else if (sourceText) {
-        setProgressMessage('외부 콘텐츠 분석 중...');
-        targetTopic = "Custom Analysis Topic";
+      if (audioOnly && preexistingNarrations.length > 0) {
+        // ── 기존 씬 오디오 재생성 (AI 대본 생성 없이) ──
+        setProgressMessage(`기존 ${preexistingNarrations.length}개 씬 오디오 재생성 중...`);
+        initialAssets = preexistingNarrations.map(a => ({
+          ...a, audioData: null, subtitleData: null, audioDuration: null
+        }));
+        assetsRef.current = initialAssets;
       } else {
-        // 사용자가 입력한 주제를 그대로 사용 (범용 대본 생성)
-        targetTopic = topic;
-        setProgressMessage(`"${topic}" 대본 생성 중...`);
+        // ── 스크립트 생성 (기존 로직) ──
+        if (topic === "Manual Script Input" && sourceText) {
+          setProgressMessage('대본 분석 및 시각화 설계 중...');
+        } else if (sourceText) {
+          setProgressMessage('외부 콘텐츠 분석 중...');
+          targetTopic = "Custom Analysis Topic";
+        } else {
+          targetTopic = topic;
+        }
+        setProgressMessage(`대본 생성 중...`);
+
+        const inputLength = sourceText?.length || 0;
+        const CHUNK_THRESHOLD = 3000;
+
+        let scriptScenes: ScriptScene[];
+        if (inputLength > CHUNK_THRESHOLD) {
+          console.log(`[App] 긴 대본 감지: ${inputLength.toLocaleString()}자 → 청크 분할 처리`);
+          setProgressMessage(`긴 대본(${inputLength.toLocaleString()}자) 청크 분할 처리 중...`);
+          scriptScenes = await generateScriptChunked(
+            targetTopic, hasRefImages, sourceText!, 2500, setProgressMessage, sceneCount || undefined
+          );
+        } else {
+          scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
+        }
+        if (isAbortedRef.current) return;
+
+        const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
+        console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, scenes=${scriptScenes.length}`);
+        if (isAutoTopic && !imageOnly) {
+          const scriptText = scriptScenes.map(s => s.narration).join('\n');
+          setInputManualScript(scriptText);
+          setInputActiveTab('manual');
+          pendingScriptScenesRef.current = scriptScenes;
+          setGeneratedData([]);
+          assetsRef.current = [];
+          setStep(GenerationStep.SCRIPT_READY);
+          setProgressMessage(`✅ 대본 완성 (${scriptScenes.length}개 씬) — 아래 대본 확인 후 "스토리보드 생성"을 눌러주세요.`);
+          isProcessingRef.current = false;
+          return;
+        }
+
+        initialAssets = scriptScenes.map(scene => ({
+          ...scene, imageData: null, audioData: null, audioDuration: null, subtitleData: null, videoData: null, videoDuration: null, status: 'pending' as const
+        }));
+        assetsRef.current = initialAssets;
+        if (!audioOnly) setGeneratedData(initialAssets);
       }
-
-      setProgressMessage(`대본 생성 중...`);
-
-      // 긴 대본(3000자 초과) 감지 시 청크 분할 처리
-      const inputLength = sourceText?.length || 0;
-      const CHUNK_THRESHOLD = 3000; // 3000자 초과 시 청크 분할
-
-      let scriptScenes: ScriptScene[];
-      if (inputLength > CHUNK_THRESHOLD) {
-        // 긴 대본: 청크 분할 처리 (10,000자 이상 대응)
-        console.log(`[App] 긴 대본 감지: ${inputLength.toLocaleString()}자 → 청크 분할 처리`);
-        setProgressMessage(`긴 대본(${inputLength.toLocaleString()}자) 청크 분할 처리 중...`);
-        scriptScenes = await generateScriptChunked(
-          targetTopic,
-          hasRefImages,
-          sourceText!,
-          2500,
-          setProgressMessage,
-          sceneCount || undefined
-        );
-      } else {
-        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
-      }
-      if (isAbortedRef.current) return;
-      
-      // 자동 주제 모드: 생성된 대본을 textarea로 전달하고 스토리보드 표시 안함
-      const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
-      console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, scenes=${scriptScenes.length}, narrations:`, scriptScenes.map(s => s.narration?.slice(0,30)));
-      if (isAutoTopic && !imageOnly) {
-        const scriptText = scriptScenes.map(s => s.narration).join('\n');
-        console.log(`[handleGenerate] SCRIPT_READY → scriptText(${scriptText.length}chars): "${scriptText.slice(0,100)}"`);
-        setInputManualScript(scriptText);
-        setInputActiveTab('manual');
-        pendingScriptScenesRef.current = scriptScenes;
-        setGeneratedData([]);
-        assetsRef.current = [];
-        setStep(GenerationStep.SCRIPT_READY);
-        setProgressMessage(`✅ 대본 완성 (${scriptScenes.length}개 씬) — 아래 대본 확인 후 "스토리보드 생성"을 눌러주세요.`);
-        isProcessingRef.current = false;
-        return;
-      }
-
-      const initialAssets = scriptScenes.map(scene => ({
-        ...scene, imageData: null, audioData: null, audioDuration: null, subtitleData: null, videoData: null, videoDuration: null, status: 'pending' as const
-      }));
-      assetsRef.current = initialAssets;
-      setGeneratedData(initialAssets);
 
       setStep(GenerationStep.ASSETS);
 

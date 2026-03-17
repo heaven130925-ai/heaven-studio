@@ -638,9 +638,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           {atTop    && <div className="absolute left-0 right-0 top-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
           {atBottom && <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
 
-          {!scene?.imageData && (
+          {!scene?.imageData && !isRegenLoading && (
             <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-xs pointer-events-none">
               이미지 생성 대기 중...
+            </div>
+          )}
+          {isRegenLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 pointer-events-none">
+              <div className="w-10 h-10 border-4 border-orange-400/30 border-t-orange-400 rounded-full animate-spin mb-3" />
+              <span className="text-orange-300 text-sm font-bold">이미지 편집 중...</span>
             </div>
           )}
         </div>

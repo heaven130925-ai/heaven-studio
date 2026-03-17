@@ -975,31 +975,32 @@ export const editImageWithGemini = async (imageBase64: string, command: string):
   const ai = getAI();
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
   try {
+    // gemini-2.0-flash-exp: 이미지 입력 + 이미지 출력 편집 지원
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-2.0-flash-exp',
       contents: {
         parts: [
           { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
           {
             text: [
-              `You are an image editor. Edit the provided image by applying ONLY the following change.`,
-              `Keep EVERYTHING ELSE in the image EXACTLY the same — same composition, same characters, same background, same style, same lighting.`,
+              `Edit this image. Apply ONLY the following instruction. Keep EVERYTHING ELSE exactly the same — same composition, characters, background, colors, style, lighting.`,
               ``,
-              `EDIT INSTRUCTION: ${command}`,
+              `INSTRUCTION: ${command}`,
               ``,
-              `Rules: ONE single continuous image. No panels. No split screens. No borders. No before/after comparison.`,
+              `Output: single continuous edited image. No panels, no split screens, no borders, no before/after.`,
             ].join('\n')
           }
         ]
       },
       config: {
-        responseModalities: [Modality.IMAGE],
-        imageConfig: { aspectRatio: ar }
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
       }
     });
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) return part.inlineData.data;
+    const parts = response.candidates?.[0]?.content?.parts ?? [];
+    for (const part of parts) {
+      if ((part as any).inlineData?.data) return (part as any).inlineData.data;
     }
+    console.warn('[Image Edit] 응답에 이미지 없음:', parts.map(p => Object.keys(p)));
     return null;
   } catch (e) {
     console.error('[Image Edit] Gemini 이미지 편집 실패:', e);
