@@ -138,10 +138,10 @@ const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                     <img
                       src={`data:image/jpeg;base64,${asset.imageData}`}
                       alt={`Scene ${asset.sceneNumber}`}
-                      className="w-full h-48 md:h-full object-cover"
+                      className="w-full aspect-video object-cover"
                     />
                   ) : (
-                    <div className="w-full h-48 md:h-full bg-slate-800 flex items-center justify-center">
+                    <div className="w-full aspect-video bg-slate-800 flex items-center justify-center">
                       <span className="text-slate-500">이미지 없음</span>
                     </div>
                   )}

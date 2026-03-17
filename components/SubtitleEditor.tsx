@@ -129,9 +129,11 @@ function renderSubtitleOnCanvas(
 const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
+  const [isRegenLoading, setIsRegenLoading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
+  const progressFillRef = useRef<HTMLDivElement>(null);
 
   // 오디오 — WebAudio API
   const [isPlaying, setIsPlaying] = useState(false);
@@ -258,13 +260,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   // ── audioData가 없어지면 재생 중인 오디오 즉시 정지 ──
   useEffect(() => {
-    if (!scene?.audioData && isPlaying) {
+    if (!scene?.audioData) {
       if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
       cancelAnimationFrame(progressTimerRef.current);
       window.clearTimeout(endTimeoutRef.current);
       setIsPlaying(false);
       setCurrentSubTime(0);
       setAudioProgress(0);
+      if (progressFillRef.current) progressFillRef.current.style.width = '0%';
       pausedAtRef.current = 0;
     }
   }, [scene?.audioData]); // eslint-disable-line
@@ -452,7 +455,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         if (actx.state === 'suspended') actx.resume();
         const elapsed = actx.currentTime - startTimeRef.current;
         const clamped = Math.min(Math.max(elapsed, 0), durationRef.current);
-        setAudioProgress((clamped / durationRef.current) * 100);
+        // 직접 DOM 업데이트 → React 리렌더 없이 부드러운 진행바
+        if (progressFillRef.current) {
+          progressFillRef.current.style.width = `${(clamped / durationRef.current) * 100}%`;
+        }
         setCurrentSubTime(clamped);
         progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
       };
@@ -667,8 +673,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               seekToFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
             }}
           >
-            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
-              style={{ width: `${audioProgress}%`, transition: 'width 0.05s linear' }} />
+            <div ref={progressFillRef} className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
+              style={{ width: `${audioProgress}%` }} />
           </div>
           <span className="text-[10px] text-slate-400 shrink-0 w-20 text-right font-mono">
             {hasAudio
@@ -701,20 +707,33 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 type="text"
                 value={editCmd}
                 onChange={e => setEditCmd(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && editCmd.trim()) {
-                    onImageEditCommand(selectedIdx, editCmd.trim());
+                onKeyDown={async (e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === 'Enter' && editCmd.trim() && !isRegenLoading) {
+                    const cmd = editCmd.trim();
                     setEditCmd('');
+                    setIsRegenLoading(true);
+                    try { await onImageEditCommand(selectedIdx, cmd); } finally { setIsRegenLoading(false); }
                   }
                 }}
+                disabled={isRegenLoading}
                 placeholder="예: 텍스트 지워줘 / 왼쪽 사람 없애줘"
-                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500"
+                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-50"
               />
               <button
-                onClick={() => { if (editCmd.trim()) { onImageEditCommand(selectedIdx, editCmd.trim()); setEditCmd(''); } }}
-                disabled={!editCmd.trim()}
-                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-600/30 border border-orange-500/50 text-orange-300 hover:bg-orange-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >재생성</button>
+                onClick={async () => {
+                  if (!editCmd.trim() || isRegenLoading) return;
+                  const cmd = editCmd.trim();
+                  setEditCmd('');
+                  setIsRegenLoading(true);
+                  try { await onImageEditCommand(selectedIdx, cmd); } finally { setIsRegenLoading(false); }
+                }}
+                disabled={!editCmd.trim() || isRegenLoading}
+                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-600/30 border border-orange-500/50 text-orange-300 hover:bg-orange-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+              >
+                {isRegenLoading
+                  ? <><div className="w-3.5 h-3.5 border-2 border-orange-300/40 border-t-orange-300 rounded-full animate-spin" />재생성 중</>
+                  : '재생성'}
+              </button>
             </div>
           </div>
         )}
