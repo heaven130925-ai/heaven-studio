@@ -968,6 +968,46 @@ ${styleDesc.instruction}`
 };
 
 /**
+ * 기존 이미지 + 편집 명령으로 이미지 수정 (image-in → image-out)
+ * - 원본 이미지를 Gemini에 직접 전달하여 지정된 부분만 수정
+ */
+export const editImageWithGemini = async (imageBase64: string, command: string): Promise<string | null> => {
+  const ai = getAI();
+  const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: {
+        parts: [
+          { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
+          {
+            text: [
+              `You are an image editor. Edit the provided image by applying ONLY the following change.`,
+              `Keep EVERYTHING ELSE in the image EXACTLY the same — same composition, same characters, same background, same style, same lighting.`,
+              ``,
+              `EDIT INSTRUCTION: ${command}`,
+              ``,
+              `Rules: ONE single continuous image. No panels. No split screens. No borders. No before/after comparison.`,
+            ].join('\n')
+          }
+        ]
+      },
+      config: {
+        responseModalities: [Modality.IMAGE],
+        imageConfig: { aspectRatio: ar }
+      }
+    });
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) return part.inlineData.data;
+    }
+    return null;
+  } catch (e) {
+    console.error('[Image Edit] Gemini 이미지 편집 실패:', e);
+    return null;
+  }
+};
+
+/**
  * 긴 텍스트를 400자 단위로 자연스럽게 분할
  * - 문장 끝(. ? ! 。)에서 우선 분할
  * - 없으면 쉼표, 공백 순으로 분할

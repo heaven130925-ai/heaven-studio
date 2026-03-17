@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt } from './services/geminiService';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt, editImageWithGemini } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
@@ -120,11 +120,13 @@ const App: React.FC = () => {
     }
   };
 
+  const audioOnlyRef = useRef(false);
+
   const updateAssetAt = (index: number, updates: Partial<GeneratedAsset>) => {
     if (isAbortedRef.current) return;
     if (assetsRef.current[index]) {
       assetsRef.current[index] = { ...assetsRef.current[index], ...updates };
-      setGeneratedData([...assetsRef.current]);
+      if (!audioOnlyRef.current) setGeneratedData([...assetsRef.current]);
     }
   };
 
@@ -216,6 +218,8 @@ const App: React.FC = () => {
     if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
     isProcessingRef.current = true;
     isAbortedRef.current = false;
+    audioOnlyRef.current = audioOnly;
+    if (audioOnly) setShowStoryboard(false);
 
     // 자동 주제 모드 또는 오디오만 생성은 스토리보드 열지 않음
     const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
@@ -498,6 +502,7 @@ const App: React.FC = () => {
 
       // 오디오만 생성: ZIP 다운로드 후 종료 (스토리보드 미표시)
       if (audioOnly) {
+        audioOnlyRef.current = false;
         setProgressMessage('오디오 ZIP 다운로드 중...');
         await downloadAudioZip(assetsRef.current);
         setProgressMessage('오디오 다운로드 완료!');
@@ -529,6 +534,7 @@ const App: React.FC = () => {
         setProgressMessage(`오류: ${error.message}`);
       }
     } finally {
+      audioOnlyRef.current = false;
       isProcessingRef.current = false;
     }
   }, [checkApiKeyStatus, refreshProjects]);
@@ -998,17 +1004,40 @@ const App: React.FC = () => {
                 onSelectThumbnail={handleSelectThumbnail}
                 onNarrationChange={(idx, val) => {
                   const updated = [...assetsRef.current];
-                  // 나레이션 변경 시 항상 오디오 삭제 (텍스트 바뀌면 오디오 싱크 불일치)
-                  updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
+                  // 자막 전체 비울 때만 오디오 삭제
+                  if (!val.trim()) {
+                    updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
+                  } else {
+                    updated[idx] = { ...updated[idx], narration: val };
+                  }
                   assetsRef.current = updated;
                   setGeneratedData([...updated]);
                 }}
                 onImageEditCommand={async (idx, command) => {
                   const current = assetsRef.current[idx];
                   if (!current) return;
-                  // command를 맨 앞에 배치해 AI가 최우선 적용하도록
-                  const base = current.visualPrompt || current.narration || '';
-                  await handleRegenerateWithPrompt(idx, `[USER EDIT REQUEST — APPLY FIRST]: ${command}\n\n[SCENE BASE]: ${base}`);
+                  if (!current.imageData) {
+                    // 이미지 없으면 프롬프트 기반 재생성
+                    const base = current.visualPrompt || current.narration || '';
+                    await handleRegenerateWithPrompt(idx, `[USER EDIT REQUEST — APPLY FIRST]: ${command}\n\n[SCENE BASE]: ${base}`);
+                    return;
+                  }
+                  // 기존 이미지를 Gemini에 전달 → 지정 부분만 수정
+                  updateAssetAt(idx, { status: 'generating' });
+                  setProgressMessage(`씬 ${idx + 1} 이미지 편집 중...`);
+                  try {
+                    const edited = await editImageWithGemini(current.imageData, command);
+                    if (edited) {
+                      updateAssetAt(idx, { imageData: edited, status: 'completed' });
+                      setProgressMessage(`씬 ${idx + 1} 이미지 편집 완료`);
+                    } else {
+                      updateAssetAt(idx, { status: 'error' });
+                      setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패`);
+                    }
+                  } catch (e: any) {
+                    updateAssetAt(idx, { status: 'error' });
+                    setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패: ${e.message}`);
+                  }
                 }}
               />
             ) : (
