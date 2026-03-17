@@ -715,7 +715,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
       <Header />
 
       {/* 네비게이션 탭 */}
@@ -931,6 +931,7 @@ const App: React.FC = () => {
             </div>
             {[
               { label: 'Gemini API 키', key: 'heaven_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
+              { label: 'Claude API 키 (대본생성)', key: 'heaven_anthropic_key', placeholder: 'sk-ant-...', link: 'https://console.anthropic.com', hint: '대본 생성에 Claude Sonnet 4.6 사용 (없으면 Gemini)' },
               { label: 'ElevenLabs API 키', key: 'heaven_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
               { label: 'FAL API 키', key: 'heaven_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
             ].map(({ label, key, placeholder, link, hint }) => (

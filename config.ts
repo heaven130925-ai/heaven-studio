@@ -249,6 +249,7 @@ export const CONFIG = {
   // 로컬 스토리지 키 이름 (내부 관리용)
   STORAGE_KEYS: {
     GEMINI_API_KEY: 'heaven_gemini_key',      // Gemini API 키 (사용자 직접 입력)
+    ANTHROPIC_API_KEY: 'heaven_anthropic_key', // Claude API 키 (대본 생성용)
     ELEVENLABS_API_KEY: 'heaven_el_key',
     ELEVENLABS_VOICE_ID: 'heaven_el_voice',
     ELEVENLABS_MODEL: 'heaven_el_model',

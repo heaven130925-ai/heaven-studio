@@ -304,7 +304,6 @@ const generateScriptSingle = async (
   maxScenes?: number
 ): Promise<ScriptScene[]> => {
   return retryGeminiRequest("Script Generation", async () => {
-    const ai = getAI();
     const baseInstruction = topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
                             hasReferenceImage ? SYSTEM_INSTRUCTIONS.REFERENCE_MATCH :
                             SYSTEM_INSTRUCTIONS.CHIEF_ART_DIRECTOR;
@@ -343,25 +342,56 @@ const generateScriptSingle = async (
 
     console.log(`${chunkLabel}[Script] 입력: ${inputLength}자, 목표 씬: ${estimatedSceneCount}개, maxOutputTokens: ${maxOutputTokens}`);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented),
-      config: {
-        thinkingConfig: { thinkingBudget: 24576 },
-        responseMimeType: "application/json",
-        systemInstruction: baseInstruction,
-        maxOutputTokens: maxOutputTokens,
-      },
-    });
+    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented);
+    const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+    let responseText: string;
 
-    // 응답 잘림 감지
-    const finishReason = response.candidates?.[0]?.finishReason;
-    if (finishReason === 'MAX_TOKENS' || String(finishReason) === 'STOP_TRUNCATED') {
-      console.warn(`${chunkLabel}[Script] ⚠️ 응답이 토큰 제한으로 잘렸습니다. finishReason: ${finishReason}`);
-      // 잘린 응답도 복구 시도 (cleanJsonResponse가 처리)
+    if (anthropicKey) {
+      // ── Claude Sonnet 4.6 ──────────────────────────────────────────────────
+      console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 사용`);
+      const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: maxOutputTokens,
+          system: baseInstruction + '\n\nOutput ONLY a valid JSON array. No markdown code fences, no explanation text.',
+          messages: [{ role: 'user', content: promptText }],
+        }),
+      });
+      if (!claudeResp.ok) {
+        const errText = await claudeResp.text();
+        throw new Error(`Claude API error ${claudeResp.status}: ${errText.slice(0, 300)}`);
+      }
+      const claudeData = await claudeResp.json();
+      responseText = claudeData.content?.[0]?.text || '[]';
+    } else {
+      // ── Gemini 2.5 Flash fallback (Claude 키 없음) ─────────────────────────
+      console.log(`${chunkLabel}[Script] Gemini 2.5 Flash 사용 (Claude 키 미설정)`);
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: promptText,
+        config: {
+          thinkingConfig: { thinkingBudget: 24576 },
+          responseMimeType: "application/json",
+          systemInstruction: baseInstruction,
+          maxOutputTokens: maxOutputTokens,
+        },
+      });
+      const finishReason = response.candidates?.[0]?.finishReason;
+      if (finishReason === 'MAX_TOKENS' || String(finishReason) === 'STOP_TRUNCATED') {
+        console.warn(`${chunkLabel}[Script] ⚠️ 응답 토큰 제한 잘림. finishReason: ${finishReason}`);
+      }
+      responseText = response.text || '[]';
     }
 
-    const result = JSON.parse(cleanJsonResponse(response.text || '[]'));
+    const result = JSON.parse(cleanJsonResponse(responseText));
     const scenes = Array.isArray(result) ? result : (result.scenes || []);
 
     console.log(`${chunkLabel}[Script] 생성된 씬 개수: ${scenes.length}`);

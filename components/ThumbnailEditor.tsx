@@ -471,6 +471,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   // 드래그
   const previewRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'main' | 'sub' | null>(null);
+  const wasDraggingRef = useRef(false);
 
   // 텍스트 plain string 추출
   const mainText = mainSegments.map(s => s.text).join('');
@@ -510,29 +511,41 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     e.target.value = '';
   };
 
-  // ── 텍스트 드래그 ──────────────────────────────────────────────────────────
+  // ── 텍스트 드래그 (document-level 리스너로 ghost 복제 방지) ───────────────
+  // dragging → null 전환 시 합성 트리거
+  useEffect(() => {
+    if (wasDraggingRef.current && dragging === null && bgImage) {
+      applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio).then(composited => {
+        setGeneratedImage(composited);
+        onImageGenerated?.(composited);
+      });
+    }
+    wasDraggingRef.current = dragging !== null;
+  }, [dragging]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleMouseDown = (which: 'main' | 'sub') => (e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setDragging(which);
-  };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging || !previewRef.current) return;
-    const rect = previewRef.current.getBoundingClientRect();
-    const x = Math.max(5, Math.min(95, ((e.clientX - rect.left) / rect.width)  * 100));
-    const y = Math.max(0, Math.min(93, ((e.clientY - rect.top)  / rect.height) * 100));
-    if (dragging === 'main') setMainPos({ x, y });
-    else                     setSubPos({ x, y });
-  };
+    const onMove = (ev: MouseEvent) => {
+      ev.preventDefault();
+      if (!previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const x = Math.max(5, Math.min(95, ((ev.clientX - rect.left) / rect.width)  * 100));
+      const y = Math.max(0, Math.min(93, ((ev.clientY - rect.top)  / rect.height) * 100));
+      if (which === 'main') setMainPos({ x, y });
+      else                  setSubPos({ x, y });
+    };
 
-  const handleMouseUp = async () => {
-    if (!dragging) return;
-    setDragging(null);
-    if (bgImage) {
-      const composited = await applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio);
-      setGeneratedImage(composited);
-      onImageGenerated?.(composited);
-    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setDragging(null);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   // ── AI 생성 ────────────────────────────────────────────────────────────────
@@ -936,9 +949,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
               ref={previewRef}
               className={`relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 select-none ${thumbnailRatio === '9:16' ? 'aspect-[9/16] max-w-[280px] mx-auto' : 'aspect-video'}`}
               style={{ containerType: 'inline-size' }}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
             >
               {isGenerating ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
