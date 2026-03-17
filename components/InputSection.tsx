@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import ThumbnailEditor from './ThumbnailEditor';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
@@ -29,9 +30,11 @@ interface InputSectionProps {
   thumbnailBaseImage?: string | null;
   onThumbnailBaseImageChange?: (img: string | null) => void;
   onAspectRatioChange?: (ratio: '16:9' | '9:16') => void;
+  thumbnailScenes?: import('../types').GeneratedAsset[];
+  thumbnailTopic?: string;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -991,181 +994,13 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
 
                 {/* 🎬 썸네일 생성 패널 */}
                 {activePanel === 'thumbnail' && (
-                  <div className="space-y-4">
-                    {/* 베이스 이미지 선택 */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">썸네일 이미지 선택</p>
-                      <input ref={thumbnailFileInputRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailUpload} />
-                      {/* 업로드 드래그앤드롭 영역 */}
-                      <div
-                        className="w-full border-2 border-dashed border-slate-600 hover:border-brand-500 rounded-xl p-6 text-center cursor-pointer transition-all bg-slate-800/40 hover:bg-slate-800/70"
-                        onClick={() => thumbnailFileInputRef.current?.click()}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const file = e.dataTransfer.files?.[0];
-                          if (!file || !file.type.startsWith('image/')) return;
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setThumbnailCustomImage(ev.target?.result as string);
-                          reader.readAsDataURL(file);
-                        }}
-                      >
-                        <div className="flex justify-center mb-2"><svg className="w-8 h-8 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
-                        <p className="text-sm font-bold text-slate-300">내 이미지 업로드</p>
-                        <p className="text-xs text-slate-500 mt-1">클릭하거나 이미지를 여기에 드래그</p>
-                      </div>
-                      <p className="text-xs text-slate-600 text-center">또는 아래 씬 이미지에서 썸네일 버튼을 클릭</p>
-                      {(thumbnailBaseImage || thumbnailCustomImage) && (
-                        <button
-                          type="button"
-                          onClick={() => { setThumbnailCustomImage(null); onThumbnailBaseImageChange?.(null); }}
-                          className="w-full py-1.5 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs font-bold rounded-lg border border-red-600/30 transition-all"
-                        >
-                          선택된 이미지 초기화
-                        </button>
-                      )}
-                    </div>
-
-                    {/* 캔버스 미리보기 */}
-                    <div className="relative rounded-xl overflow-hidden bg-slate-900 border border-slate-700 aspect-video">
-                      <canvas
-                        ref={thumbnailCanvasRef}
-                        className="w-full h-full object-contain"
-                        style={{ display: (thumbnailBaseImage || thumbnailCustomImage) ? 'block' : 'none' }}
-                      />
-                      {!(thumbnailBaseImage || thumbnailCustomImage) && (
-                        <div className="absolute inset-0 flex items-center justify-center text-slate-600 text-sm">
-                          이미지를 선택하세요
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 텍스트 오버레이 컨트롤 */}
-                    <div className="space-y-3">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">텍스트 오버레이</p>
-                      <input
-                        type="text"
-                        value={thumbnailText}
-                        onChange={(e) => setThumbnailText(e.target.value)}
-                        placeholder="썸네일에 넣을 텍스트"
-                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-brand-500"
-                      />
-
-                      {/* 폰트 + 정렬 */}
-                      <div className="space-y-2">
-                        {/* 폰트 선택 */}
-                        <div>
-                          <label className="text-xs text-slate-500 mb-1.5 block">폰트</label>
-                          <div className="flex flex-col gap-1">
-                            {([
-                              { label: 'Impact',      value: 'Impact, "Arial Narrow", sans-serif' },
-                              { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif' },
-                              { label: 'Bold Sans',   value: '"Noto Sans KR", "Malgun Gothic", sans-serif' },
-                              { label: 'Serif',       value: 'Georgia, serif' },
-                              { label: 'Mono',        value: '"Courier New", Courier, monospace' },
-                            ] as { label: string; value: string }[]).map(f => (
-                              <button
-                                key={f.value}
-                                type="button"
-                                onClick={() => setThumbnailFontFamily(f.value)}
-                                style={{ fontFamily: f.value }}
-                                className={`w-full py-2 px-3 rounded-lg text-sm font-bold text-left transition-all border ${
-                                  thumbnailFontFamily === f.value
-                                    ? 'bg-blue-600 border-blue-400 text-white'
-                                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                                }`}
-                              >
-                                {f.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        {/* 정렬 */}
-                        <div>
-                          <label className="text-xs text-slate-500 mb-1.5 block">정렬</label>
-                          <div className="flex gap-1.5">
-                            {([['left', '좌'], ['center', '중'], ['right', '우']] as ['left'|'center'|'right', string][]).map(([val, label]) => (
-                              <button
-                                key={val}
-                                type="button"
-                                onClick={() => setThumbnailTextAlign(val)}
-                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${
-                                  thumbnailTextAlign === val
-                                    ? 'bg-blue-600 border-blue-400 text-white'
-                                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-                                }`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-slate-500 mb-1 block">글자 크기: {thumbnailFontSize}px</label>
-                          <input
-                            type="range" min={40} max={200} step={4}
-                            value={thumbnailFontSize}
-                            onChange={(e) => setThumbnailFontSize(Number(e.target.value))}
-                            className="w-full accent-brand-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-500 mb-1 block">텍스트 색상</label>
-                          <input
-                            type="color"
-                            value={thumbnailTextColor}
-                            onChange={(e) => setThumbnailTextColor(e.target.value)}
-                            className="w-full h-9 rounded-lg bg-slate-800 border border-slate-700 cursor-pointer"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-500 mb-1 block">텍스트 위치: {thumbnailTextY}%</label>
-                        <input
-                          type="range" min={10} max={95} step={1}
-                          value={thumbnailTextY}
-                          onChange={(e) => setThumbnailTextY(Number(e.target.value))}
-                          className="w-full accent-brand-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* 다운로드 */}
-                    {(thumbnailBaseImage || thumbnailCustomImage) && (
-                      <button
-                        type="button"
-                        onClick={handleDownloadThumbnail}
-                        className="w-full py-3 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-500 hover:to-pink-500 text-white font-black rounded-xl transition-all text-sm"
-                      >
-                        썸네일 다운로드 (1280×720 JPG)
-                      </button>
-                    )}
-
-                    {/* AI 생성 섹션 */}
-                    <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-                      <p className="text-xs font-bold text-blue-300 uppercase tracking-wider mb-3">AI 썸네일 생성</p>
-                      <button
-                        type="button"
-                        onClick={handleGenerateThumbnail}
-                        disabled={isProcessing || isThumbnailGenerating}
-                        className="w-full py-2.5 bg-blue-600/20 hover:bg-blue-600/35 disabled:opacity-40 text-blue-200 font-bold rounded-xl transition-all text-sm border border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.25)]"
-                      >
-                        {isThumbnailGenerating ? '생성 중...' : 'AI로 썸네일 이미지 생성'}
-                      </button>
-                      {thumbnailImage && (
-                        <div className="mt-3 relative rounded-xl overflow-hidden border border-slate-700 cursor-pointer" onClick={() => {
-                          setThumbnailCustomImage(`data:image/jpeg;base64,${thumbnailImage}`);
-                        }}>
-                          <img src={`data:image/jpeg;base64,${thumbnailImage}`} alt="AI 썸네일" className="w-full" />
-                          <div className="absolute inset-0 bg-black/50 opacity-0 hover:opacity-100 transition-all flex items-center justify-center text-white text-sm font-bold">
-                            클릭하면 에디터에서 편집
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                  <div className="h-full -mx-4 -mb-4">
+                    <ThumbnailEditor
+                      scenes={thumbnailScenes || []}
+                      topic={thumbnailTopic || ''}
+                      selectedImage={thumbnailBaseImage}
+                      onImageGenerated={(img) => onThumbnailBaseImageChange?.(img)}
+                    />
                   </div>
                 )}
 

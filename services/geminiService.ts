@@ -1447,22 +1447,21 @@ export const generateThumbnailV2 = async (params: {
   const ratio = params.thumbnailRatio || '16:9';
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
-  const prompt = `유튜브 썸네일 이미지를 생성하라. ${sizeDesc}.
+  const prompt = `유튜브 썸네일 배경 이미지를 생성하라. ${sizeDesc}.
 
 주제: "${params.topic}"
 시청 타겟: ${params.targetAudience}
 ${charDesc}
-메인 텍스트: "${params.mainText}" — 썸네일에 크고 굵게 한국어로 표시
-서브 텍스트: "${params.subText}" — 메인 텍스트 아래 작게 한국어로 표시
 ${borderDesc[params.borderStyle] || ''}
 ${channelDesc}${editDesc}
 
 이미지 방향: ${params.imagePrompt}
 
 요구사항:
+- NO TEXT IN IMAGE — 텍스트, 글자, 문자를 절대 포함하지 말 것
 - 강렬하고 눈길을 끄는 비주얼, 밝고 대비가 강한 색상
-- 텍스트는 크고 굵게, 선명하게 읽기 쉽게
-- 전문적인 유튜브 썸네일 스타일
+- 상단 30% 영역은 텍스트 오버레이를 위한 여백 확보 (단색 또는 그라디언트 배경)
+- 전문적인 유튜브 썸네일 배경 스타일
 - SINGLE FRAME ONLY — 패널, 분할 화면, 만화 컷 금지`;
 
   try {

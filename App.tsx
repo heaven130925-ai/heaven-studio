@@ -801,6 +801,8 @@ const App: React.FC = () => {
           thumbnailBaseImage={thumbnailBaseImage}
           onThumbnailBaseImageChange={setThumbnailBaseImage}
           onAspectRatioChange={setAspectRatio}
+          thumbnailScenes={generatedData}
+          thumbnailTopic={currentTopic}
         />
 
         

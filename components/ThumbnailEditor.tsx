@@ -1,7 +1,7 @@
 /**
  * ThumbnailEditor — AI 썸네일 생성 위자드 (6단계)
  * 1. 주제 입력 → 2. 등장 인물 → 3. 시청 타겟
- * → 4. AI 분석 → 5. 전략/스타일 → 6. 결과
+ * → 4. AI 분석 → 5. 전략/스타일 → 6. 결과 (캔버스 한글 텍스트 합성)
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -40,13 +40,68 @@ const BORDER_OPTIONS: { id: BorderStyle; label: string; icon: string }[] = [
   { id: 'sketch', label: '손그림/낙서', icon: '✏️' },
 ];
 
+/** 캔버스로 배경이미지 + 한글 텍스트 합성 */
+async function applyTextOverlay(
+  bgBase64: string,
+  mainText: string,
+  subText: string,
+  ratio: '16:9' | '9:16'
+): Promise<string> {
+  return new Promise((resolve) => {
+    const W = ratio === '9:16' ? 1080 : 1280;
+    const H = ratio === '9:16' ? 1920 : 720;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+
+    const img = new Image();
+    img.onload = () => {
+      // 배경 그리기
+      ctx.drawImage(img, 0, 0, W, H);
+
+      if (mainText || subText) {
+        // 메인 텍스트 크기 / 위치
+        const mainSize = Math.round(W * 0.095);
+        const subSize  = Math.round(W * 0.055);
+        const topY     = Math.round(H * 0.04);
+
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'top';
+        ctx.lineJoin     = 'round';
+
+        const drawText = (text: string, y: number, size: number, fillColor: string, strokeColor: string) => {
+          if (!text) return;
+          ctx.font      = `900 ${size}px "Noto Sans KR","맑은 고딕","Apple SD Gothic Neo","Arial Black",sans-serif`;
+          ctx.lineWidth = size * 0.09;
+          ctx.strokeStyle = strokeColor;
+          ctx.strokeText(text, W / 2, y);
+          ctx.fillStyle = fillColor;
+          ctx.fillText(text, W / 2, y);
+        };
+
+        // 메인: 흰색 + 검정 스트로크
+        drawText(mainText, topY, mainSize, '#FFFFFF', '#000000');
+        // 서브: 노란색 + 검정 스트로크
+        if (subText) drawText(subText, topY + mainSize * 1.25, subSize, '#FFE600', '#000000');
+      }
+
+      resolve(canvas.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = () => {
+      // 이미지 로드 실패 시 base64 그대로 반환
+      resolve(`data:image/jpeg;base64,${bgBase64}`);
+    };
+    img.src = bgBase64.startsWith('data:') ? bgBase64 : `data:image/jpeg;base64,${bgBase64}`;
+  });
+}
+
 const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, selectedImage, onImageGenerated }) => {
   const [step, setStep] = useState<Step>(1);
 
   // 별표로 선택된 이미지가 오면 바로 결과 화면으로
   useEffect(() => {
     if (selectedImage) {
-      // imageData는 raw base64일 수 있으므로 data URL로 변환
       const dataUrl = selectedImage.startsWith('data:')
         ? selectedImage
         : `data:image/jpeg;base64,${selectedImage}`;
@@ -134,7 +189,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const runGenerate = async (editReq?: string) => {
     try {
       const { generateThumbnailV2 } = await import('../services/geminiService');
-      const result = await generateThumbnailV2({
+      const bgBase64 = await generateThumbnailV2({
         topic,
         mainText,
         subText,
@@ -149,10 +204,11 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         channelName,
         editRequest: editReq,
       });
-      if (result) {
-        const dataUrl = `data:image/jpeg;base64,${result}`;
-        setGeneratedImage(dataUrl);
-        onImageGenerated?.(dataUrl);
+      if (bgBase64) {
+        // 캔버스로 한글 텍스트 합성
+        const composited = await applyTextOverlay(bgBase64, mainText, subText, thumbnailRatio);
+        setGeneratedImage(composited);
+        onImageGenerated?.(composited);
       }
     } catch (e) { console.error(e); }
   };
@@ -194,23 +250,30 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setShowChannelName(false);
   };
 
+  // 뒤로가기 버튼 (각 단계별 이전 단계)
+  const BackButton = ({ toStep }: { toStep: Step }) => (
+    <button
+      onClick={() => setStep(toStep)}
+      className="text-sm text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+    >
+      ← 이전
+    </button>
+  );
+
   // ── 렌더 ─────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="max-w-2xl mx-auto w-full p-6 space-y-5">
+      <div className="max-w-2xl mx-auto w-full p-6 flex flex-col justify-center min-h-full">
+        <div className="space-y-5">
 
         {/* ── STEP 1: 주제 입력 ── */}
         {step === 1 && (
-          <div className="space-y-5">
-            <div className="text-center space-y-2 pt-4">
-              <h2 className="text-2xl font-black text-white leading-tight">
+          <div className="space-y-6">
+            <div className="text-center pt-4">
+              <h2 className="text-4xl font-black text-white leading-tight">
                 클릭을 부르는<br />
-                <span className="text-red-500">썸네일 기획 및 생성</span>
+                <span className="text-red-500">썸네일 생성</span>
               </h2>
-              <p className="text-sm text-slate-400">
-                영상 주제를 입력하거나 <strong className="text-white">대본 파일</strong>을 업로드하세요.<br />
-                내용을 깊이 있게 분석하여 최적의 썸네일을 제안합니다.
-              </p>
             </div>
             <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4">
               <textarea
@@ -244,9 +307,13 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         {/* ── STEP 2: 등장 인물 ── */}
         {step === 2 && (
           <div className="space-y-4">
-            <div className="text-center space-y-1 pt-2">
-              <h2 className="text-xl font-black text-white">썸네일 등장 인물 설정</h2>
-              <p className="text-sm text-slate-400">썸네일에 들어갈 메인 피사체를 설정해주세요.</p>
+            <div className="flex items-center justify-between pt-2">
+              <BackButton toStep={1} />
+              <div className="text-center">
+                <h2 className="text-xl font-black text-white">썸네일 등장 인물 설정</h2>
+                <p className="text-sm text-slate-400">썸네일에 들어갈 메인 피사체를 설정해주세요.</p>
+              </div>
+              <div className="w-12" />
             </div>
             <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-4">
               {/* 피사체 토글 */}
@@ -345,9 +412,13 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         {/* ── STEP 3: 시청 타겟 ── */}
         {step === 3 && (
           <div className="space-y-4">
-            <div className="text-center space-y-1 pt-2">
-              <h2 className="text-xl font-black text-white">주요 시청 타겟은 누구인가요?</h2>
-              <p className="text-sm text-slate-400">타겟에 따라 성공하는 디자인과 텍스트 전략이 결정됩니다.</p>
+            <div className="flex items-center justify-between pt-2">
+              <BackButton toStep={2} />
+              <div className="text-center">
+                <h2 className="text-xl font-black text-white">주요 시청 타겟은 누구인가요?</h2>
+                <p className="text-sm text-slate-400">타겟에 따라 성공하는 디자인과 텍스트 전략이 결정됩니다.</p>
+              </div>
+              <div className="w-12" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               {TARGET_OPTIONS.map(t => (
@@ -372,15 +443,23 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
         {/* ── STEP 4: 분석 중 ── */}
         {step === 4 && (
-          <div className="flex flex-col items-center justify-center py-40 space-y-4">
-            <div className="w-12 h-12 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">주제 및 대본 분석 중...</p>
+          <div className="space-y-4">
+            <div className="flex items-center pt-2">
+              <BackButton toStep={3} />
+            </div>
+            <div className="flex flex-col items-center justify-center py-32 space-y-4">
+              <div className="w-12 h-12 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-slate-400 text-sm">주제 및 대본 분석 중...</p>
+            </div>
           </div>
         )}
 
         {/* ── STEP 5: 전략 제안 + 스타일 ── */}
         {step === 5 && strategy && (
           <div className="space-y-4">
+            <div className="flex items-center pt-2">
+              <BackButton toStep={3} />
+            </div>
             {/* 전략 요약 */}
             <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -458,7 +537,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
               <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{strategy.imagePrompt}</p>
             </div>
 
-            <p className="text-center text-xs text-slate-500">ⓘ 두 가지 버전의 이미지가 동시에 생성됩니다 (약 20초 소요)</p>
+            <p className="text-center text-xs text-slate-500">ⓘ 약 20초 소요</p>
             <button onClick={handleGenerate}
               className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-sm transition-colors flex items-center justify-center gap-2">
               🖼 썸네일 생성하기 →
@@ -470,8 +549,9 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         {step === 6 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <button onClick={() => setStep(5)} className="text-sm text-slate-400 hover:text-white transition-colors">← 처음으로</button>
+              <BackButton toStep={5} />
               <p className="text-sm font-bold text-white">썸네일 생성 완료</p>
+              <div className="w-12" />
             </div>
 
             {/* 이미지 */}
@@ -524,6 +604,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
           </div>
         )}
 
+        </div>
       </div>
     </div>
   );
