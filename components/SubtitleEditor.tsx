@@ -7,7 +7,7 @@
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS } from '../types';
-import { downloadProjectZip, downloadMediaZip, downloadAudioZip, downloadMergedAudio } from '../utils/csvHelper';
+import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
 import { exportAssetsToZip } from '../services/exportService';
 
@@ -578,8 +578,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             {[
               { label: '전체 저장', onClick: () => downloadProjectZip(scenes) },
               { label: '이미지+음성', onClick: () => downloadMediaZip(scenes) },
-              { label: '오디오 ZIP', onClick: () => downloadAudioZip(scenes) },
-              { label: '오디오 통합 WAV', onClick: () => downloadMergedAudio(scenes) },
               { label: '엑셀+이미지', onClick: () => exportAssetsToZip(scenes, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`) },
               { label: 'SRT', onClick: async () => await downloadSrt(scenes, `subtitles_${Date.now()}.srt`) },
             ].map(btn => (
