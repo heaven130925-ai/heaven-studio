@@ -8,10 +8,16 @@ const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSa
 // UTF-8 BOM for Excel Korean support
 const BOM = "\uFEFF";
 
+/** data: URI 접두사 제거 */
+function stripDataPrefix(base64: string): string {
+  return base64.startsWith('data:') ? base64.split(',')[1] : base64;
+}
+
 /** Raw PCM16 여부 감지 (MP3/WAV/OGG 헤더 없으면 PCM으로 간주) */
 function isPcm16Audio(base64: string): boolean {
   try {
-    const bytes = atob(base64.slice(0, 12));
+    const raw = stripDataPrefix(base64);
+    const bytes = atob(raw.slice(0, 16)); // 16자 = 12바이트 확보
     const b0 = bytes.charCodeAt(0), b1 = bytes.charCodeAt(1), b2 = bytes.charCodeAt(2);
     if (b0 === 0x49 && b1 === 0x44 && b2 === 0x33) return false; // ID3 (MP3)
     if (b0 === 0xFF && (b1 & 0xE0) === 0xE0) return false;       // sync frame (MP3)
@@ -21,9 +27,20 @@ function isPcm16Audio(base64: string): boolean {
   } catch { return false; }
 }
 
+/** Uint8Array → base64 (청크 처리로 스택 오버플로 방지) */
+function uint8ToBase64(bytes: Uint8Array): string {
+  let bin = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(bin);
+}
+
 /** PCM16 base64 → WAV base64 (24kHz, mono, 16-bit) */
 function pcm16ToWavBase64(base64Pcm: string): string {
-  const pcmBytes = Uint8Array.from(atob(base64Pcm), c => c.charCodeAt(0));
+  const raw = stripDataPrefix(base64Pcm);
+  const pcmBytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
   const wav = new ArrayBuffer(44 + pcmBytes.length);
   const v = new DataView(wav);
   const wr = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
@@ -32,10 +49,7 @@ function pcm16ToWavBase64(base64Pcm: string): string {
   v.setUint32(24, 24000, true); v.setUint32(28, 48000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
   wr(36, 'data'); v.setUint32(40, pcmBytes.length, true);
   new Uint8Array(wav).set(pcmBytes, 44);
-  const wavBytes = new Uint8Array(wav);
-  let bin = '';
-  for (let i = 0; i < wavBytes.length; i++) bin += String.fromCharCode(wavBytes[i]);
-  return btoa(bin);
+  return uint8ToBase64(new Uint8Array(wav));
 }
 
 export const downloadCSV = (data: GeneratedAsset[]) => {
@@ -115,10 +129,11 @@ export const downloadMediaZip = async (data: GeneratedAsset[]) => {
     }
 
     if (item.audioData && audioFolder) {
+      const rawAudio = stripDataPrefix(item.audioData);
       if (isPcm16Audio(item.audioData)) {
-        audioFolder.file(`scene_${num}.wav`, pcm16ToWavBase64(item.audioData), { base64: true });
+        audioFolder.file(`scene_${num}.wav`, pcm16ToWavBase64(rawAudio), { base64: true });
       } else {
-        audioFolder.file(`scene_${num}.mp3`, item.audioData, { base64: true });
+        audioFolder.file(`scene_${num}.mp3`, rawAudio, { base64: true });
       }
       audioCount++;
     }
@@ -144,10 +159,11 @@ export const downloadAudioZip = async (data: GeneratedAsset[]) => {
   for (const item of data) {
     if (item.audioData) {
       const num = item.sceneNumber.toString().padStart(3, '0');
+      const rawAudio = stripDataPrefix(item.audioData);
       if (isPcm16Audio(item.audioData)) {
-        zip.file(`scene_${num}.wav`, pcm16ToWavBase64(item.audioData), { base64: true });
+        zip.file(`scene_${num}.wav`, pcm16ToWavBase64(rawAudio), { base64: true });
       } else {
-        zip.file(`scene_${num}.mp3`, item.audioData, { base64: true });
+        zip.file(`scene_${num}.mp3`, rawAudio, { base64: true });
       }
       audioCount++;
     }
