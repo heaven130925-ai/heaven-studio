@@ -173,6 +173,76 @@ export const downloadAudioZip = async (data: GeneratedAsset[]) => {
   saveAs(blob, `heaven_audio_${Date.now()}.zip`);
 };
 
+/** AudioBuffer → WAV Blob (PCM16, 인터리브) */
+function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const numSamples = buffer.length;
+  const dataSize = numSamples * numChannels * 2;
+  const wav = new ArrayBuffer(44 + dataSize);
+  const v = new DataView(wav);
+  const wr = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  wr(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); wr(8, 'WAVE');
+  wr(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, numChannels, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * numChannels * 2, true);
+  v.setUint16(32, numChannels * 2, true);
+  v.setUint16(34, 16, true);
+  wr(36, 'data'); v.setUint32(40, dataSize, true);
+  const pcm = new Int16Array(wav, 44);
+  for (let i = 0; i < numSamples; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      pcm[i * numChannels + ch] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+  }
+  return new Blob([wav], { type: 'audio/wav' });
+}
+
+/** 모든 씬 오디오를 하나로 합쳐서 WAV 1개로 다운로드 */
+export const downloadMergedAudio = async (data: GeneratedAsset[]) => {
+  const items = data.filter(item => item.audioData);
+  if (items.length === 0) { alert("다운로드할 오디오가 없습니다."); return; }
+
+  const ctx = new AudioContext();
+  const buffers: AudioBuffer[] = [];
+
+  for (const item of items) {
+    const raw = stripDataPrefix(item.audioData!);
+    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+    try {
+      buffers.push(await ctx.decodeAudioData(bytes.buffer.slice(0)));
+    } catch {
+      // PCM16 fallback (Gemini TTS)
+      const pcm = new Int16Array(bytes.buffer);
+      const buf = ctx.createBuffer(1, pcm.length, 24000);
+      const ch = buf.getChannelData(0);
+      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
+      buffers.push(buf);
+    }
+  }
+
+  if (buffers.length === 0) { alert("오디오 디코딩 실패"); ctx.close(); return; }
+
+  const sampleRate = buffers[0].sampleRate;
+  const numChannels = Math.max(...buffers.map(b => b.numberOfChannels));
+  const totalLen = buffers.reduce((s, b) => s + b.length, 0);
+  const merged = ctx.createBuffer(numChannels, totalLen, sampleRate);
+
+  let offset = 0;
+  for (const buf of buffers) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const src = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
+      merged.getChannelData(ch).set(src, offset);
+    }
+    offset += buf.length;
+  }
+
+  ctx.close();
+  saveAs(audioBufferToWavBlob(merged), `heaven_audio_merged_${Date.now()}.wav`);
+};
+
 export const downloadProjectZip = async (data: GeneratedAsset[]) => {
   const zip = new JSZip();
   const imgFolder = zip.folder("images");
