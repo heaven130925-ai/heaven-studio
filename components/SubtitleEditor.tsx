@@ -214,7 +214,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     }
     // 3순위: AI 의미 단위 (meaningChunks)
     if (meaningChunks && meaningChunks.length > 0) {
-      const EARLY = 0;
+      const EARLY = -0.1;
       const tAdj = t + EARLY;
       if (tAdj < meaningChunks[0].startTime) return meaningChunks[0].text;
       const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => tAdj >= chunk.startTime && tAdj < chunk.endTime);
@@ -304,7 +304,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     });
     const total = weights.reduce((a, b) => a + b, 0);
 
-    const EARLY = 0;
+    const EARLY = -0.1;
     const result: { text: string; startTime: number; endTime: number }[] = [];
     let t = 0;
     for (let i = 0; i < chunks.length; i++) {

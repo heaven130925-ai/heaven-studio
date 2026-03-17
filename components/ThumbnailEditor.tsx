@@ -637,11 +637,30 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setIsTextUpdating(false);
   };
 
-  // 배경만 AI 수정
+  // 배경만 AI 수정 (image-to-image)
   const handleEdit = async () => {
-    if (!editRequest.trim()) return;
+    if (!editRequest.trim() || !bgImage) return;
     setIsEditing(true);
-    await runGenerate(editRequest);
+    try {
+      const { editImageWithGemini } = await import('../services/geminiService');
+      const rawBase64 = bgImage.startsWith('data:') ? bgImage.split(',')[1] : bgImage;
+      const edited = await editImageWithGemini(rawBase64, editRequest);
+      if (edited) {
+        const selectedModel = localStorage.getItem('heaven_image_model') || '';
+        const isNanoBanana = selectedModel.startsWith('gemini-3');
+        const rawBg = `data:image/jpeg;base64,${edited}`;
+        setBgImage(rawBg);
+        skipNextSelectedImageRef.current = true;
+        if (isNanoBanana) {
+          setGeneratedImage(rawBg);
+          onImageGenerated?.(rawBg);
+        } else {
+          const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
+          setGeneratedImage(composited);
+          onImageGenerated?.(composited);
+        }
+      }
+    } catch (e) { console.error(e); }
     setEditRequest('');
     setIsEditing(false);
   };
@@ -990,8 +1009,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                   {/* 배경 이미지 */}
                   <img src={bgImage} className="absolute inset-0 w-full h-full object-cover pointer-events-none" alt="" />
 
-                  {/* 메인 텍스트 — 드래그 가능, 실시간 업데이트 */}
-                  {mainText && (
+                  {/* 메인 텍스트 — 드래그 가능, 실시간 업데이트 (나노바나나2는 텍스트가 이미지 안에 있으므로 숨김) */}
+                  {mainText && !(localStorage.getItem('heaven_image_model') || '').startsWith('gemini-3') && (
                     <div
                       className={`absolute cursor-grab active:cursor-grabbing z-10 ${dragging === 'main' ? 'opacity-90' : ''}`}
                       style={{
@@ -1010,8 +1029,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                     </div>
                   )}
 
-                  {/* 서브 텍스트 — 드래그 가능 */}
-                  {subText && (
+                  {/* 서브 텍스트 — 드래그 가능 (나노바나나2는 숨김) */}
+                  {subText && !(localStorage.getItem('heaven_image_model') || '').startsWith('gemini-3') && (
                     <div
                       className={`absolute cursor-grab active:cursor-grabbing z-10 ${dragging === 'sub' ? 'opacity-90' : ''}`}
                       style={{
