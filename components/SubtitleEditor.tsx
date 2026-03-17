@@ -212,9 +212,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const g = googleTtsGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : googleTtsGroups[googleTtsGroups.length - 1].text;
     }
-    // 3순위: AI 의미 단위 (meaningChunks) — 0.15s 먼저 표시 (오디오 지연 보정)
+    // 3순위: AI 의미 단위 (meaningChunks)
     if (meaningChunks && meaningChunks.length > 0) {
-      const EARLY = 0.15;
+      const EARLY = 0;
       const tAdj = t + EARLY;
       if (tAdj < meaningChunks[0].startTime) return meaningChunks[0].text;
       const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => tAdj >= chunk.startTime && tAdj < chunk.endTime);
@@ -304,8 +304,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     });
     const total = weights.reduce((a, b) => a + b, 0);
 
-    // 0.15s 앞당겨 표시: TTS가 음절을 말하기 직전에 자막이 나오도록
-    const EARLY = 0.15;
+    const EARLY = 0;
     const result: { text: string; startTime: number; endTime: number }[] = [];
     let t = 0;
     for (let i = 0; i < chunks.length; i++) {
