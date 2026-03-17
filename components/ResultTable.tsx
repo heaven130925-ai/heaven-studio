@@ -63,6 +63,7 @@ interface ResultTableProps {
   onUpgradeImage?: (index: number) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   onGenerateAnimation?: (index: number) => void;  // 영상 변환 콜백
+  onGenerateTextToVideo?: (index: number, prompt: string) => void;  // 텍스트→영상 콜백
   isExporting?: boolean;
   animatingIndices?: Set<number>;  // 현재 영상 변환 중인 인덱스들
   onSelectThumbnail?: (imageBase64: string) => void;
@@ -208,13 +209,15 @@ interface TableRowProps {
   onRegenerateImage?: (index: number) => void;
   onRegenerateWithPrompt?: (index: number, customPrompt: string) => void;
   onGenerateAnimation?: (index: number) => void;
+  onGenerateTextToVideo?: (index: number, prompt: string) => void;
   onOpenPreview?: (src: string) => void;
   onSelectThumbnail?: (imageBase64: string) => void;
 }
 
-const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspectRatio = '16:9', subConfig, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onOpenPreview, onSelectThumbnail }) => {
+const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspectRatio = '16:9', subConfig, onRegenerateImage, onRegenerateWithPrompt, onGenerateAnimation, onGenerateTextToVideo, onOpenPreview, onSelectThumbnail }) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editPrompt, setEditPrompt] = useState(row.visualPrompt || '');
+  const [videoPrompt, setVideoPrompt] = useState('');
 
   const handleApplyPrompt = () => {
     if (editPrompt.trim()) {
@@ -388,6 +391,35 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
             </button>
           </div>
         )}
+
+        {/* 텍스트→영상 (Kling) 입력 */}
+        {onGenerateTextToVideo && (
+          <div className="mt-3 space-y-1.5">
+            <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Kling 텍스트→영상</div>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={videoPrompt}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVideoPrompt(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === 'Enter' && videoPrompt.trim() && !isAnimating) {
+                    onGenerateTextToVideo(index, videoPrompt.trim());
+                  }
+                }}
+                placeholder="영상 내용을 입력하세요..."
+                disabled={isAnimating}
+                className="flex-1 bg-slate-950 border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-[10px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-cyan-500/40 disabled:opacity-40"
+              />
+              <button
+                onClick={() => { if (videoPrompt.trim()) onGenerateTextToVideo(index, videoPrompt.trim()); }}
+                disabled={!videoPrompt.trim() || isAnimating}
+                className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-400 text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 whitespace-nowrap"
+              >
+                영상 생성
+              </button>
+            </div>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -395,7 +427,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
 
 TableRow.displayName = 'TableRow';
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, isExporting, animatingIndices, onSelectThumbnail, aspectRatio: aspectRatioProp }) => {
+const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRegenerateWithPrompt, onExportVideo, onGenerateAnimation, onGenerateTextToVideo, isExporting, animatingIndices, onSelectThumbnail, aspectRatio: aspectRatioProp }) => {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const onOpenPreview = useCallback((src: string) => setPreviewSrc(src), []);
   const aspectRatio = aspectRatioProp ?? ((localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9');
@@ -632,6 +664,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onRegenerateImage, onRe
                   onRegenerateImage={onRegenerateImage}
                   onRegenerateWithPrompt={onRegenerateWithPrompt}
                   onGenerateAnimation={onGenerateAnimation}
+                  onGenerateTextToVideo={onGenerateTextToVideo}
                   onOpenPreview={onOpenPreview}
                   onSelectThumbnail={onSelectThumbnail}
                 />

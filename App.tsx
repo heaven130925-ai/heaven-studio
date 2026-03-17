@@ -10,13 +10,14 @@ import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
-import { generateVideoFromImage, getFalApiKey } from './services/falService';
+import { generateVideoFromImage, generateTextToVideo, getFalApiKey } from './services/falService';
 import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
+import { downloadAudioZip } from './utils/csvHelper';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -152,6 +153,34 @@ const App: React.FC = () => {
     setCurrentCost(null);
   };
 
+  // 미완성 씬 이어서 생성 (이미지 없는 씬만)
+  const handleResume = useCallback(async () => {
+    if (isProcessingRef.current) return;
+    const incomplete = assetsRef.current.filter(a => !a.imageData);
+    if (incomplete.length === 0) return;
+    isAbortedRef.current = false;
+    isProcessingRef.current = true;
+    setStep(GenerationStep.ASSETS);
+    setProgressMessage('이어서 생성 중...');
+    for (let i = 0; i < assetsRef.current.length; i++) {
+      if (isAbortedRef.current) break;
+      if (assetsRef.current[i].imageData) continue;
+      updateAssetAt(i, { status: 'generating' });
+      setProgressMessage(`씬 ${i + 1}/${assetsRef.current.length} 이미지 생성 중...`);
+      try {
+        const img = await generateImage(assetsRef.current[i], currentReferenceImages);
+        if (img && !isAbortedRef.current) updateAssetAt(i, { imageData: img, status: 'completed' });
+      } catch (e: any) {
+        console.error(`씬 ${i + 1} 이어서 생성 실패:`, e.message);
+        updateAssetAt(i, { status: 'error' });
+      }
+      if (i < assetsRef.current.length - 1 && !isAbortedRef.current) await wait(1500);
+    }
+    isProcessingRef.current = false;
+    if (!isAbortedRef.current) setStep(GenerationStep.COMPLETED);
+    setProgressMessage('이어서 생성 완료!');
+  }, [currentReferenceImages]);
+
   const handleAbort = () => {
     isAbortedRef.current = true;
     isProcessingRef.current = false;
@@ -180,7 +209,8 @@ const App: React.FC = () => {
     refImgs: ReferenceImages,
     sourceText: string | null,
     sceneCount: number = 0,
-    imageOnly: boolean = false
+    imageOnly: boolean = false,
+    audioOnly: boolean = false
   ) => {
     console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}, imageOnly=${imageOnly}`);
     if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
@@ -188,7 +218,7 @@ const App: React.FC = () => {
     isAbortedRef.current = false;
 
     // 자동 주제 모드(대본만 생성)는 메인화면에서 처리 → 스토리보드 창 안 열기
-    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly;
+    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
     if (!isAutoTopicMode) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
@@ -459,14 +489,24 @@ const App: React.FC = () => {
         }
       };
 
-      setProgressMessage(imageOnly ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
-      // imageOnly 모드: 이미지만 생성, 아니면 병렬 생성
-      await Promise.all(imageOnly ? [runImages()] : [runAudio(), runImages()]);
+      setProgressMessage(imageOnly ? '이미지 생성 중...' : audioOnly ? '오디오 생성 중...' : '시각 에셋 및 오디오 합성 중...');
+      if (imageOnly) await runImages();
+      else if (audioOnly) await runAudio();
+      else await Promise.all([runAudio(), runImages()]);
 
-      // 애니메이션 변환은 이제 수동으로 (이미지 호버 시 버튼 클릭)
-      // 자동 변환 비활성화 - 사용자가 원하는 이미지만 선택적으로 변환 가능
-      
       if (isAbortedRef.current) return;
+
+      // 오디오만 생성: ZIP 다운로드 후 종료 (스토리보드 미표시)
+      if (audioOnly) {
+        setProgressMessage('오디오 ZIP 다운로드 중...');
+        await downloadAudioZip(assetsRef.current);
+        setProgressMessage('오디오 다운로드 완료!');
+        assetsRef.current = [];
+        setGeneratedData([]);
+        setStep(GenerationStep.IDLE);
+        return;
+      }
+
       setStep(GenerationStep.COMPLETED);
 
       // 비용 요약 메시지 (원화)
@@ -496,6 +536,7 @@ const App: React.FC = () => {
   // 이미지 재생성 핸들러 (useCallback으로 메모이제이션)
   const handleRegenerateImage = useCallback(async (idx: number) => {
     if (isProcessingRef.current) return;
+    isAbortedRef.current = false; // 개별 재생성은 abort 상태 리셋
 
     const MAX_RETRIES = 2;
     updateAssetAt(idx, { status: 'generating' });
@@ -602,6 +643,36 @@ const App: React.FC = () => {
         next.delete(idx);
         return next;
       });
+    }
+  }, [animatingIndices]);
+
+  // Kling 텍스트→영상 핸들러
+  const handleGenerateTextToVideo = useCallback(async (idx: number, prompt: string) => {
+    const falKey = getFalApiKey();
+    if (!falKey) {
+      alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
+      return;
+    }
+    if (animatingIndices.has(idx)) return;
+
+    try {
+      setAnimatingIndices(prev => new Set(prev).add(idx));
+      setProgressMessage(`씬 ${idx + 1} Kling 텍스트→영상 생성 중...`);
+
+      const videoUrl = await generateTextToVideo(prompt, falKey);
+
+      if (videoUrl) {
+        updateAssetAt(idx, { videoData: videoUrl, videoDuration: CONFIG.ANIMATION.VIDEO_DURATION });
+        addCost('video', PRICING.VIDEO.perVideo, 1);
+        setProgressMessage(`씬 ${idx + 1} 영상 생성 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
+      } else {
+        setProgressMessage(`씬 ${idx + 1} 영상 생성 실패`);
+      }
+    } catch (e: any) {
+      console.error('Kling 텍스트→영상 실패:', e);
+      setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
+    } finally {
+      setAnimatingIndices(prev => { const next = new Set<number>(prev); next.delete(idx); return next; });
     }
   }, [animatingIndices]);
 
@@ -746,6 +817,13 @@ const App: React.FC = () => {
               </span>
             )}
           </button>
+          <button
+            onClick={() => { setStoryboardTab('subtitle'); setShowStoryboard(true); }}
+            className="px-5 py-2.5 text-base font-black rounded-xl transition-all border text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+            자막 편집
+          </button>
           <div className="ml-auto">
             <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
@@ -776,8 +854,37 @@ const App: React.FC = () => {
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
       <main className="py-2 overflow-x-hidden">
-        {/* 기존 스토리보드로 돌아가기 배너 */}
-        {generatedData.length > 0 && !showStoryboard && (
+        {/* 대본 완성 배너 */}
+        {step === GenerationStep.SCRIPT_READY && (
+          <div className="max-w-7xl mx-auto px-4 mb-3">
+            <div className="w-full flex items-center justify-between px-5 py-4 rounded-xl bg-green-500/10 border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">✅</span>
+                <span className="text-sm font-bold text-green-300">{progressMessage}</span>
+              </div>
+              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-black border border-red-500/30 hover:bg-red-600/30 transition-colors">리셋</button>
+            </div>
+          </div>
+        )}
+
+        {/* 백그라운드 생성 중 진행 배너 */}
+        {!showStoryboard && (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING || isVideoGenerating) && (
+          <div className="max-w-7xl mx-auto px-4 mb-3">
+            <div className="w-full flex items-center justify-between px-5 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/40">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent animate-spin rounded-full shrink-0" />
+                <span className="text-sm font-bold text-yellow-300 truncate">{progressMessage || '생성 중...'}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-3">
+                <button onClick={() => setShowStoryboard(true)} className="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-300 text-xs font-bold border border-yellow-500/40 hover:bg-yellow-500/30 transition-colors">보기</button>
+                {!isVideoGenerating && <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-bold border border-red-500/30 hover:bg-red-600/30 transition-colors">중단</button>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 스토리보드로 돌아가기 배너 */}
+        {generatedData.length > 0 && !showStoryboard && step === GenerationStep.COMPLETED && !isVideoGenerating && (
           <div className="max-w-7xl mx-auto px-4 mb-6">
             <button
               onClick={() => setShowStoryboard(true)}
@@ -801,21 +908,12 @@ const App: React.FC = () => {
           thumbnailBaseImage={thumbnailBaseImage}
           onThumbnailBaseImageChange={setThumbnailBaseImage}
           onAspectRatioChange={setAspectRatio}
-          thumbnailScenes={generatedData}
+          thumbnailScenes={[]}
           thumbnailTopic={currentTopic}
+          onOpenGallery={() => setViewMode('gallery')}
         />
 
         
-        {/* SCRIPT_READY 상태: 대본 완성 안내 */}
-        {step === GenerationStep.SCRIPT_READY && (
-          <div className="max-w-7xl mx-auto px-4 text-center mb-6">
-            <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
-              <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
-              <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
-              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
-            </div>
-          </div>
-        )}
       </main>
       )}
 
@@ -826,7 +924,7 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 shrink-0">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
+                onClick={() => setShowStoryboard(false)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-red-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
               >
                 ← 메인으로
@@ -860,6 +958,9 @@ const App: React.FC = () => {
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
+                  {assetsRef.current.some(a => !a.imageData) && (
+                    <button onClick={handleResume} className="px-3 py-1 rounded-lg bg-blue-600/30 text-blue-300 text-[10px] font-black border border-blue-500/40 hover:bg-blue-600/50 transition-colors">▶ 이어서 생성</button>
+                  )}
                   <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">전체 리셋</button>
                 </>
               )}
@@ -885,7 +986,7 @@ const App: React.FC = () => {
                 scenes={generatedData}
                 topic={currentTopic}
                 selectedImage={thumbnailBaseImage}
-                onImageGenerated={(img) => setThumbnailBaseImage(img)}
+                onImageGenerated={undefined}
               />
             ) : storyboardTab === 'subtitle' ? (
               <SubtitleEditor
@@ -896,10 +997,22 @@ const App: React.FC = () => {
                 isExporting={isVideoGenerating}
                 onSelectThumbnail={handleSelectThumbnail}
                 onNarrationChange={(idx, val) => {
-                  const updated = [...generatedData];
-                  updated[idx] = { ...updated[idx], narration: val };
+                  const updated = [...assetsRef.current];
+                  // 자막 비우면 오디오도 함께 삭제
+                  if (!val.trim()) {
+                    updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
+                  } else {
+                    updated[idx] = { ...updated[idx], narration: val };
+                  }
                   assetsRef.current = updated;
-                  setGeneratedData(updated);
+                  setGeneratedData([...updated]);
+                }}
+                onImageEditCommand={async (idx, command) => {
+                  const current = assetsRef.current[idx];
+                  if (!current) return;
+                  // command를 맨 앞에 배치해 AI가 최우선 적용하도록
+                  const base = current.visualPrompt || current.narration || '';
+                  await handleRegenerateWithPrompt(idx, `[USER EDIT REQUEST — APPLY FIRST]: ${command}\n\n[SCENE BASE]: ${base}`);
                 }}
               />
             ) : (
@@ -912,6 +1025,7 @@ const App: React.FC = () => {
                   isExporting={isVideoGenerating}
                   animatingIndices={animatingIndices}
                   onGenerateAnimation={handleGenerateAnimation}
+                  onGenerateTextToVideo={handleGenerateTextToVideo}
                   onSelectThumbnail={handleSelectThumbnail}
                   aspectRatio={aspectRatio}
                 />

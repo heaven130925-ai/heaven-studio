@@ -413,6 +413,11 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
   useEffect(() => {
     if (selectedImage) {
+      // onImageGenerated 피드백으로 인한 루프 차단
+      if (skipNextSelectedImageRef.current) {
+        skipNextSelectedImageRef.current = false;
+        return;
+      }
       const dataUrl = selectedImage.startsWith('data:') ? selectedImage : `data:image/jpeg;base64,${selectedImage}`;
       setGeneratedImage(dataUrl);
       setBgImage(dataUrl);
@@ -472,6 +477,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const previewRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<'main' | 'sub' | null>(null);
   const wasDraggingRef = useRef(false);
+  // onImageGenerated → selectedImage 피드백 루프 방지용 플래그
+  const skipNextSelectedImageRef = useRef(false);
 
   // 텍스트 plain string 추출
   const mainText = mainSegments.map(s => s.text).join('');
@@ -516,6 +523,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   useEffect(() => {
     if (wasDraggingRef.current && dragging === null && bgImage) {
       applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio).then(composited => {
+        skipNextSelectedImageRef.current = true;
         setGeneratedImage(composited);
         onImageGenerated?.(composited);
       });
@@ -577,6 +585,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         rawBg = uploadedBgImage;
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
+        const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
         const b64 = await generateThumbnailV2({
           topic, mainText, subText,
           imagePrompt: strategy?.imagePrompt || '',
@@ -586,6 +595,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
           targetAudience: targetAudience ? getTargetLabel(targetAudience as TargetAudience) : '전연령',
           showChannelName, channelName,
           editRequest: editReq,
+          model: selectedModel,
         });
         if (!b64) return;
         rawBg = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
@@ -593,6 +603,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       setBgImage(rawBg);
       setFromExternal(false);
       const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
+      skipNextSelectedImageRef.current = true;
       setGeneratedImage(composited);
       onImageGenerated?.(composited);
     } catch (e) { console.error(e); }
@@ -610,6 +621,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     if (!bgImage) return;
     setIsTextUpdating(true);
     const composited = await applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio);
+    skipNextSelectedImageRef.current = true;
     setGeneratedImage(composited);
     onImageGenerated?.(composited);
     setIsTextUpdating(false);
@@ -644,6 +656,14 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setMainSegments([{ text: '' }]); setSubSegments([{ text: '' }]);
     setEditorKey(k => k + 1);
   };
+
+  // step 6 진입 시 컨테이너 스크롤 탑
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (step === 6) {
+      containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [step]);
 
   const BackButton = ({ toStep }: { toStep: Step }) => (
     <button onClick={() => setStep(toStep)}
@@ -685,8 +705,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
   // ── 렌더 ──────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
-      <div className="max-w-2xl mx-auto w-full px-6 pb-6 pt-[13%]">
+    <div ref={containerRef} className="flex flex-col h-full overflow-y-auto">
+      <div className={`max-w-2xl mx-auto w-full px-6 pb-6 ${step === 6 ? 'pt-4' : 'pt-[13%]'}`}>
         <div className="space-y-5">
 
         {/* ── STEP 1 ── */}

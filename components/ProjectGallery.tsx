@@ -136,7 +136,7 @@ const ProjectGallery: React.FC<ProjectGalleryProps> = ({
                 <div className="md:w-1/3 flex-shrink-0">
                   {asset.imageData ? (
                     <img
-                      src={`data:image/png;base64,${asset.imageData}`}
+                      src={`data:image/jpeg;base64,${asset.imageData}`}
                       alt={`Scene ${asset.sceneNumber}`}
                       className="w-full h-48 md:h-full object-cover"
                     />

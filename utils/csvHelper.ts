@@ -104,6 +104,21 @@ export const downloadMediaZip = async (data: GeneratedAsset[]) => {
   }
 };
 
+export const downloadAudioZip = async (data: GeneratedAsset[]) => {
+  const zip = new JSZip();
+  let audioCount = 0;
+  for (const item of data) {
+    if (item.audioData) {
+      const num = item.sceneNumber.toString().padStart(3, '0');
+      zip.file(`scene_${num}.mp3`, item.audioData, { base64: true });
+      audioCount++;
+    }
+  }
+  if (audioCount === 0) { alert("다운로드할 오디오가 없습니다."); return; }
+  const blob = await zip.generateAsync({ type: "blob" });
+  saveAs(blob, `heaven_audio_${Date.now()}.zip`);
+};
+
 export const downloadProjectZip = async (data: GeneratedAsset[]) => {
   const zip = new JSZip();
   const imgFolder = zip.folder("images");

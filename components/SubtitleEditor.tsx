@@ -7,7 +7,7 @@
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS } from '../types';
-import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
+import { downloadProjectZip, downloadMediaZip, downloadAudioZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
 import { exportAssetsToZip } from '../services/exportService';
 
@@ -16,6 +16,7 @@ interface Props {
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
   onNarrationChange?: (index: number, narration: string) => void;
+  onImageEditCommand?: (index: number, command: string) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
   onSelectThumbnail?: (imageBase64: string) => void;
@@ -125,8 +126,9 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onExportVideo, isExporting, onSelectThumbnail }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [editCmd, setEditCmd] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
@@ -208,10 +210,12 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const g = googleTtsGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : googleTtsGroups[googleTtsGroups.length - 1].text;
     }
-    // 3순위: AI 의미 단위 (meaningChunks)
+    // 3순위: AI 의미 단위 (meaningChunks) — 0.15s 먼저 표시 (오디오 지연 보정)
     if (meaningChunks && meaningChunks.length > 0) {
-      if (t < meaningChunks[0].startTime) return meaningChunks[0].text;
-      const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => t >= chunk.startTime && t < chunk.endTime);
+      const EARLY = 0.15;
+      const tAdj = t + EARLY;
+      if (tAdj < meaningChunks[0].startTime) return meaningChunks[0].text;
+      const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => tAdj >= chunk.startTime && tAdj < chunk.endTime);
       return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
     }
     // Fallback: 나레이션을 maxChars 단위로 쪼개서 시간 균등 분배
@@ -252,6 +256,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // ── 씬 변경 시 Google TTS 그룹 초기화 ──
   useEffect(() => { setGoogleTtsGroups(null); }, [selectedIdx]);
 
+  // ── audioData가 없어지면 재생 중인 오디오 즉시 정지 ──
+  useEffect(() => {
+    if (!scene?.audioData && isPlaying) {
+      if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
+      cancelAnimationFrame(progressTimerRef.current);
+      window.clearTimeout(endTimeoutRef.current);
+      setIsPlaying(false);
+      setCurrentSubTime(0);
+      setAudioProgress(0);
+      pausedAtRef.current = 0;
+    }
+  }, [scene?.audioData]); // eslint-disable-line
+
   // ── Google TTS용: 구두점 가중치 기반 비례 자막 타이밍 ──
   function createProportionalSubtitles(
     text: string,
@@ -284,8 +301,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     });
     const total = weights.reduce((a, b) => a + b, 0);
 
-    // 0.1s 앞당겨 표시: TTS가 음절을 말하기 직전에 자막이 나오도록
-    const EARLY = 0.1;
+    // 0.15s 앞당겨 표시: TTS가 음절을 말하기 직전에 자막이 나오도록
+    const EARLY = 0.15;
     const result: { text: string; startTime: number; endTime: number }[] = [];
     let t = 0;
     for (let i = 0; i < chunks.length; i++) {
@@ -335,7 +352,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     isManualPauseRef.current = false;
     window.clearTimeout(endTimeoutRef.current);
     if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    window.clearInterval(progressTimerRef.current);
+    cancelAnimationFrame(progressTimerRef.current);
     setIsPlaying(false);
     setAudioProgress(0);
     setCurrentSubTime(0);
@@ -364,7 +381,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         );
       }
       if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-      window.clearInterval(progressTimerRef.current);
+      cancelAnimationFrame(progressTimerRef.current);
       setIsPlaying(false);
       return;
     }
@@ -407,7 +424,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       source.onended = () => {
         const wasManual = isManualPauseRef.current;
         isManualPauseRef.current = false;
-        window.clearInterval(progressTimerRef.current);
+        cancelAnimationFrame(progressTimerRef.current);
         sourceRef.current = null;
         if (!wasManual) {
           // 자연 종료 → 마지막 자막 유지 후 1.2초 뒤 리셋
@@ -425,18 +442,21 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const playDuration = effectiveDuration - offset + 0.5;
       source.start(0, offset, playDuration > 0 ? playDuration : undefined);
       sourceRef.current = source;
-      // startTimeRef 조정: elapsed = ctx.currentTime - startTimeRef = offset (시작 직후)
-      startTimeRef.current = ctx.currentTime - offset;
+      // 오디오 하드웨어 출력 지연 보정 (outputLatency: 실제 스피커 출력까지의 지연)
+      const hwLatency = (ctx as any).outputLatency ?? (ctx as any).baseLatency ?? 0;
+      startTimeRef.current = ctx.currentTime - offset + hwLatency;
 
-      progressTimerRef.current = window.setInterval(() => {
+      const rafLoop = () => {
         const actx = audioCtxRef.current;
         if (!actx || !sourceRef.current) return;
         if (actx.state === 'suspended') actx.resume();
         const elapsed = actx.currentTime - startTimeRef.current;
-        const clamped = Math.min(elapsed, durationRef.current);
+        const clamped = Math.min(Math.max(elapsed, 0), durationRef.current);
         setAudioProgress((clamped / durationRef.current) * 100);
         setCurrentSubTime(clamped);
-      }, 50);
+        progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
+      };
+      progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
     } catch (e) {
       console.error('Audio error:', e);
       setIsPlaying(false);
@@ -449,7 +469,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     const seekTime = Math.max(0, Math.min(1, fraction)) * durationRef.current;
     isManualPauseRef.current = true;
     if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    window.clearInterval(progressTimerRef.current);
+    cancelAnimationFrame(progressTimerRef.current);
     window.clearTimeout(endTimeoutRef.current);
     setIsPlaying(false);
     pausedAtRef.current = seekTime;
@@ -553,6 +573,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             {[
               { label: '전체 저장', onClick: () => downloadProjectZip(scenes) },
               { label: '이미지+음성', onClick: () => downloadMediaZip(scenes) },
+              { label: '오디오 ZIP', onClick: () => downloadAudioZip(scenes) },
               { label: '엑셀+이미지', onClick: () => exportAssetsToZip(scenes, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`) },
               { label: 'SRT', onClick: async () => await downloadSrt(scenes, `subtitles_${Date.now()}.srt`) },
             ].map(btn => (
@@ -580,7 +601,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
           className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={{ aspectRatio: '16/9', width: '100%', flexShrink: 0 }}
+          style={{ aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
@@ -661,27 +682,54 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 자막 텍스트 편집 */}
         {onNarrationChange && (
           <div className="px-4 pt-3 pb-1">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">씬 {selectedIdx + 1} 자막 텍스트</label>
+            <label className="text-sm text-slate-300 font-bold block mb-1">씬 {selectedIdx + 1} 자막 텍스트</label>
             <textarea
               value={narration}
               onChange={e => onNarrationChange(selectedIdx, e.target.value)}
-              rows={2}
-              className="w-full mt-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-blue-500"
+              rows={5}
+              className="w-full mt-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-2 text-base text-white resize-none focus:outline-none focus:border-blue-500"
             />
           </div>
         )}
 
+        {/* 이미지 편집 명령 */}
+        {onImageEditCommand && (
+          <div className="px-4 pt-1 pb-2">
+            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">이미지 편집 명령</label>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="text"
+                value={editCmd}
+                onChange={e => setEditCmd(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && editCmd.trim()) {
+                    onImageEditCommand(selectedIdx, editCmd.trim());
+                    setEditCmd('');
+                  }
+                }}
+                placeholder="예: 텍스트 지워줘 / 왼쪽 사람 없애줘"
+                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500"
+              />
+              <button
+                onClick={() => { if (editCmd.trim()) { onImageEditCommand(selectedIdx, editCmd.trim()); setEditCmd(''); } }}
+                disabled={!editCmd.trim()}
+                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-600/30 border border-orange-500/50 text-orange-300 hover:bg-orange-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >재생성</button>
+            </div>
+          </div>
+        )}
+
         {/* 자막 스타일 컨트롤 */}
-        <div className="px-4 py-3 space-y-3">
+        <div className="px-2 py-2 space-y-1.5">
 
           {/* 폰트 선택 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-            <label className="text-sm text-blue-300 uppercase tracking-wider font-black block mb-2">폰트</label>
-            <div className="grid grid-cols-3 gap-1.5">
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+            <label className="text-xs text-blue-300 uppercase tracking-wider font-black block mb-1">폰트</label>
+            <div className="flex gap-1 overflow-x-auto pb-0.5">
               {SUBTITLE_FONTS.map(f => (
                 <button key={f.value}
                   onClick={() => set({ fontFamily: f.value, fontWeight: f.weight })}
-                  className={`py-2.5 px-2 rounded-lg text-sm font-bold transition-colors text-center border ${
+                  className={`shrink-0 py-1 px-2 rounded-lg text-xs font-bold transition-colors text-center border ${
                     subConfig.fontFamily === f.value ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-200 border-blue-500/30 hover:bg-slate-700 hover:border-blue-400/50'
                   }`}
                   style={{ fontFamily: f.value }}
@@ -693,19 +741,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 크기 + 굵기 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">
-                크기 <span className="text-slate-200 normal-case">{subConfig.fontSize}px</span>
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">
+                크기 <span className="text-slate-200">{subConfig.fontSize}px</span>
               </label>
               <input type="range" min={20} max={120} step={2}
                 value={subConfig.fontSize} onChange={e => set({ fontSize: +e.target.value })}
                 className="w-full accent-blue-500" />
             </div>
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">
-                굵기 <span className="text-slate-200 normal-case">{subConfig.fontWeight}</span>
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">
+                굵기 <span className="text-slate-200">{subConfig.fontWeight}</span>
               </label>
               <input type="range" min={100} max={900} step={100}
                 value={subConfig.fontWeight} onChange={e => set({ fontWeight: +e.target.value })}
@@ -715,26 +763,26 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 색상 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">글자색</label>
-              <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">글자색</label>
+              <div className="flex items-center gap-1.5">
                 <input type="color" value={subConfig.textColor} onChange={e => set({ textColor: e.target.value })}
-                  className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
-                <span className="text-xs text-slate-300 font-mono">{subConfig.textColor}</span>
+                  className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent" />
+                <span className="text-[10px] text-slate-300 font-mono">{subConfig.textColor}</span>
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">테두리색</label>
-              <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">테두리색</label>
+              <div className="flex items-center gap-1.5">
                 <input type="color" value={subConfig.strokeColor} onChange={e => set({ strokeColor: e.target.value })}
-                  className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
-                <span className="text-xs text-slate-300 font-mono">{subConfig.strokeColor}</span>
+                  className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent" />
+                <span className="text-[10px] text-slate-300 font-mono">{subConfig.strokeColor}</span>
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">
                 테두리 <span className="text-slate-200">{subConfig.strokeWidth}</span>
               </label>
               <input type="range" min={0} max={20} step={1}
@@ -745,18 +793,18 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
 
           {/* 배경 + 정렬 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">배경</label>
-              <div className="flex gap-1.5">
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">배경</label>
+              <div className="flex gap-1">
                 {[
                   { label: '없음', val: 'rgba(0, 0, 0, 0)' },
                   { label: '반투명', val: 'rgba(0,0,0,0.6)' },
                   { label: '불투명', val: 'rgba(0,0,0,0.9)' },
                 ].map(o => (
                   <button key={o.val} onClick={() => set({ backgroundColor: o.val })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                    className={`flex-1 py-1 rounded-lg text-[11px] font-bold transition-colors border ${
                       subConfig.backgroundColor === o.val ? 'bg-blue-600/20 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.4)] border-blue-500/60' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {o.label}
@@ -765,11 +813,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               </div>
             </div>
             <div>
-              <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">정렬</label>
-              <div className="flex gap-1.5">
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">정렬</label>
+              <div className="flex gap-1">
                 {(['left', 'center', 'right'] as const).map(a => (
                   <button key={a} onClick={() => set({ textAlign: a })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                    className={`flex-1 py-1 rounded-lg text-[11px] font-bold transition-colors border ${
                       (subConfig.textAlign ?? 'center') === a ? 'bg-blue-600/20 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.4)] border-blue-500/60' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'
                     }`}>
                     {a === 'left' ? '좌' : a === 'center' ? '중' : '우'}
@@ -780,42 +828,44 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
           </div>
 
-          {/* 세로 위치 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-            <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">
-              세로 위치 <span className="text-slate-200 normal-case">{subConfig.yPercent ?? 85}%</span>
-            </label>
-            <input type="range" min={0} max={100} step={1}
-              value={subConfig.yPercent ?? 85} onChange={e => set({ yPercent: +e.target.value })}
-              className="w-full accent-blue-500" />
+          {/* 세로위치 + 청크글자수 (한 블록으로 합침) */}
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">
+                세로위치 <span className="text-slate-200">{subConfig.yPercent ?? 85}%</span>
+              </label>
+              <input type="range" min={0} max={100} step={1}
+                value={subConfig.yPercent ?? 85} onChange={e => set({ yPercent: +e.target.value })}
+                className="w-full accent-blue-500" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-300 font-bold block mb-0.5">
+                청크글자 <span className="text-slate-200">{subConfig.maxCharsPerChunk ?? 15}자</span>
+              </label>
+              <input type="range" min={5} max={30} step={1}
+                value={subConfig.maxCharsPerChunk ?? 15} onChange={e => set({ maxCharsPerChunk: +e.target.value })}
+                className="w-full accent-blue-500" />
+            </div>
           </div>
-
-          {/* 청크 글자 수 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-            <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1">
-              청크 글자 수 <span className="text-slate-200">{subConfig.maxCharsPerChunk ?? 15}자</span>
-            </label>
-            <input type="range" min={5} max={30} step={1}
-              value={subConfig.maxCharsPerChunk ?? 15} onChange={e => set({ maxCharsPerChunk: +e.target.value })}
-              className="w-full accent-blue-500" />
           </div>
 
           {/* AI 의미 단위 자막 */}
-          <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-            <label className="text-xs text-slate-300 uppercase tracking-wider font-bold block mb-1.5">
+          <div className="p-2 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
+            <label className="text-xs text-slate-300 font-bold block mb-1">
               AI 의미 단위 자막
               {!hasMeaningChunks && <span className="ml-1 text-slate-600 normal-case font-normal">(TTS 생성 후 활성화)</span>}
             </label>
             <button
               onClick={() => setUseMeaningChunks(v => !v)}
               disabled={!hasMeaningChunks}
-              className={`w-full py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+              className={`w-full py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 useMeaningChunks
                   ? 'bg-blue-600 text-white shadow-[0_0_10px_rgba(59,130,246,0.4)]'
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              {useMeaningChunks ? 'AI 의미 단위 ON' : '글자수 기준 (AI 의미 단위 OFF)'}
+              {useMeaningChunks ? 'AI 의미 단위 ON' : '글자수 기준 (AI OFF)'}
             </button>
           </div>
         </div>
@@ -837,8 +887,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 }
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-slate-500 font-bold mb-0.5">씬 {i + 1}</p>
-                <p className="text-xs text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
+                <p className="text-[11px] text-slate-500 font-bold mb-0.5">씬 {i + 1}</p>
+                <p className="text-sm text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
               </div>
             </button>
             {s.imageData && onSelectThumbnail && (

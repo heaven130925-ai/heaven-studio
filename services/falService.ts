@@ -249,6 +249,64 @@ export async function faceSwapCharacter(
 }
 
 /**
+ * 텍스트 프롬프트로 영상 생성 (Kling v1.6 Standard)
+ *
+ * @param prompt - 영상 내용 설명 텍스트
+ * @param apiKey - FAL API 키 (선택, 없으면 로컬스토리지에서 가져옴)
+ * @returns 생성된 영상 URL 또는 null
+ */
+export async function generateTextToVideo(
+  prompt: string,
+  apiKey?: string
+): Promise<string | null> {
+  const key = apiKey || getFalApiKey();
+
+  if (!key) {
+    console.warn('[Kling] API 키가 설정되지 않았습니다.');
+    return null;
+  }
+
+  try {
+    console.log(`[Kling] 텍스트→영상 생성 시작: "${prompt.slice(0, 60)}..."`);
+
+    const response = await fetch('https://fal.run/fal-ai/kling-video/v1.6/standard/text-to-video', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Key ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt,
+        duration: '5',
+        aspect_ratio: '16:9',
+      })
+    });
+
+    console.log('[Kling] 응답 상태:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Kling] API 오류 (${response.status}):`, errorText);
+      throw new Error(`Kling API 오류: ${response.status} - ${errorText.slice(0, 200)}`);
+    }
+
+    const result = await response.json();
+    const videoUrl = result?.video?.url;
+    if (!videoUrl) {
+      console.error('[Kling] 응답에 video.url 없음:', JSON.stringify(result).slice(0, 200));
+      return null;
+    }
+
+    console.log(`[Kling] 영상 생성 완료: ${videoUrl}`);
+    return videoUrl;
+
+  } catch (error: any) {
+    console.error('[Kling] 영상 생성 실패:', error.message);
+    return null;
+  }
+}
+
+/**
  * 여러 이미지를 순차적으로 영상 변환 (rate limit 고려)
  */
 export async function batchGenerateVideos(

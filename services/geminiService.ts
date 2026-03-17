@@ -660,19 +660,22 @@ const getStrengthDescription = (strength: number): { level: string; instruction:
  */
 const generateImageWithImagen3 = async (
   prompt: string,
-  modelId: string = 'imagen-3.0-fast-generate-001'
+  modelId: string = 'imagen-3.0-fast-generate-001',
+  negativePrompt?: string
 ): Promise<string | null> => {
   return retryGeminiRequest("Imagen3 Generation", async () => {
     const ai = getAI();
     const ar = localStorage.getItem('heaven_aspect_ratio') || '16:9';
+    const config: Record<string, any> = {
+      numberOfImages: 1,
+      aspectRatio: ar,
+      outputMimeType: 'image/jpeg',
+    };
+    if (negativePrompt) config.negativePrompt = negativePrompt;
     const response = await (ai.models as any).generateImages({
       model: modelId,
       prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: ar,
-        outputMimeType: 'image/jpeg',
-      }
+      config,
     });
     const imageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
     if (!imageBytes) return null;
@@ -756,7 +759,10 @@ export const generateImageForScene = async (
     const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
     console.log(`[Image Gen] Imagen 사용 (참조 없음): ${selectedModel}, 비율: ${ar}`);
     try {
-      const result = await generateImageWithImagen3(prompt, selectedModel);
+      const negPrompt = textMode === 'none'
+        ? 'text, letters, words, alphabet, numbers, signs, watermark, captions, labels, writing, typography, subtitles, overlay text'
+        : undefined;
+      const result = await generateImageWithImagen3(prompt, selectedModel, negPrompt);
       if (result) return result;
     } catch (e: any) {
       const msg = e?.message || '';
@@ -1505,6 +1511,7 @@ export const generateThumbnailV2 = async (params: {
   showChannelName: boolean;
   channelName: string;
   editRequest?: string;
+  model?: string;
 }): Promise<string | null> => {
   const ai = getAI();
   if (!ai) return null;
@@ -1526,26 +1533,28 @@ export const generateThumbnailV2 = async (params: {
   const ratio = params.thumbnailRatio || '16:9';
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
-  const prompt = `유튜브 썸네일 배경 이미지를 생성하라. ${sizeDesc}.
+  const prompt = `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
 
-주제: "${params.topic}"
-시청 타겟: ${params.targetAudience}
+Topic: "${params.topic}"
+Target audience: ${params.targetAudience}
 ${charDesc}
 ${borderDesc[params.borderStyle] || ''}
 ${channelDesc}${editDesc}
 
-이미지 방향: ${params.imagePrompt}
+Visual direction: ${params.imagePrompt}
 
-요구사항:
-- NO TEXT IN IMAGE — 텍스트, 글자, 문자를 절대 포함하지 말 것
-- 강렬하고 눈길을 끄는 비주얼, 밝고 대비가 강한 색상
-- 상단 30% 영역은 텍스트 오버레이를 위한 여백 확보 (단색 또는 그라디언트 배경)
-- 전문적인 유튜브 썸네일 배경 스타일
-- SINGLE FRAME ONLY — 패널, 분할 화면, 만화 컷 금지`;
+⛔ ABSOLUTE RULES — VIOLATION = FAILURE:
+1. ZERO TEXT: Do NOT render ANY text, letters, words, numbers, Korean characters, Latin characters, signs, captions, watermarks, or any written symbols ANYWHERE in the image. Text will be added as a separate overlay. Any text in the image = complete failure.
+2. SINGLE FRAME: One continuous scene only. No panels, no split screens, no comic strips, no borders dividing the image.
+3. BACKGROUND ONLY: Leave the upper 30% area relatively open (gradient or solid color) for text overlay placement.
+4. Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style.`;
+
+  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
+  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: thumbnailModel,
       contents: prompt,
       config: {
         responseModalities: [Modality.IMAGE],
