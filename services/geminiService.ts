@@ -747,9 +747,23 @@ export const generateImageForScene = async (
         const parts: any[] = [];
         const charTextDesc = referenceImages.characterDescription?.trim();
 
+        // ── 절대 금지 규칙 (항상 첫 번째 part로 배치) ──────────────────
+        const textModeRule = textMode === 'none'
+          ? `⛔ RULE: ZERO TEXT — No text, letters, words, numbers, signs, labels, captions, or written characters of ANY kind anywhere in the image. Pure visual scene only. Including ANY text = CRITICAL FAILURE.`
+          : textMode === 'numbers'
+          ? `⚠️ RULE: Only Arabic numerals (0-9) allowed. No words, no letters.`
+          : textMode === 'english'
+          ? `⚠️ RULE: Only Latin/English characters allowed. No Korean (한글), no Chinese, no Japanese.`
+          : '';
+        parts.push({
+          text: `⛔ ABSOLUTE RULE — SINGLE FRAME: Generate exactly ONE continuous unified image. Panels, comic strips, split screens, grids, storyboard layouts, multiple cuts, and any dividing borders/lines are STRICTLY FORBIDDEN. ONE scene only. Panels = CRITICAL FAILURE.\n${textModeRule}`
+        });
+
         if (hasCharacterRef) {
           // ─── 캐릭터 일관성 모드 ───
-          const sceneAction = scene.narration
+          const sceneAction = scene.visualPrompt
+            ? scene.visualPrompt.slice(0, 200)
+            : scene.narration
             ? scene.narration.slice(0, 150)
             : sanitizedPrompt.slice(0, 250);
 
@@ -759,12 +773,11 @@ export const generateImageForScene = async (
             return sp ? `\nArt style: ${sp}` : '';
           })();
 
-          // 캐릭터 설명 텍스트 (수동 입력 또는 자동 추출)
           const descBlock = charTextDesc
             ? `\nCharacter features to reproduce exactly:\n${charTextDesc}`
             : '';
 
-          // 모든 참조 이미지를 먼저 나열
+          // 참조 이미지 나열
           referenceImages.character.forEach((img, idx) => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
             parts.push({
@@ -775,7 +788,6 @@ export const generateImageForScene = async (
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 핵심 지시
           parts.push({
             text: `Generate an illustration of the person shown in the reference photo above, placed in a new scene.
 
@@ -784,13 +796,13 @@ MANDATORY — copy these features from the reference photo exactly:
 • Hair: same color, same length, same style — do not change at all
 • Overall look: this person must be instantly recognizable as the same individual${descBlock}
 
-Scene to illustrate: ${sceneAction}${styleHint}
+Scene to illustrate (visual description only — do NOT render any of this as text in the image): ${sceneAction}${styleHint}
 
 DO NOT invent a new face. DO NOT change hair color or style. Reproduce the reference person faithfully.`
           });
 
         } else {
-          // ─── 일반 모드 (캐릭터 참조 없음): 기존 순서 유지 ───
+          // ─── 일반 모드 ───
           if (hasStyleRef) {
             const styleDesc = getStrengthDescription(styleStrength);
             parts.push({
@@ -805,25 +817,21 @@ ${styleDesc.instruction}`
           } else {
             const geminiStylePrompt = getSelectedGeminiStylePrompt();
             if (geminiStylePrompt) {
-              parts.push({
-                text: `[ART STYLE INSTRUCTION]\nApply this art style: ${geminiStylePrompt}`
-              });
+              parts.push({ text: `[ART STYLE INSTRUCTION]\nApply this art style: ${geminiStylePrompt}` });
             }
           }
           parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
         }
 
-        // 단일 프레임 강제 (항상 적용)
-        parts.push({ text: `[FINAL LAYOUT] SINGLE FRAME ONLY. Do NOT create panels, comic strips, split screens, grids, or multiple cuts. The entire canvas must be ONE unified scene with no dividing borders or lines.` });
-
-        // 텍스트 모드별 마지막 강제 지시
-        if (textMode === 'none') {
-          parts.push({ text: `[FINAL] No text, letters, words, or numbers in the image. Pure visual only.` });
-        } else if (textMode === 'numbers') {
-          parts.push({ text: `[FINAL] Only Arabic numerals (0-9) allowed. No Korean, no English words.` });
-        } else if (textMode === 'english') {
-          parts.push({ text: `[FINAL] Only Latin/English characters allowed. No Korean, no Chinese, no Japanese.` });
-        }
+        // ── 마지막에도 이중 강제 ─────────────────────────────────────────
+        parts.push({
+          text: [
+            `⛔ FINAL OVERRIDE — SINGLE FRAME: ONE image, ONE scene. NO panels. NO splits. NO borders.`,
+            textMode === 'none'   ? `⛔ FINAL OVERRIDE — ZERO TEXT: Absolutely no text, letters, numbers, or signs in the image.` : '',
+            textMode === 'numbers' ? `⚠️ FINAL: Only digits (0-9). No letters, no words.` : '',
+            textMode === 'english' ? `⚠️ FINAL: Only Latin/English. No Korean, no Chinese, no Japanese.` : '',
+          ].filter(Boolean).join('\n')
+        });
 
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash-image',
