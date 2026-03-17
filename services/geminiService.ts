@@ -975,9 +975,11 @@ export const editImageWithGemini = async (imageBase64: string, command: string):
   const ai = getAI();
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
   try {
-    // gemini-2.0-flash-exp: 이미지 입력 + 이미지 출력 편집 지원
+    // 선택된 이미지 모델 사용 (나노바나나2 포함), 없으면 gemini-2.0-flash-exp 폴백
+    const selectedModel = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) || '';
+    const editModel = selectedModel.startsWith('gemini') ? selectedModel : 'gemini-2.0-flash-exp';
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp',
+      model: editModel,
       contents: {
         parts: [
           { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
