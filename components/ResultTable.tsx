@@ -229,7 +229,7 @@ const TableRow: React.FC<TableRowProps> = memo(({ row, index, isAnimating, aspec
       {/* 이미지 + 음성/다운로드 (왼쪽 배치) */}
       <td className="py-5 px-4 align-top">
         <div className="flex flex-col items-center gap-2">
-        <div className={`relative rounded-xl overflow-hidden bg-black border border-white/[0.08] shadow-inner group/img ${aspectRatio === '9:16' ? 'aspect-[9/16] w-28' : 'aspect-video w-48'}`}>
+        <div className={`relative rounded-xl overflow-hidden bg-black border border-white/[0.08] shadow-inner group/img ${aspectRatio === '9:16' ? 'aspect-[9/16] w-44' : 'aspect-video w-72'}`}>
           {row.status === 'generating' ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
