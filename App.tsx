@@ -217,9 +217,9 @@ const App: React.FC = () => {
     isProcessingRef.current = true;
     isAbortedRef.current = false;
 
-    // 자동 주제 모드(대본만 생성)는 메인화면에서 처리 → 스토리보드 창 안 열기
+    // 자동 주제 모드 또는 오디오만 생성은 스토리보드 열지 않음
     const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
-    if (!isAutoTopicMode) setShowStoryboard(true);
+    if (!isAutoTopicMode && !audioOnly) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -998,12 +998,8 @@ const App: React.FC = () => {
                 onSelectThumbnail={handleSelectThumbnail}
                 onNarrationChange={(idx, val) => {
                   const updated = [...assetsRef.current];
-                  // 자막 비우면 오디오도 함께 삭제
-                  if (!val.trim()) {
-                    updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
-                  } else {
-                    updated[idx] = { ...updated[idx], narration: val };
-                  }
+                  // 나레이션 변경 시 항상 오디오 삭제 (텍스트 바뀌면 오디오 싱크 불일치)
+                  updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
                   assetsRef.current = updated;
                   setGeneratedData([...updated]);
                 }}
