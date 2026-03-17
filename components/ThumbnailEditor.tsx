@@ -581,11 +581,13 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const runGenerate = async (editReq?: string) => {
     try {
       let rawBg: string;
+      const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
+      const isNanoBanana = selectedModel.startsWith('gemini-3');
+
       if (uploadedBgImage && !editReq) {
         rawBg = uploadedBgImage;
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
-        const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
         const b64 = await generateThumbnailV2({
           topic, mainText, subText,
           imagePrompt: strategy?.imagePrompt || '',
@@ -602,10 +604,18 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       }
       setBgImage(rawBg);
       setFromExternal(false);
-      const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
       skipNextSelectedImageRef.current = true;
-      setGeneratedImage(composited);
-      onImageGenerated?.(composited);
+
+      if (isNanoBanana) {
+        // Nano Banana 2: 텍스트가 이미지 안에 이미 렌더링됨 → Canvas 오버레이 불필요
+        setGeneratedImage(rawBg);
+        onImageGenerated?.(rawBg);
+      } else {
+        // 일반 Gemini: Canvas 텍스트 오버레이 적용
+        const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
+        setGeneratedImage(composited);
+        onImageGenerated?.(composited);
+      }
     } catch (e) { console.error(e); }
   };
 

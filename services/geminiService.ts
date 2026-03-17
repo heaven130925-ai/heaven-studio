@@ -1573,7 +1573,33 @@ export const generateThumbnailV2 = async (params: {
   const ratio = params.thumbnailRatio || '16:9';
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
-  const prompt = `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
+  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
+  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
+  const isNanoBanana = thumbnailModel.startsWith('gemini-3');
+
+  // Nano Banana 2: 텍스트 포함 완성 썸네일 생성 (이미지 안에 텍스트 직접 렌더링)
+  // 일반 Gemini: 배경만 생성 (텍스트는 Canvas 오버레이로 별도 추가)
+  const prompt = isNanoBanana
+    ? `Generate a complete YouTube thumbnail image. ${sizeDesc}.
+
+Topic: "${params.topic}"
+Target audience: ${params.targetAudience}
+${charDesc}
+${channelDesc}${editDesc}
+
+Visual direction: ${params.imagePrompt}
+${borderDesc[params.borderStyle] ? '\n' + borderDesc[params.borderStyle] : ''}
+
+TEXT TO RENDER IN THE IMAGE (required, render clearly):
+- Main title (very large, bold, top 30% of image): "${params.mainText}"
+- Subtitle (medium size, below main title): "${params.subText}"
+
+Requirements:
+- Korean text must be rendered beautifully with high contrast and strong outline/shadow
+- Main title: extremely large, bold, highly visible, impactful
+- Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style
+- ONE single continuous image. No panels, no splits, no borders.`
+    : `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
 
 Topic: "${params.topic}"
 Target audience: ${params.targetAudience}
@@ -1588,9 +1614,6 @@ Visual direction: ${params.imagePrompt}
 2. SINGLE FRAME: One continuous scene only. No panels, no split screens, no comic strips, no borders dividing the image.
 3. BACKGROUND ONLY: Leave the upper 30% area relatively open (gradient or solid color) for text overlay placement.
 4. Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style.`;
-
-  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
-  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
 
   try {
     const response = await ai.models.generateContent({
