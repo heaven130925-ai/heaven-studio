@@ -9,7 +9,7 @@ import { faceSwapCharacter } from "./falService";
  * Gemini API 클라이언트 초기화
  */
 const getGeminiApiKey = () =>
-  localStorage.getItem('tubegen_gemini_key') || process.env.GEMINI_API_KEY || '';
+  localStorage.getItem('heaven_gemini_key') || process.env.GEMINI_API_KEY || '';
 
 const getAI = () => new GoogleGenAI({ apiKey: getGeminiApiKey() });
 
@@ -40,6 +40,24 @@ const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
   'blood': ['red liquid', 'crimson'],
   'death': ['end', 'decline', 'fall'],
   'kill': ['eliminate', 'end', 'stop'],
+};
+
+/**
+ * 나레이션에서 섹션 마커(파트1:, 씬1:, 나레이션: 등)를 제거
+ */
+const cleanNarration = (text: string): string => {
+  return text
+    // 파트N: / 파트 N: / [파트N] / [파트 N]
+    .replace(/^[\[【]?\s*파트\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
+    // 씬N: / 씬 N: / [씬N]
+    .replace(/^[\[【]?\s*씬\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
+    // 나레이션N: / 나레이션:
+    .replace(/^나레이션\s*\d*\s*[:：]\s*/gim, '')
+    // Part N: / Section N: (영문)
+    .replace(/^(Part|Section|Scene|Chapter)\s*\d+\s*[:：]?\s*/gim, '')
+    // [숫자] 또는 숫자. 로 시작하는 섹션 번호
+    .replace(/^\[\d+\]\s*/gim, '')
+    .trim();
 };
 
 /**
@@ -283,13 +301,10 @@ const generateScriptSingle = async (
   hasReferenceImage: boolean,
   sourceContext?: string | null,
   chunkInfo?: { current: number; total: number },
-  maxScenes?: number,
-  hasCharacterRef?: boolean
+  maxScenes?: number
 ): Promise<ScriptScene[]> => {
   return retryGeminiRequest("Script Generation", async () => {
-    const ai = getAI();
-    const baseInstruction = hasCharacterRef ? SYSTEM_INSTRUCTIONS.CHARACTER_CONSISTENT_DIRECTOR :
-                            topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
+    const baseInstruction = topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
                             hasReferenceImage ? SYSTEM_INSTRUCTIONS.REFERENCE_MATCH :
                             SYSTEM_INSTRUCTIONS.CHIEF_ART_DIRECTOR;
 
@@ -327,25 +342,66 @@ const generateScriptSingle = async (
 
     console.log(`${chunkLabel}[Script] 입력: ${inputLength}자, 목표 씬: ${estimatedSceneCount}개, maxOutputTokens: ${maxOutputTokens}`);
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented, hasCharacterRef),
-      config: {
-        thinkingConfig: { thinkingBudget: 24576 },
-        responseMimeType: "application/json",
-        systemInstruction: baseInstruction,
-        maxOutputTokens: maxOutputTokens,
-      },
-    });
+    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented);
+    const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+    let responseText: string;
 
-    // 응답 잘림 감지
-    const finishReason = response.candidates?.[0]?.finishReason;
-    if (finishReason === 'MAX_TOKENS' || String(finishReason) === 'STOP_TRUNCATED') {
-      console.warn(`${chunkLabel}[Script] ⚠️ 응답이 토큰 제한으로 잘렸습니다. finishReason: ${finishReason}`);
-      // 잘린 응답도 복구 시도 (cleanJsonResponse가 처리)
+    // ── Claude 시도 (키 있을 때) ───────────────────────────────────────────
+    let claudeUsed = false;
+    if (anthropicKey) {
+      try {
+        console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 시도`);
+        const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: maxOutputTokens,
+            system: baseInstruction + '\n\nOutput ONLY a valid JSON array. No markdown code fences, no explanation text.',
+            messages: [{ role: 'user', content: promptText }],
+          }),
+        });
+        if (!claudeResp.ok) {
+          const errText = await claudeResp.text();
+          console.warn(`${chunkLabel}[Script] Claude 실패 (${claudeResp.status}): ${errText.slice(0, 200)} → Gemini fallback`);
+        } else {
+          const claudeData = await claudeResp.json();
+          responseText = claudeData.content?.[0]?.text || '[]';
+          claudeUsed = true;
+          console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 성공`);
+        }
+      } catch (claudeErr: any) {
+        console.warn(`${chunkLabel}[Script] Claude 네트워크 오류: ${claudeErr.message} → Gemini fallback`);
+      }
     }
 
-    const result = JSON.parse(cleanJsonResponse(response.text || '[]'));
+    // ── Gemini 2.5 Flash fallback ─────────────────────────────────────────
+    if (!claudeUsed) {
+      console.log(`${chunkLabel}[Script] Gemini 2.5 Flash 사용${anthropicKey ? ' (Claude fallback)' : ' (Claude 키 없음)'}`);
+      const ai = getAI();
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: promptText,
+        config: {
+          thinkingConfig: { thinkingBudget: 24576 },
+          responseMimeType: "application/json",
+          systemInstruction: baseInstruction,
+          maxOutputTokens: maxOutputTokens,
+        },
+      });
+      const finishReason = response.candidates?.[0]?.finishReason;
+      if (finishReason === 'MAX_TOKENS' || String(finishReason) === 'STOP_TRUNCATED') {
+        console.warn(`${chunkLabel}[Script] ⚠️ 응답 토큰 제한 잘림. finishReason: ${finishReason}`);
+      }
+      responseText = response.text || '[]';
+    }
+
+    const result = JSON.parse(cleanJsonResponse(responseText));
     const scenes = Array.isArray(result) ? result : (result.scenes || []);
 
     console.log(`${chunkLabel}[Script] 생성된 씬 개수: ${scenes.length}`);
@@ -357,7 +413,7 @@ const generateScriptSingle = async (
 
     return scenes.map((scene: any, idx: number) => ({
       sceneNumber: scene.sceneNumber || idx + 1,
-      narration: scene.narration || "",
+      narration: cleanNarration(scene.narration || ""),
       visualPrompt: scene.image_prompt_english || "",
       analysis: scene.analysis || {}
     }));
@@ -371,10 +427,9 @@ export const generateScript = async (
   topic: string,
   hasReferenceImage: boolean,
   sourceContext?: string | null,
-  maxScenes?: number,
-  hasCharacterRef?: boolean
+  maxScenes?: number
 ): Promise<ScriptScene[]> => {
-  return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes, hasCharacterRef);
+  return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
 };
 
 /**
@@ -448,15 +503,14 @@ export const generateScriptChunked = async (
   sourceContext: string,
   chunkSize: number = 2500,
   onProgress?: (message: string) => void,
-  maxScenes?: number,
-  hasCharacterRef?: boolean
+  maxScenes?: number
 ): Promise<ScriptScene[]> => {
   const inputLength = sourceContext.length;
 
   // 청크 분할 기준 이하면 일반 처리
   if (inputLength <= chunkSize) {
     console.log(`[Chunked Script] 입력(${inputLength}자)이 청크 크기(${chunkSize}자) 이하. 일반 처리.`);
-    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes, hasCharacterRef);
+    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
   }
 
   console.log(`[Chunked Script] ========================================`);
@@ -497,8 +551,7 @@ export const generateScriptChunked = async (
         hasReferenceImage,
         chunkContext,
         { current: i + 1, total: chunks.length },
-        chunkMaxScenes,
-        hasCharacterRef
+        chunkMaxScenes
       );
 
       // 씬 번호 재조정 (이전 씬들 뒤에 이어서)
@@ -538,9 +591,6 @@ const getSelectedGeminiStylePrompt = (): string => {
   // 비주얼 스타일 빠른 선택기 우선 적용
   const visualStyleId = localStorage.getItem(CONFIG.STORAGE_KEYS.VISUAL_STYLE_ID);
   if (visualStyleId && visualStyleId !== 'none') {
-    if (visualStyleId === 'custom') {
-      return localStorage.getItem(CONFIG.STORAGE_KEYS.CUSTOM_STYLE_PROMPT) || '';
-    }
     const found = (VISUAL_STYLES as readonly { id: string; prompt: string }[]).find(s => s.id === visualStyleId);
     if (found) return found.prompt;
   }
@@ -610,19 +660,22 @@ const getStrengthDescription = (strength: number): { level: string; instruction:
  */
 const generateImageWithImagen3 = async (
   prompt: string,
-  modelId: string = 'imagen-3.0-fast-generate-001'
+  modelId: string = 'imagen-3.0-fast-generate-001',
+  negativePrompt?: string
 ): Promise<string | null> => {
   return retryGeminiRequest("Imagen3 Generation", async () => {
     const ai = getAI();
-    const ar = localStorage.getItem('tubegen_aspect_ratio') || '16:9';
+    const ar = localStorage.getItem('heaven_aspect_ratio') || '16:9';
+    const config: Record<string, any> = {
+      numberOfImages: 1,
+      aspectRatio: ar,
+      outputMimeType: 'image/jpeg',
+    };
+    if (negativePrompt) config.negativePrompt = negativePrompt;
     const response = await (ai.models as any).generateImages({
       model: modelId,
       prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: ar,
-        outputMimeType: 'image/jpeg',
-      }
+      config,
     });
     const imageBytes = response?.generatedImages?.[0]?.image?.imageBytes;
     if (!imageBytes) return null;
@@ -642,7 +695,7 @@ export const analyzeCharacterReference = async (imageBase64: string): Promise<st
     const imageData = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.0-flash',
       contents: {
         parts: [
           {
@@ -681,7 +734,6 @@ export const generateImageForScene = async (
   scene: ScriptScene,
   referenceImages: ReferenceImages
 ): Promise<string | null> => {
-  console.warn(`[GEN-START] generateImageForScene 호출됨. character배열길이=${referenceImages.character?.length ?? 'undefined'}`);
   // 캐릭터 참조 이미지가 있으면 고정 프롬프트 제외
   const hasCharacterRef = referenceImages.character && referenceImages.character.length > 0;
   const hasStyleRef = referenceImages.style && referenceImages.style.length > 0;
@@ -692,6 +744,10 @@ export const generateImageForScene = async (
   const isImagen3 = selectedModel.startsWith('imagen-3');
   const isImagen4 = selectedModel.startsWith('imagen-4');
   const isImagenModel = isImagen3 || isImagen4;
+  // Nano Banana 모델 (gemini-3-pro-image-preview, gemini-3.1-flash-image-preview)은 Gemini 경로 사용
+  const isNanoBanana = selectedModel.startsWith('gemini-3');
+  // 실제 Gemini 이미지 모델 ID 결정 (Nano Banana 선택 시 해당 모델 직접 사용)
+  const geminiImageModel = isNanoBanana ? selectedModel : 'gemini-2.5-flash-image';
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
@@ -699,11 +755,14 @@ export const generateImageForScene = async (
   // 캐릭터 참조가 있으면 Imagen은 이미지 입력 불가 → Gemini Flash Image로 처리 (시각적 참조 필수)
   // 캐릭터 참조가 없으면 Imagen 직접 사용
   if (isImagenModel && !hasCharacterRef) {
-    const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
+    const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none';
     const prompt = getFinalVisualPrompt(scene, false, getSelectedGeminiStylePrompt(), textMode, ar);
     console.log(`[Image Gen] Imagen 사용 (참조 없음): ${selectedModel}, 비율: ${ar}`);
     try {
-      const result = await generateImageWithImagen3(prompt, selectedModel);
+      const negPrompt = textMode === 'none'
+        ? 'text, letters, words, alphabet, numbers, signs, watermark, captions, labels, writing, typography, subtitles, overlay text'
+        : undefined;
+      const result = await generateImageWithImagen3(prompt, selectedModel, negPrompt);
       if (result) return result;
     } catch (e: any) {
       const msg = e?.message || '';
@@ -724,7 +783,7 @@ export const generateImageForScene = async (
   // 스타일 참조 이미지가 없을 때만 선택된 화풍 적용 (스타일 참조 우선)
   // 화풍 프롬프트를 캐릭터에도 적용하기 위해 getFinalVisualPrompt에 전달
   const geminiStylePrompt = hasStyleRef ? undefined : getSelectedGeminiStylePrompt();
-  const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
+  const textMode = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none';
   const basePrompt = getFinalVisualPrompt(scene, hasCharacterRef, geminiStylePrompt, textMode, ar);
 
   if (geminiStylePrompt) {
@@ -754,21 +813,30 @@ export const generateImageForScene = async (
       const result = await retryGeminiRequest("Pro Image Generation", async () => {
         const ai = new GoogleGenAI({ apiKey: getGeminiApiKey() });
         const parts: any[] = [];
+        const charTextDesc = referenceImages.characterDescription?.trim();
 
-        // ── 텍스트 없음 모드: 프롬프트 맨 앞에 강력 차단 선언 ──
-        if (textMode === 'none') {
-          parts.push({ text: `🚫 ABSOLUTE RULE #1 (CANNOT BE OVERRIDDEN): This image must contain ZERO text, letters, words, numbers, signs, labels, captions, watermarks, or any written characters in ANY language (Korean, English, Chinese, Japanese, Arabic, etc.). DO NOT render any typography whatsoever. Pure visual only.` });
-        }
+        // ── 절대 금지 규칙 (항상 첫 번째 part로 배치) ──────────────────
+        const textModeRule = textMode === 'none'
+          ? `⛔ RULE: ZERO TEXT — No text, letters, words, numbers, signs, labels, captions, or written characters of ANY kind anywhere in the image. Pure visual scene only. Including ANY text = CRITICAL FAILURE.`
+          : textMode === 'numbers'
+          ? `⚠️ RULE: Only Arabic numerals (0-9) allowed. No words, no letters.`
+          : textMode === 'english'
+          ? `⚠️ RULE: Only Latin/English characters allowed. No Korean (한글), no Chinese, no Japanese.`
+          : '';
+        const absoluteRules = [
+          `⛔ RULE #1 — ONE SINGLE IMAGE ONLY: Generate exactly ONE continuous, unified image filling the entire canvas.`,
+          `FORBIDDEN FOREVER: panels, comic strips, split screens, grids, multiple cuts, storyboard layouts, borders/lines dividing the image, before/after comparisons, side-by-side images, triptychs, diptychs, collages. Any form of image division = INSTANT FAILURE.`,
+          textModeRule,
+        ].filter(Boolean).join('\n');
+        parts.push({ text: absoluteRules });
 
-        // NO_CHAR 씬(사물/추상)은 캐릭터 참조 무시하고 일반 모드로 처리
-        const isNoCharScene = scene.analysis?.composition_type === 'NO_CHAR';
-        if (hasCharacterRef && !isNoCharScene) {
+        if (hasCharacterRef) {
           // ─── 캐릭터 일관성 모드 ───
-          const userEditedPrompt = scene.visualPrompt?.trim();
-          const sceneAction = [
-            scene.narration?.slice(0, 150),
-            userEditedPrompt ? `Visual direction: ${userEditedPrompt.slice(0, 300)}` : null
-          ].filter(Boolean).join('\n') || sanitizedPrompt.slice(0, 250);
+          const sceneAction = scene.visualPrompt
+            ? scene.visualPrompt.slice(0, 200)
+            : scene.narration
+            ? scene.narration.slice(0, 150)
+            : sanitizedPrompt.slice(0, 250);
 
           const styleHint = (() => {
             if (hasStyleRef) return '';
@@ -776,37 +844,40 @@ export const generateImageForScene = async (
             return sp ? `\nArt style: ${sp}` : '';
           })();
 
-          // 참조 이미지를 [CHARACTER LOCK] 블록으로 강조
-          parts.push({ text: `[CHARACTER LOCK — DO NOT DEVIATE]
-The image(s) below define the ONLY character allowed in this scene.
-You MUST reproduce this exact person. Zero deviation permitted.` });
+          const descBlock = charTextDesc
+            ? `\nCharacter features to reproduce exactly:\n${charTextDesc}`
+            : '';
 
+          // 참조 이미지 나열
           referenceImages.character.forEach((img, idx) => {
             const imageData = img.includes(',') ? img.split(',')[1] : img;
-            if (idx > 0) parts.push({ text: `Same character, another angle:` });
+            parts.push({
+              text: idx === 0
+                ? `This is the character reference photo. Study this person's face carefully.`
+                : `Same character, additional angle:`
+            });
             parts.push({ inlineData: { data: imageData, mimeType: 'image/jpeg' } });
           });
 
-          // 장면 내용 우선 → 캐릭터 배치 순서
-          const charDesc = referenceImages.characterDescription?.trim();
           parts.push({
-            text: `=== SCENE TO ILLUSTRATE ===
-${sceneAction}
-${styleHint ? styleHint.trim() : ''}
+            text: `You MUST draw the EXACT SAME PERSON shown in the reference photo(s) above. Character identity must be 100% consistent.
 
-=== CHARACTER REFERENCE (LOCKED) ===
-The person in the reference image(s) above is THE CHARACTER who appears in this scene.
-${charDesc ? `CHARACTER DETAILS:\n${charDesc}\n` : ''}
-RULES:
-• Draw the scene described above FIRST (setting, action, objects, mood)
-• Place THE CHARACTER from the reference into that scene
-• Character face, hair, skin tone must match reference EXACTLY
-• FORBIDDEN: different face, different hair color, different gender
-• OUTPUT: full illustration of the described scene with the reference character in it`
+COPY THESE FEATURES EXACTLY — zero deviation allowed:
+• Face shape: reproduce identically (jaw, cheekbones, forehead)
+• Eyes: same shape, same color, same distance apart
+• Nose: same shape and size
+• Lips: same shape and fullness
+• Skin tone: identical
+• Hair: SAME COLOR, SAME LENGTH, SAME STYLE — absolutely no changes${descBlock}
+
+This person must be INSTANTLY RECOGNIZABLE as the same individual from the reference. Do NOT invent a new face. Do NOT alter any physical features.
+
+New scene to place them in (DO NOT render any of this as text/letters in the image):
+${sceneAction}${styleHint}`
           });
 
         } else {
-          // ─── 일반 모드 (캐릭터 참조 없음): 기존 순서 유지 ───
+          // ─── 일반 모드 ───
           if (hasStyleRef) {
             const styleDesc = getStrengthDescription(styleStrength);
             parts.push({
@@ -821,27 +892,24 @@ ${styleDesc.instruction}`
           } else {
             const geminiStylePrompt = getSelectedGeminiStylePrompt();
             if (geminiStylePrompt) {
-              parts.push({
-                text: `[ART STYLE INSTRUCTION]\nApply this art style: ${geminiStylePrompt}`
-              });
+              parts.push({ text: `[ART STYLE INSTRUCTION]\nApply this art style: ${geminiStylePrompt}` });
             }
           }
-          // 나레이션(한국어 원문)을 컨텍스트로 추가 → 씬 내용 이해도 향상
-          const narrationCtx = scene.narration ? `[SCENE NARRATION - what is happening]\n${scene.narration}\n\n` : '';
-          parts.push({ text: `${narrationCtx}[VISUAL PROMPT - how to draw it]\n${sanitizedPrompt}` });
+          parts.push({ text: `[SCENE PROMPT]\n${sanitizedPrompt}` });
         }
 
-        // 텍스트 모드별 마지막 강제 지시 (끝에 한 번 더)
-        if (textMode === 'none') {
-          parts.push({ text: `🚫 FINAL ABSOLUTE OVERRIDE — ZERO TEXT RULE: Do NOT render ANY text, letters, words, numbers, signs, logos, captions, labels, or written characters of ANY kind in ANY language anywhere in this image. No exceptions. Remove all typography. Pure visual illustration only.` });
-        } else if (textMode === 'numbers') {
-          parts.push({ text: `[FINAL] Only Arabic numerals (0-9) allowed. Absolutely NO Korean, NO English words, NO letters of any kind.` });
-        } else if (textMode === 'english') {
-          parts.push({ text: `[FINAL] Only Latin/English characters allowed. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.` });
-        }
+        // ── 마지막에도 이중 강제 ─────────────────────────────────────────
+        parts.push({
+          text: [
+            `⛔ FINAL OVERRIDE — SINGLE FRAME: ONE image, ONE scene. NO panels. NO splits. NO borders.`,
+            textMode === 'none'   ? `⛔ FINAL OVERRIDE — ZERO TEXT: Absolutely no text, letters, numbers, or signs in the image.` : '',
+            textMode === 'numbers' ? `⚠️ FINAL: Only digits (0-9). No letters, no words.` : '',
+            textMode === 'english' ? `⚠️ FINAL: Only Latin/English. No Korean, no Chinese, no Japanese.` : '',
+          ].filter(Boolean).join('\n')
+        });
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
+          model: geminiImageModel,
           contents: { parts },
           config: {
             responseModalities: [Modality.IMAGE],
@@ -857,20 +925,17 @@ ${styleDesc.instruction}`
         return null;
       }, 2, 3000); // 각 대체어당 2회 재시도
 
-      console.warn(`[CHECKPOINT] result=${result ? '이미지있음' : 'NULL'}, hasCharacterRef=${hasCharacterRef}, charCount=${referenceImages.character?.length || 0}`);
       if (result) {
         // 캐릭터 참조가 있고 FAL 키가 있으면 face swap으로 얼굴 일관성 보장
-        console.log(`[Image Gen] 이미지 생성 완료. hasCharacterRef=${hasCharacterRef}, charImages=${referenceImages.character?.length || 0}`);
         if (hasCharacterRef) {
           const faceRefRaw = referenceImages.character[0];
-          console.log(`[Image Gen] Face swap 시도 중... 참조 이미지 크기: ${faceRefRaw?.length || 0}자`);
           const faceRef = faceRefRaw.includes(',') ? faceRefRaw.split(',')[1] : faceRefRaw;
           const swapped = await faceSwapCharacter(result, faceRef);
           if (swapped) {
-            console.log('[Image Gen] ✅ Face swap 적용 완료');
+            console.log('[Image Gen] Face swap 적용 완료');
             return swapped;
           }
-          console.error('[Image Gen] ❌ Face swap 실패 또는 FAL 키 없음 → 원본 반환');
+          console.log('[Image Gen] Face swap 실패 또는 FAL 키 없음 → 원본 반환');
         }
         return result;
       }
@@ -975,11 +1040,14 @@ function concatenatePcmBase64(chunks: string[]): string {
 /**
  * TTS 단일 청크 생성 (내부용)
  */
-async function generateTtsChunk(text: string): Promise<string | null> {
+async function generateTtsChunk(text: string): Promise<string> {
   const voiceName = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
   const voiceSpeed = localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
   const speedInstruction = voiceSpeed === '0.7' ? '(천천히 또렷하게 말해주세요) ' : voiceSpeed === '1.3' ? '(빠르게 활기차게 말해주세요) ' : '';
-  const textWithSpeed = speedInstruction + text;
+  // Google TTS 톤/분위기 텍스트 지시 (사용자가 선택한 감정 스타일)
+  const toneInstruction = localStorage.getItem('heaven_google_tts_tone') || '';
+  const moodInstruction = localStorage.getItem('heaven_google_tts_mood') || '';
+  const textWithSpeed = speedInstruction + toneInstruction + moodInstruction + text;
   return retryGeminiRequest("TTS Generation", async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
@@ -990,7 +1058,10 @@ async function generateTtsChunk(text: string): Promise<string | null> {
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
       }
     });
-    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+    // 빈 응답 시 재시도 트리거 (retryGeminiRequest가 exception을 retry 조건으로 사용)
+    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!data) throw new Error('TTS returned empty audio — retrying');
+    return data;
   });
 }
 
@@ -1065,8 +1136,7 @@ export const generateAllScenesAudio = async (
   for (let i = 0; i < chunks.length; i++) {
     if (!chunks[i].trim()) continue;
     onProgress?.(`전체 나레이션 음성 생성 중 (${i + 1}/${chunks.length})`);
-    const audio = await generateTtsChunk(chunks[i]);
-    if (audio) audioChunks.push(audio);
+    audioChunks.push(await generateTtsChunk(chunks[i]));
     if (i < chunks.length - 1) await wait(300);
   }
 
@@ -1097,8 +1167,7 @@ export const generateAudioForScene = async (text: string): Promise<string | null
   const results: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     console.log(`[TTS] 청크 ${i + 1}/${chunks.length}: ${chunks[i].length}자`);
-    const audio = await generateTtsChunk(chunks[i]);
-    if (audio) results.push(audio);
+    results.push(await generateTtsChunk(chunks[i]));
   }
 
   if (results.length === 0) return null;
@@ -1149,7 +1218,7 @@ ${narration}
 JSON 배열만 출력. 예: ["청크1", "청크2"]`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json"
@@ -1207,7 +1276,7 @@ Return ONLY the motion prompt, no explanation. Example:
 "Slow gentle zoom in. Character slightly nods with a warm smile, eyes blinking naturally. Subtle breathing motion. Background remains static. Maintain original art style consistency."`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
@@ -1360,11 +1429,11 @@ ${textInstruction}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-image',
       contents: prompt,
       config: {
-        responseModalities: ['IMAGE'],
-        responseMimeType: 'image/jpeg',
+        responseModalities: [Modality.IMAGE],
+        imageConfig: { aspectRatio: '16:9' },
       },
     });
 
@@ -1379,6 +1448,128 @@ ${textInstruction}
     return null;
   } catch (e) {
     console.error('[Thumbnail] 생성 실패:', e);
+    return null;
+  }
+};
+
+// ── 썸네일 전략 분석 ──────────────────────────────────────────────────────────
+export const analyzeThumbnailStrategy = async (params: {
+  topic: string;
+  characterEnabled: boolean;
+  characterType: string;
+  characterDetails: string;
+  targetAudience: string;
+}): Promise<{ summary: string; mainText: string; subText: string; imagePrompt: string } | null> => {
+  const ai = getAI();
+  if (!ai) return null;
+
+  const charDesc = params.characterEnabled
+    ? `등장 피사체: ${params.characterType} - ${params.characterDetails}`
+    : '피사체 없음 (배경/사물 중심)';
+
+  const prompt = `당신은 유튜브 썸네일 전략가입니다. 다음 정보를 바탕으로 클릭율을 극대화하는 썸네일 전략을 JSON으로 제안하세요.
+
+영상 주제: "${params.topic}"
+${charDesc}
+시청 타겟: ${params.targetAudience}
+
+다음 JSON 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
+{
+  "summary": "전략 분석 요약 (2-3문장, 한국어)",
+  "mainText": "메인 문구 (10자 이내, 임팩트 있게, 한국어)",
+  "subText": "서브 문구 (15자 이내, 한국어)",
+  "imagePrompt": "썸네일 이미지 생성 프롬프트 (한국어, 구체적으로 시각적 요소 묘사, 100자 이내)"
+}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    console.error('[ThumbnailStrategy] 분석 실패:', e);
+    return null;
+  }
+};
+
+// ── 썸네일 V2 생성 ────────────────────────────────────────────────────────────
+export const generateThumbnailV2 = async (params: {
+  topic: string;
+  mainText: string;
+  subText: string;
+  imagePrompt: string;
+  borderStyle: string;
+  thumbnailRatio?: '16:9' | '9:16';
+  characterEnabled: boolean;
+  characterType: string;
+  characterDetails: string;
+  targetAudience: string;
+  showChannelName: boolean;
+  channelName: string;
+  editRequest?: string;
+  model?: string;
+}): Promise<string | null> => {
+  const ai = getAI();
+  if (!ai) return null;
+
+  const borderDesc: Record<string, string> = {
+    none: '',
+    solid: '테두리: 굵은 단색 테두리로 텍스트 강조.',
+    neon: '테두리: 네온 글로우 효과로 텍스트 발광.',
+    sketch: '테두리: 손그림/낙서 스타일 테두리.',
+  };
+
+  const charDesc = params.characterEnabled ? `등장 피사체: ${params.characterDetails} (${params.characterType})` : '';
+  const channelDesc = params.showChannelName && params.channelName
+    ? `채널명 "${params.channelName}"을 썸네일 하단 모서리에 작게 표시.`
+    : '';
+  const editDesc = params.editRequest
+    ? `\n수정 요청 (아래 사항만 변경하고 나머지 구도·색상·스타일·분위기는 완전히 동일하게 유지할 것): ${params.editRequest}`
+    : '';
+  const ratio = params.thumbnailRatio || '16:9';
+  const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
+
+  const prompt = `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
+
+Topic: "${params.topic}"
+Target audience: ${params.targetAudience}
+${charDesc}
+${borderDesc[params.borderStyle] || ''}
+${channelDesc}${editDesc}
+
+Visual direction: ${params.imagePrompt}
+
+⛔ ABSOLUTE RULES — VIOLATION = FAILURE:
+1. ZERO TEXT: Do NOT render ANY text, letters, words, numbers, Korean characters, Latin characters, signs, captions, watermarks, or any written symbols ANYWHERE in the image. Text will be added as a separate overlay. Any text in the image = complete failure.
+2. SINGLE FRAME: One continuous scene only. No panels, no split screens, no comic strips, no borders dividing the image.
+3. BACKGROUND ONLY: Leave the upper 30% area relatively open (gradient or solid color) for text overlay placement.
+4. Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style.`;
+
+  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
+  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
+
+  try {
+    const response = await ai.models.generateContent({
+      model: thumbnailModel,
+      contents: prompt,
+      config: {
+        responseModalities: [Modality.IMAGE],
+        imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' },
+      },
+    });
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if ((part as any).inlineData?.data) return (part as any).inlineData.data;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error('[ThumbnailV2] 생성 실패:', e);
     return null;
   }
 };

@@ -37,7 +37,7 @@ function getGeminiCustomStylePrompt(): string {
  * 'auto' | 'none' | 'english' | 'numbers'
  */
 export function getImageTextMode(): string {
-  return localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'auto';
+  return localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none';
 }
 
 /**

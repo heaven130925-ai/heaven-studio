@@ -90,11 +90,14 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
 
   // 캐릭터 (화풍 적용)
   const styleNote = artStylePrompt ? ` Render in ${artStylePrompt} style.` : '';
+  const sizeNote = type === 'MICRO' ? '5-15% of frame' : type === 'MACRO' ? '60-80% of frame' : '30-40% of frame';
   const charPrompt = type === 'NO_CHAR'
     ? `NO CHARACTER - objects only. No human figures.${styleNote}`
     : hasCharacterRef
     ? `Use CHARACTER REFERENCE image.${styleNote}`
-    : `Stick figure (${type === 'MICRO' ? '5-15%' : type === 'MACRO' ? '60-80%' : '30-40%'}).${styleNote}`;
+    : artStylePrompt
+    ? `Human figure in ${artStylePrompt} style. Size: ${sizeNote}. NO stick figures, NO simple outlines — fully rendered in art style.`
+    : `Stick figure (${sizeNote}).`;
 
   // 스타일
   const style = artStylePrompt
@@ -103,30 +106,40 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
 
   const char = hasCharacterRef
     ? `CHARACTER: Match reference image.${styleNote}`
-    : `CHARACTER: ${VAR_BASE_CHAR}${styleNote}`;
+    : artStylePrompt
+    ? `CHARACTER: Fully rendered human in ${artStylePrompt} style. STRICTLY NO stick figures, NO simple line figures, NO minimalist outlines.`
+    : `CHARACTER: ${VAR_BASE_CHAR}`;
 
-  // 텍스트 규칙 (프롬프트 앞 prefix + 뒤 FINAL OVERRIDE 이중 적용)
-  let textPrefix = '';
-  let textRule = '';
+  // ── 절대 금지 규칙 (프롬프트 맨 앞 + 맨 뒤 이중 적용) ──────────────
+  // 단일 프레임 강제 (항상)
+  const singleFrameTop = `⛔ ABSOLUTE RULE #1 — ONE SINGLE IMAGE: Generate exactly ONE continuous, unified image. The entire canvas = one scene. FORBIDDEN: panels, comic strips, split-screens, grids, multiple cuts, storyboard layouts, before/after comparisons, triptychs, diptychs, collages, any borders or lines dividing the image. ONE scene = ONLY valid output. Multiple frames = INSTANT FAILURE.`;
+  const singleFrameBottom = `⛔ FINAL CHECK — SINGLE FRAME: ONE image, ONE scene, NO panels, NO splits, NO borders, NO divided canvas of any kind.`;
+
+  // 텍스트 규칙
+  let textTop = '';
+  let textBottom = '';
+  let textRule = ''; // 중간 삽입용 (auto 모드)
 
   if (textMode === 'none') {
-    textPrefix = '🚫 TEXT RESTRICTION ACTIVE: ZERO TEXT IN IMAGE. Do NOT include any text, letters, words, numbers, signs, logos, labels, captions, or written characters anywhere in the image. Pure visual only.\n\n';
-    textRule = '🚫 ZERO TEXT FINAL OVERRIDE: No text of any kind. No Korean, no English, no numbers, no signs, no labels anywhere in this image.';
+    textTop = `⛔ ABSOLUTE RULE #2 — ZERO TEXT: Do NOT render any text, letters, words, numbers, signs, logos, labels, captions, watermarks, or written characters ANYWHERE in the image. This is a pure visual scene with NO readable text whatsoever. Including text = CRITICAL FAILURE.`;
+    textBottom = `⛔ FINAL CHECK — ZERO TEXT: No Korean (한글), no English, no numbers, no symbols, no written language of ANY kind. Pure visual only.`;
   } else if (textMode === 'english') {
-    textPrefix = '⚠️ TEXT RESTRICTION: English/Latin characters only. Korean/Chinese/Japanese forbidden.\n\n';
-    textRule = keywords
-      ? `⚠️ FINAL TEXT RULE: ONLY Latin/English characters allowed. Render "${keywords}" in English ONLY. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.`
-      : '⚠️ FINAL TEXT RULE: ONLY Latin/English characters allowed. STRICTLY FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic, or any non-Latin script.';
+    textTop = `⚠️ TEXT RULE: English/Latin characters ONLY. Korean (한글), Chinese, Japanese, Arabic forbidden.`;
+    textBottom = keywords
+      ? `⚠️ FINAL TEXT: Render "${keywords}" in ENGLISH ONLY. FORBIDDEN: Korean, Chinese, Japanese, Arabic.`
+      : `⚠️ FINAL TEXT: Latin/English only. FORBIDDEN: Korean (한글), Chinese, Japanese, Arabic.`;
   } else if (textMode === 'numbers') {
-    textPrefix = '⚠️ TEXT RESTRICTION: Only Arabic numerals (0-9) allowed. No Korean, no English words, no letters of any kind.\n\n';
-    textRule = '⚠️ FINAL TEXT RULE: ONLY Arabic numerals (0-9) and basic symbols (+, -, %, $, .) allowed. NO letters. NO words. NO Korean (한글). NO English words. NO written language of any kind.';
+    textTop = `⚠️ TEXT RULE: Only Arabic numerals (0-9) allowed. No words, no letters of any kind.`;
+    textBottom = `⚠️ FINAL TEXT: ONLY digits (0-9) and basic symbols. NO letters, NO words, NO Korean, NO English words.`;
   } else {
     // auto: 기존 동작
     textRule = keywords ? `TEXT: "${keywords}"` : '';
   }
 
   return `
-${textPrefix}${basePrompt}
+${singleFrameTop}
+${textTop ? textTop + '\n' : ''}
+${basePrompt}
 
 MOOD: ${mood}
 ${charPrompt}
@@ -134,8 +147,11 @@ ${charPrompt}
 ${style}
 ${char}
 ${VAR_MOOD_ENFORCER}
-QUALITY: Sharp lines, clean composition, consistent art style across all scenes. No blurry or low-quality elements.
+QUALITY: Sharp lines, clean composition, consistent art style. No blurry or low-quality elements.
 ${textRule ? `\n${textRule}` : ''}
+
+${singleFrameBottom}
+${textBottom ? textBottom : ''}
 `.trim();
 };
 

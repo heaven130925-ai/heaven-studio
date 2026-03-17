@@ -9,7 +9,7 @@ import { CONFIG } from '../config';
 import { SavedProject, GeneratedAsset, CostBreakdown } from '../types';
 import { getSelectedImageModel } from './imageService';
 
-const DB_NAME = 'TubeGenAI';
+const DB_NAME = 'HeavenAI';
 const DB_VERSION = 1;
 const STORE_NAME = 'projects';
 
@@ -36,25 +36,27 @@ function openDB(): Promise<IDBDatabase> {
 /**
  * 이미지 축소 (썸네일 생성용)
  */
-function createThumbnail(base64Image: string, maxWidth: number = 200): Promise<string> {
+function createThumbnail(base64Image: string, maxWidth: number = 640): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const ratio = maxWidth / img.width;
-      canvas.width = maxWidth;
-      canvas.height = img.height * ratio;
+      const ratio = Math.min(maxWidth / img.width, 1); // 원본보다 크게 하지 않음
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
 
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
+        resolve(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
       } else {
-        resolve(base64Image.slice(0, 1000));
+        resolve(base64Image);
       }
     };
     img.onerror = () => resolve('');
-    img.src = `data:image/png;base64,${base64Image}`;
+    // Gemini/Imagen 이미지는 JPEG base64 → 올바른 MIME 타입 사용
+    const mimeType = base64Image.startsWith('/9j/') ? 'image/jpeg' : 'image/jpeg';
+    img.src = `data:${mimeType};base64,${base64Image}`;
   });
 }
 
@@ -63,10 +65,12 @@ function createThumbnail(base64Image: string, maxWidth: number = 200): Promise<s
  */
 function getCurrentSettings() {
   const elevenLabsModel = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL) || CONFIG.DEFAULT_ELEVENLABS_MODEL;
+  const aspectRatio = (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9';
 
   return {
     imageModel: getSelectedImageModel(),
-    elevenLabsModel
+    elevenLabsModel,
+    aspectRatio,
   };
 }
 

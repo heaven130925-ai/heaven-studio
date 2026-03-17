@@ -1,12 +1,28 @@
 
 /**
- * TubeGen AI 전역 설정 파일
+ * Heaven AI 전역 설정 파일
  * 보안을 위해 민감한 API 키는 이곳에 직접 입력하지 마세요.
  * 앱 내의 [설정] 메뉴를 통해 입력하면 브라우저에 안전하게 보관됩니다.
  */
 
 // 이미지 생성 모델 목록
 export const IMAGE_MODELS = [
+  {
+    id: 'gemini-3-pro-image-preview',
+    name: 'Nano Banana Pro 🍌👑 NEW',
+    provider: 'Google',
+    pricePerImage: 0.06,
+    description: '최고급 Nano Banana Pro — 최고품질, 1K 해상도, 유료 API키 필요',
+    speed: '보통'
+  },
+  {
+    id: 'gemini-3.1-flash-image-preview',
+    name: 'Nano Banana 2 🍌 NEW',
+    provider: 'Google',
+    pricePerImage: 0.0315,
+    description: '최신 Nano Banana 2 — 한글 텍스트 깨끗, Flash 속도, 유료 API키 필요',
+    speed: '빠름'
+  },
   {
     id: 'imagen-4.0-fast-generate-001',
     name: 'Imagen 4 Fast ⚡',
@@ -98,6 +114,7 @@ export type GeminiStyleId = typeof GEMINI_STYLE_CATEGORIES[number]['styles'][num
 
 // ─── 비주얼 스타일 (이미지 생성기 빠른 선택) ─────────────────────────────────
 export const VISUAL_STYLES = [
+  { id: 'custom',       name: '커스텀',         emoji: '✏️', bg: 'from-slate-700 to-slate-800',   prompt: '' },
   { id: 'cinematic',    name: '시네마틱 실사',  emoji: '🎬', bg: 'from-slate-700 to-slate-900',   prompt: 'Cinematic photorealistic style, Hollywood blockbuster film aesthetic, professional cinematography, dramatic volumetric lighting, shallow depth of field, 8K ultra-detailed, rich cinematic color grading' },
   { id: 'kdrama',       name: 'K-드라마 실사',  emoji: '🌸', bg: 'from-pink-800 to-rose-900',     prompt: 'Korean drama photorealistic style, soft romantic lighting, clean modern Korean aesthetics, beautiful actors with natural makeup, elegant drama set design, warm golden hour lighting, Netflix Korean drama quality' },
   { id: 'noir',         name: '누아르',         emoji: '🌑', bg: 'from-gray-800 to-black',         prompt: 'Film noir style, dramatic black and white with deep moody shadows, 1940s detective noir aesthetic, high contrast chiaroscuro lighting, rain-soaked atmospheric streets, expressionist shadows and silhouettes' },
@@ -112,7 +129,6 @@ export const VISUAL_STYLES = [
   { id: 'webnovel',     name: '웹소설 시그니쳐',emoji: '📖', bg: 'from-violet-800 to-purple-900', prompt: 'Korean web novel signature cover illustration style, dramatic fantasy character portrait, flowing hair and clothing in dynamic wind, intense gaze, glowing magical light effects, rich saturated fantasy colors' },
   { id: 'ghibli',       name: '지브리풍',       emoji: '🌿', bg: 'from-emerald-700 to-green-900', prompt: 'Studio Ghibli inspired animation style, hand-drawn watercolor painterly backgrounds with lush organic detail, warm nostalgic atmosphere, Hayao Miyazaki aesthetic, expressive simple characters, magical realism, soft natural color palette' },
   { id: 'stickman',     name: '스틱맨',         emoji: '🖊️', bg: 'from-slate-600 to-slate-800',  prompt: 'Simple stick figure illustration style, clean minimalist black line drawings on white background, xkcd-style stick figure characters, simple geometric shapes, hand-drawn marker whiteboard animation aesthetic' },
-  { id: 'custom',       name: '커스텀',         emoji: '✏️', bg: 'from-violet-700 to-indigo-900', prompt: '' },
 ] as const;
 
 export type VisualStyleId = typeof VISUAL_STYLES[number]['id'] | 'none';
@@ -123,6 +139,8 @@ export const PRICING = {
   USD_TO_KRW: 1450,
 
   IMAGE: {
+    'gemini-3-pro-image-preview': 0.06,
+    'gemini-3.1-flash-image-preview': 0.0315,
     'imagen-4.0-fast-generate-001': 0.02,
     'imagen-4.0-generate-001': 0.04,
     'imagen-4.0-ultra-generate-001': 0.06,
@@ -170,6 +188,7 @@ export const ELEVENLABS_DEFAULT_VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', gender: 'female' as const, accent: 'American', description: '⭐ 가장 안정적, 나레이션 최적화, 긴 텍스트 OK' },
   { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', gender: 'female' as const, accent: 'American', description: '부드럽고 친근함, 대화형 콘텐츠에 적합' },
   { id: 'XB0fDUnXU5powFXDhCwa', name: 'Charlotte', gender: 'female' as const, accent: 'British', description: '세련된 영국식, 고급스러운 나레이션' },
+  { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', gender: 'female' as const, accent: 'American', description: '젊고 활기찬 여성, 유튜브 콘텐츠에 적합' },
   // 남성 음성 (Male) - 안정성 검증된 음성만
   { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male' as const, accent: 'American', description: '⭐ 가장 안정적, 뉴스/다큐 스타일, 긴 텍스트 OK' },
   { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', gender: 'male' as const, accent: 'American', description: '젊고 역동적, 유튜브/엔터테인먼트에 적합' },
@@ -229,28 +248,28 @@ export const CONFIG = {
 
   // 로컬 스토리지 키 이름 (내부 관리용)
   STORAGE_KEYS: {
-    GEMINI_API_KEY: 'tubegen_gemini_key',      // Gemini API 키 (사용자 직접 입력)
-    ELEVENLABS_API_KEY: 'tubegen_el_key',
-    ELEVENLABS_VOICE_ID: 'tubegen_el_voice',
-    ELEVENLABS_MODEL: 'tubegen_el_model',
-    FAL_API_KEY: 'tubegen_fal_key',  // PixVerse 영상 변환용
-    IMAGE_MODEL: 'tubegen_image_model',
+    GEMINI_API_KEY: 'heaven_gemini_key',      // Gemini API 키 (사용자 직접 입력)
+    ANTHROPIC_API_KEY: 'heaven_anthropic_key', // Claude API 키 (대본 생성용)
+    ELEVENLABS_API_KEY: 'heaven_el_key',
+    ELEVENLABS_VOICE_ID: 'heaven_el_voice',
+    ELEVENLABS_MODEL: 'heaven_el_model',
+    FAL_API_KEY: 'heaven_fal_key',  // PixVerse 영상 변환용
+    IMAGE_MODEL: 'heaven_image_model',
     // Gemini 전용 화풍 설정
-    GEMINI_STYLE: 'tubegen_gemini_style',
-    GEMINI_CUSTOM_STYLE: 'tubegen_gemini_custom_style',
-    IMAGE_TEXT_MODE: 'tubegen_image_text_mode',
-    SUBTITLE_CONFIG: 'tubegen_subtitle_config',
-    PROJECTS: 'tubegen_projects',
-    GEMINI_TTS_VOICE: 'tubegen_gemini_tts_voice',
-    TTS_PROVIDER: 'tubegen_tts_provider',  // 'elevenlabs' | 'google'
-    VOICE_SPEED: 'tubegen_voice_speed',          // '0.7' | '1.0' | '1.3'
-    VOICE_STABILITY: 'tubegen_voice_stability',   // '0'-'100' (ElevenLabs)
-    VOICE_STYLE: 'tubegen_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
-    ASPECT_RATIO: 'tubegen_aspect_ratio',         // '16:9' | '9:16'
-    VISUAL_STYLE_ID: 'tubegen_visual_style_id',   // VisualStyleId
-    CUSTOM_STYLE_PROMPT: 'tubegen_custom_style_prompt', // 커스텀 화풍 프롬프트
-    LONGFORM_DURATION: 'tubegen_longform_duration',   // seconds per scene (longform)
-    SHORTFORM_DURATION: 'tubegen_shortform_duration', // seconds per scene (shortform)
+    GEMINI_STYLE: 'heaven_gemini_style',
+    GEMINI_CUSTOM_STYLE: 'heaven_gemini_custom_style',
+    IMAGE_TEXT_MODE: 'heaven_image_text_mode',
+    SUBTITLE_CONFIG: 'heaven_subtitle_config',
+    PROJECTS: 'heaven_projects',
+    GEMINI_TTS_VOICE: 'heaven_gemini_tts_voice',
+    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google'
+    VOICE_SPEED: 'heaven_voice_speed',          // '0.7' | '1.0' | '1.3'
+    VOICE_STABILITY: 'heaven_voice_stability',   // '0'-'100' (ElevenLabs)
+    VOICE_STYLE: 'heaven_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
+    ASPECT_RATIO: 'heaven_aspect_ratio',         // '16:9' | '9:16'
+    VISUAL_STYLE_ID: 'heaven_visual_style_id',   // VisualStyleId
+    LONGFORM_DURATION: 'heaven_longform_duration',   // seconds per scene (longform)
+    SHORTFORM_DURATION: 'heaven_shortform_duration', // seconds per scene (shortform)
   },
 
   // 애니메이션 설정

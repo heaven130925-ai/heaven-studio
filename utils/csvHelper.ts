@@ -54,7 +54,7 @@ export const downloadImagesAsZip = async (data: GeneratedAsset[]) => {
 
   try {
     const blob = await zip.generateAsync({ type: "blob" });
-    saveAs(blob, "tubegen_assets.zip");
+    saveAs(blob, "heaven_assets.zip");
   } catch (error) {
     console.error("Failed to generate zip", error);
     alert("ZIP 파일 생성 중 오류가 발생했습니다.");
@@ -104,6 +104,21 @@ export const downloadMediaZip = async (data: GeneratedAsset[]) => {
   }
 };
 
+export const downloadAudioZip = async (data: GeneratedAsset[]) => {
+  const zip = new JSZip();
+  let audioCount = 0;
+  for (const item of data) {
+    if (item.audioData) {
+      const num = item.sceneNumber.toString().padStart(3, '0');
+      zip.file(`scene_${num}.mp3`, item.audioData, { base64: true });
+      audioCount++;
+    }
+  }
+  if (audioCount === 0) { alert("다운로드할 오디오가 없습니다."); return; }
+  const blob = await zip.generateAsync({ type: "blob" });
+  saveAs(blob, `heaven_audio_${Date.now()}.zip`);
+};
+
 export const downloadProjectZip = async (data: GeneratedAsset[]) => {
   const zip = new JSZip();
   const imgFolder = zip.folder("images");
@@ -142,7 +157,7 @@ export const downloadProjectZip = async (data: GeneratedAsset[]) => {
 
   try {
     const blob = await zip.generateAsync({ type: "blob" });
-    saveAs(blob, "tubegen_full_project.zip");
+    saveAs(blob, "heaven_full_project.zip");
   } catch (error) {
     console.error("Failed to zip project", error);
     alert("프로젝트 압축 중 오류가 발생했습니다.");

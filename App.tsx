@@ -5,18 +5,19 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt } from './services/geminiService';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
-import { generateVideoFromImage, getFalApiKey } from './services/falService';
+import { generateVideoFromImage, generateTextToVideo, getFalApiKey } from './services/falService';
 import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
+import { downloadAudioZip } from './utils/csvHelper';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -44,6 +45,9 @@ const App: React.FC = () => {
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
   const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
   const [showApiModal, setShowApiModal] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
+  );
 
   // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
   const [showStoryboard, setShowStoryboard] = useState(false);
@@ -149,6 +153,34 @@ const App: React.FC = () => {
     setCurrentCost(null);
   };
 
+  // 미완성 씬 이어서 생성 (이미지 없는 씬만)
+  const handleResume = useCallback(async () => {
+    if (isProcessingRef.current) return;
+    const incomplete = assetsRef.current.filter(a => !a.imageData);
+    if (incomplete.length === 0) return;
+    isAbortedRef.current = false;
+    isProcessingRef.current = true;
+    setStep(GenerationStep.ASSETS);
+    setProgressMessage('이어서 생성 중...');
+    for (let i = 0; i < assetsRef.current.length; i++) {
+      if (isAbortedRef.current) break;
+      if (assetsRef.current[i].imageData) continue;
+      updateAssetAt(i, { status: 'generating' });
+      setProgressMessage(`씬 ${i + 1}/${assetsRef.current.length} 이미지 생성 중...`);
+      try {
+        const img = await generateImage(assetsRef.current[i], currentReferenceImages);
+        if (img && !isAbortedRef.current) updateAssetAt(i, { imageData: img, status: 'completed' });
+      } catch (e: any) {
+        console.error(`씬 ${i + 1} 이어서 생성 실패:`, e.message);
+        updateAssetAt(i, { status: 'error' });
+      }
+      if (i < assetsRef.current.length - 1 && !isAbortedRef.current) await wait(1500);
+    }
+    isProcessingRef.current = false;
+    if (!isAbortedRef.current) setStep(GenerationStep.COMPLETED);
+    setProgressMessage('이어서 생성 완료!');
+  }, [currentReferenceImages]);
+
   const handleAbort = () => {
     isAbortedRef.current = true;
     isProcessingRef.current = false;
@@ -177,7 +209,8 @@ const App: React.FC = () => {
     refImgs: ReferenceImages,
     sourceText: string | null,
     sceneCount: number = 0,
-    imageOnly: boolean = false
+    imageOnly: boolean = false,
+    audioOnly: boolean = false
   ) => {
     console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}, imageOnly=${imageOnly}`);
     if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
@@ -185,7 +218,7 @@ const App: React.FC = () => {
     isAbortedRef.current = false;
 
     // 자동 주제 모드(대본만 생성)는 메인화면에서 처리 → 스토리보드 창 안 열기
-    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly;
+    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
     if (!isAutoTopicMode) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
@@ -237,11 +270,10 @@ const App: React.FC = () => {
           sourceText!,
           2500,
           setProgressMessage,
-          sceneCount || undefined,
-          hasCharacterRef
+          sceneCount || undefined
         );
       } else {
-        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined, hasCharacterRef);
+        scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
       }
       if (isAbortedRef.current) return;
       
@@ -274,21 +306,22 @@ const App: React.FC = () => {
           const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
 
           if (ttsProvider === 'google') {
-            // ── Google TTS: 전체 씬을 한 세션에서 생성 (목소리 일관성) ──
-            try {
-              const narrations = initialAssets.map(a => a.narration);
-              const audioList = await generateAllScenesAudio(narrations, setProgressMessage);
+            // ── Google TTS: 씬별 개별 생성 (음성 잘림 방지) ──
+            for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) return;
-              audioList.forEach((audioData, i) => {
-                if (audioData) {
-                  updateAssetAt(i, { audioData });
-                  console.log(`[TTS] 씬 ${i + 1} Google TTS 배치 완료`);
-                } else {
-                  updateAssetAt(i, { audioData: null });
+              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+              try {
+                const audioData = await generateAudioForScene(initialAssets[i].narration);
+                if (!isAbortedRef.current) {
+                  updateAssetAt(i, { audioData: audioData ?? null });
+                  console.log(`[TTS] 씬 ${i + 1} Google TTS 완료`);
                 }
-              });
-            } catch (e: any) {
-              console.error('[TTS] Google TTS 배치 실패:', e.message);
+              } catch (e: any) {
+                console.error(`[TTS] 씬 ${i + 1} Google TTS 실패:`, e.message);
+              }
+              if (i < initialAssets.length - 1 && !isAbortedRef.current) {
+                await wait(500);
+              }
             }
             return;
           }
@@ -456,14 +489,24 @@ const App: React.FC = () => {
         }
       };
 
-      setProgressMessage(imageOnly ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
-      // imageOnly 모드: 이미지만 생성, 아니면 병렬 생성
-      await Promise.all(imageOnly ? [runImages()] : [runAudio(), runImages()]);
+      setProgressMessage(imageOnly ? '이미지 생성 중...' : audioOnly ? '오디오 생성 중...' : '시각 에셋 및 오디오 합성 중...');
+      if (imageOnly) await runImages();
+      else if (audioOnly) await runAudio();
+      else await Promise.all([runAudio(), runImages()]);
 
-      // 애니메이션 변환은 이제 수동으로 (이미지 호버 시 버튼 클릭)
-      // 자동 변환 비활성화 - 사용자가 원하는 이미지만 선택적으로 변환 가능
-      
       if (isAbortedRef.current) return;
+
+      // 오디오만 생성: ZIP 다운로드 후 종료 (스토리보드 미표시)
+      if (audioOnly) {
+        setProgressMessage('오디오 ZIP 다운로드 중...');
+        await downloadAudioZip(assetsRef.current);
+        setProgressMessage('오디오 다운로드 완료!');
+        assetsRef.current = [];
+        setGeneratedData([]);
+        setStep(GenerationStep.IDLE);
+        return;
+      }
+
       setStep(GenerationStep.COMPLETED);
 
       // 비용 요약 메시지 (원화)
@@ -493,6 +536,7 @@ const App: React.FC = () => {
   // 이미지 재생성 핸들러 (useCallback으로 메모이제이션)
   const handleRegenerateImage = useCallback(async (idx: number) => {
     if (isProcessingRef.current) return;
+    isAbortedRef.current = false; // 개별 재생성은 abort 상태 리셋
 
     const MAX_RETRIES = 2;
     updateAssetAt(idx, { status: 'generating' });
@@ -602,8 +646,43 @@ const App: React.FC = () => {
     }
   }, [animatingIndices]);
 
+  // Kling 텍스트→영상 핸들러
+  const handleGenerateTextToVideo = useCallback(async (idx: number, prompt: string) => {
+    const falKey = getFalApiKey();
+    if (!falKey) {
+      alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
+      return;
+    }
+    if (animatingIndices.has(idx)) return;
+
+    try {
+      setAnimatingIndices(prev => new Set(prev).add(idx));
+      setProgressMessage(`씬 ${idx + 1} Kling 텍스트→영상 생성 중...`);
+
+      const videoUrl = await generateTextToVideo(prompt, falKey);
+
+      if (videoUrl) {
+        updateAssetAt(idx, { videoData: videoUrl, videoDuration: CONFIG.ANIMATION.VIDEO_DURATION });
+        addCost('video', PRICING.VIDEO.perVideo, 1);
+        setProgressMessage(`씬 ${idx + 1} 영상 생성 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
+      } else {
+        setProgressMessage(`씬 ${idx + 1} 영상 생성 실패`);
+      }
+    } catch (e: any) {
+      console.error('Kling 텍스트→영상 실패:', e);
+      setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
+    } finally {
+      setAnimatingIndices(prev => { const next = new Set<number>(prev); next.delete(idx); return next; });
+    }
+  }, [animatingIndices]);
+
   const handleSelectThumbnail = useCallback((imageBase64: string) => {
-    setThumbnailBaseImage(imageBase64);
+    setThumbnailBaseImage(null); // 먼저 null로 리셋하여 useEffect 재트리거 보장
+    requestAnimationFrame(() => {
+      setThumbnailBaseImage(imageBase64);
+      setShowStoryboard(true);
+      setStoryboardTab('thumbnail');
+    });
   }, []);
 
   const triggerVideoExport = async (enableSubtitles: boolean = true) => {
@@ -625,7 +704,7 @@ const App: React.FC = () => {
 
       if (result) {
         // 영상 저장 (자막은 영상에 하드코딩됨)
-        saveAs(result.videoBlob, `tubegen_v92_${suffix}_${timestamp}.mp4`);
+        saveAs(result.videoBlob, `heaven_ai_${suffix}_${timestamp}.mp4`);
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
       }
     } catch (error: any) {
@@ -653,10 +732,14 @@ const App: React.FC = () => {
     setProgressMessage(`"${project.name}" 프로젝트 불러옴`);
     setViewMode('main');
     setShowStoryboard(true); // 바로 스토리보드로 이동
+    // 프로젝트의 aspect ratio 복원 (없으면 16:9 기본값)
+    const savedRatio = ((project.settings as any)?.aspectRatio as '16:9' | '9:16') || '16:9';
+    setAspectRatio(savedRatio);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, savedRatio);
   };
 
   // Gemini API 키 미설정 시 셋업 화면
-  const hasGeminiKey = !!(localStorage.getItem('tubegen_gemini_key') || process.env.GEMINI_API_KEY);
+  const hasGeminiKey = !!(localStorage.getItem('heaven_gemini_key') || process.env.GEMINI_API_KEY);
   if (!hasGeminiKey) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center p-4">
@@ -686,7 +769,7 @@ const App: React.FC = () => {
             onClick={() => {
               const input = (document.getElementById('setup-gemini-key') as HTMLInputElement).value.trim();
               if (!input) { alert('API 키를 입력해주세요.'); return; }
-              localStorage.setItem('tubegen_gemini_key', input);
+              localStorage.setItem('heaven_gemini_key', input);
               window.location.reload();
             }}
           >
@@ -703,18 +786,18 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white">
+    <div className="min-h-screen bg-[#0a0a0a] text-white overflow-x-hidden">
       <Header />
 
       {/* 네비게이션 탭 */}
       <div className="border-b border-white/[0.07] bg-black/60 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 flex items-center gap-2 py-2">
+        <div className="px-6 flex items-center gap-2 py-2" style={{ maxWidth: '1600px', margin: '0 auto' }}>
           <button
             onClick={() => setViewMode('main')}
             className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border ${
               viewMode === 'main'
-                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
-                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
+                ? 'text-blue-200 bg-blue-600/20 border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-blue-500/40 hover:bg-blue-600/10'
             }`}
           >
             스토리보드 생성
@@ -723,16 +806,23 @@ const App: React.FC = () => {
             onClick={() => setViewMode('gallery')}
             className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
               viewMode === 'gallery'
-                ? 'text-white bg-emerald-600/25 border-emerald-400/70 shadow-[0_0_18px_rgba(52,211,153,0.45)]'
-                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-emerald-500/40 hover:bg-emerald-600/10'
+                ? 'text-blue-200 bg-blue-600/20 border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-blue-500/40 hover:bg-blue-600/10'
             }`}
           >
             저장된 프로젝트
             {savedProjects.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-xs rounded-full text-emerald-300 font-bold">
+              <span className="px-1.5 py-0.5 bg-blue-500/20 border border-blue-500/30 text-xs rounded-full text-blue-300 font-bold">
                 {savedProjects.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => { setStoryboardTab('subtitle'); setShowStoryboard(true); }}
+            className="px-5 py-2.5 text-base font-black rounded-xl transition-all border text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10 flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+            자막 편집
           </button>
           <div className="ml-auto">
             <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
@@ -763,9 +853,38 @@ const App: React.FC = () => {
 
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
-      <main className="py-8">
-        {/* 기존 스토리보드로 돌아가기 배너 */}
-        {generatedData.length > 0 && !showStoryboard && (
+      <main className="py-2 overflow-x-hidden">
+        {/* 대본 완성 배너 */}
+        {step === GenerationStep.SCRIPT_READY && (
+          <div className="max-w-7xl mx-auto px-4 mb-3">
+            <div className="w-full flex items-center justify-between px-5 py-4 rounded-xl bg-green-500/10 border border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">✅</span>
+                <span className="text-sm font-bold text-green-300">{progressMessage}</span>
+              </div>
+              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-black border border-red-500/30 hover:bg-red-600/30 transition-colors">리셋</button>
+            </div>
+          </div>
+        )}
+
+        {/* 백그라운드 생성 중 진행 배너 */}
+        {!showStoryboard && (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING || isVideoGenerating) && (
+          <div className="max-w-7xl mx-auto px-4 mb-3">
+            <div className="w-full flex items-center justify-between px-5 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/40">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent animate-spin rounded-full shrink-0" />
+                <span className="text-sm font-bold text-yellow-300 truncate">{progressMessage || '생성 중...'}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-3">
+                <button onClick={() => setShowStoryboard(true)} className="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-300 text-xs font-bold border border-yellow-500/40 hover:bg-yellow-500/30 transition-colors">보기</button>
+                {!isVideoGenerating && <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-bold border border-red-500/30 hover:bg-red-600/30 transition-colors">중단</button>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 스토리보드로 돌아가기 배너 */}
+        {generatedData.length > 0 && !showStoryboard && step === GenerationStep.COMPLETED && !isVideoGenerating && (
           <div className="max-w-7xl mx-auto px-4 mb-6">
             <button
               onClick={() => setShowStoryboard(true)}
@@ -788,19 +907,13 @@ const App: React.FC = () => {
           onManualScriptChange={setInputManualScript}
           thumbnailBaseImage={thumbnailBaseImage}
           onThumbnailBaseImageChange={setThumbnailBaseImage}
+          onAspectRatioChange={setAspectRatio}
+          thumbnailScenes={[]}
+          thumbnailTopic={currentTopic}
+          onOpenGallery={() => setViewMode('gallery')}
         />
 
         
-        {/* SCRIPT_READY 상태: 대본 완성 안내 */}
-        {step === GenerationStep.SCRIPT_READY && (
-          <div className="max-w-7xl mx-auto px-4 text-center mb-6">
-            <div className="inline-flex flex-wrap items-center gap-3 px-6 py-3 rounded-2xl border bg-slate-900 border-slate-800 shadow-2xl">
-              <div className="w-2 h-2 rounded-full bg-yellow-400"></div>
-              <span className="text-sm font-bold text-slate-300">{progressMessage}</span>
-              <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">리셋</button>
-            </div>
-          </div>
-        )}
       </main>
       )}
 
@@ -811,7 +924,7 @@ const App: React.FC = () => {
           <div className="flex items-center justify-between px-5 py-3 border-b border-slate-700/50 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 shrink-0">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { if (step === GenerationStep.ASSETS || step === GenerationStep.SCRIPTING) { handleAbort(); } setShowStoryboard(false); }}
+                onClick={() => setShowStoryboard(false)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-red-500/50 bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white text-sm font-semibold transition-all"
               >
                 ← 메인으로
@@ -845,6 +958,9 @@ const App: React.FC = () => {
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
+                  {assetsRef.current.some(a => !a.imageData) && (
+                    <button onClick={handleResume} className="px-3 py-1 rounded-lg bg-blue-600/30 text-blue-300 text-[10px] font-black border border-blue-500/40 hover:bg-blue-600/50 transition-colors">▶ 이어서 생성</button>
+                  )}
                   <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">전체 리셋</button>
                 </>
               )}
@@ -869,6 +985,8 @@ const App: React.FC = () => {
               <ThumbnailEditor
                 scenes={generatedData}
                 topic={currentTopic}
+                selectedImage={thumbnailBaseImage}
+                onImageGenerated={undefined}
               />
             ) : storyboardTab === 'subtitle' ? (
               <SubtitleEditor
@@ -877,11 +995,24 @@ const App: React.FC = () => {
                 onSubConfigChange={handleSubConfigChange}
                 onExportVideo={triggerVideoExport}
                 isExporting={isVideoGenerating}
+                onSelectThumbnail={handleSelectThumbnail}
                 onNarrationChange={(idx, val) => {
-                  const updated = [...generatedData];
-                  updated[idx] = { ...updated[idx], narration: val };
+                  const updated = [...assetsRef.current];
+                  // 자막 비우면 오디오도 함께 삭제
+                  if (!val.trim()) {
+                    updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
+                  } else {
+                    updated[idx] = { ...updated[idx], narration: val };
+                  }
                   assetsRef.current = updated;
-                  setGeneratedData(updated);
+                  setGeneratedData([...updated]);
+                }}
+                onImageEditCommand={async (idx, command) => {
+                  const current = assetsRef.current[idx];
+                  if (!current) return;
+                  // command를 맨 앞에 배치해 AI가 최우선 적용하도록
+                  const base = current.visualPrompt || current.narration || '';
+                  await handleRegenerateWithPrompt(idx, `[USER EDIT REQUEST — APPLY FIRST]: ${command}\n\n[SCENE BASE]: ${base}`);
                 }}
               />
             ) : (
@@ -894,7 +1025,9 @@ const App: React.FC = () => {
                   isExporting={isVideoGenerating}
                   animatingIndices={animatingIndices}
                   onGenerateAnimation={handleGenerateAnimation}
+                  onGenerateTextToVideo={handleGenerateTextToVideo}
                   onSelectThumbnail={handleSelectThumbnail}
+                  aspectRatio={aspectRatio}
                 />
               </div>
             )}
@@ -911,9 +1044,10 @@ const App: React.FC = () => {
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
             </div>
             {[
-              { label: 'Gemini API 키', key: 'tubegen_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
-              { label: 'ElevenLabs API 키', key: 'tubegen_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
-              { label: 'FAL API 키', key: 'tubegen_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
+              { label: 'Gemini API 키', key: 'heaven_gemini_key', placeholder: 'AIza...', link: 'https://aistudio.google.com/app/apikey', hint: 'Google AI Studio에서 무료 발급' },
+              { label: 'Claude API 키 (대본생성)', key: 'heaven_anthropic_key', placeholder: 'sk-ant-...', link: 'https://console.anthropic.com', hint: '대본 생성에 Claude Sonnet 4.6 사용 (없으면 Gemini)' },
+              { label: 'ElevenLabs API 키', key: 'heaven_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
+              { label: 'FAL API 키', key: 'heaven_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
             ].map(({ label, key, placeholder, link, hint }) => (
               <div key={key} className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</label>

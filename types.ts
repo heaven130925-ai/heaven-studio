@@ -18,7 +18,7 @@ export const DEFAULT_REFERENCE_IMAGES: ReferenceImages = {
 };
 
 export interface SceneAnalysis {
-  composition_type: 'MICRO' | 'STANDARD' | 'MACRO' | 'NO_CHAR';
+  composition_type: 'MICRO' | 'STANDARD' | 'MACRO';
   composition_explanation: string; // 구도_설명
   camera: {
     view: string;    // 시점
@@ -95,22 +95,18 @@ export interface SubtitleConfig {
   strokeWidth: number;       // 테두리 굵기 (0 = 없음)
   position: 'top' | 'middle' | 'bottom';  // 자막 위치 (하위호환)
   yPercent?: number;  // 수직 위치 0(상단)~100(하단), position보다 우선
-  xPercent?: number;  // 수평 위치 0(왼쪽)~100(오른쪽), 기본 50(가운데)
-  textAlign?: 'left' | 'center' | 'right'; // 텍스트 정렬
   maxCharsPerChunk?: number;  // 자막 청크당 최대 글자 수 (기본 15, 숏폼은 10 권장)
+  textAlign?: 'left' | 'center' | 'right';  // 텍스트 정렬
 }
 
-// 사용 가능한 한국어 폰트 목록
+// 자막 폰트 목록
 export const SUBTITLE_FONTS = [
-  { label: '노토 산스 (기본)', value: '"Noto Sans KR", sans-serif', weight: 700 },
-  { label: '노토 세리프', value: '"Noto Serif KR", serif', weight: 700 },
-  { label: '블랙한산스 (굵음)', value: '"Black Han Sans", sans-serif', weight: 400 },
-  { label: '주아체 (귀여움)', value: '"Jua", sans-serif', weight: 400 },
-  { label: '도현체 (깔끔)', value: '"Do Hyeon", sans-serif', weight: 400 },
-  { label: '가에구 (손글씨)', value: '"Gaegu", cursive', weight: 700 },
-  { label: '스타일리시', value: '"Stylish", sans-serif', weight: 400 },
-  { label: '굴림체', value: '"Gulim", "굴림", sans-serif', weight: 400 },
-  { label: '맑은 고딕', value: '"Malgun Gothic", "맑은 고딕", sans-serif', weight: 700 },
+  { label: 'Noto Sans KR', value: '"Noto Sans KR", "Malgun Gothic", sans-serif', weight: 700 },
+  { label: '맑은 고딕', value: '"Malgun Gothic", sans-serif', weight: 700 },
+  { label: '나눔고딕', value: '"Nanum Gothic", sans-serif', weight: 700 },
+  { label: '나눔명조', value: '"Nanum Myeongjo", serif', weight: 700 },
+  { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif', weight: 900 },
+  { label: 'Impact', value: 'Impact, "Arial Narrow", sans-serif', weight: 900 },
 ];
 
 // 기본 자막 설정
@@ -118,17 +114,15 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   wordsPerLine: 5,
   maxLines: 1,
   fontSize: 40,
-  fontFamily: '"Noto Sans KR", sans-serif',
+  fontFamily: '"Noto Sans KR", "Malgun Gothic", sans-serif',
   fontWeight: 700,
   bottomMargin: 80,
-  backgroundColor: 'rgba(0, 0, 0, 0)',
+  backgroundColor: 'rgba(0, 0, 0, 0.75)',
   textColor: '#FFFFFF',
   strokeColor: '#000000',
-  strokeWidth: 6,
+  strokeWidth: 4,
   position: 'bottom',
   yPercent: 85,
-  xPercent: 50,
-  textAlign: 'center',
   maxCharsPerChunk: 15
 };
 

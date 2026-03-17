@@ -85,16 +85,41 @@ function convertToWords(
  * - 분리된 청크와 ElevenLabs 단어 타이밍을 매핑
  * - 각 청크의 시작/끝 시간 계산
  */
+function charBasedSplit(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + maxChars, text.length);
+    // Try to break at a space or punctuation
+    if (end < text.length) {
+      const breakAt = text.lastIndexOf(' ', end);
+      if (breakAt > i) end = breakAt + 1;
+    }
+    chunks.push(text.slice(i, end).trim());
+    i = end;
+  }
+  return chunks.filter(c => c.length > 0);
+}
+
 async function createMeaningChunks(
   fullText: string,
   words: SubtitleWord[]
 ): Promise<MeaningChunk[]> {
-  // AI 기반 의미 단위 분리
-  const textChunks = await splitSubtitleByMeaning(fullText, 20);
+  if (words.length === 0) return [];
 
-  if (textChunks.length === 0 || words.length === 0) {
-    return [];
+  // AI 기반 의미 단위 분리 (실패 시 글자수 기반 폴백)
+  let textChunks: string[];
+  try {
+    textChunks = await splitSubtitleByMeaning(fullText, 20);
+  } catch (e) {
+    console.warn('[MeaningChunks] AI 분리 실패, 글자수 기반 폴백 사용:', e);
+    textChunks = charBasedSplit(fullText, 18);
   }
+
+  if (textChunks.length === 0) {
+    textChunks = charBasedSplit(fullText, 18);
+  }
+  if (textChunks.length === 0) return [];
 
   const meaningChunks: MeaningChunk[] = [];
   let wordIndex = 0;
