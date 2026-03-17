@@ -346,33 +346,43 @@ const generateScriptSingle = async (
     const anthropicKey = localStorage.getItem('heaven_anthropic_key');
     let responseText: string;
 
+    // ── Claude 시도 (키 있을 때) ───────────────────────────────────────────
+    let claudeUsed = false;
     if (anthropicKey) {
-      // ── Claude Sonnet 4.6 ──────────────────────────────────────────────────
-      console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 사용`);
-      const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': anthropicKey,
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'anthropic-dangerous-direct-browser-access': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: maxOutputTokens,
-          system: baseInstruction + '\n\nOutput ONLY a valid JSON array. No markdown code fences, no explanation text.',
-          messages: [{ role: 'user', content: promptText }],
-        }),
-      });
-      if (!claudeResp.ok) {
-        const errText = await claudeResp.text();
-        throw new Error(`Claude API error ${claudeResp.status}: ${errText.slice(0, 300)}`);
+      try {
+        console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 시도`);
+        const claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: maxOutputTokens,
+            system: baseInstruction + '\n\nOutput ONLY a valid JSON array. No markdown code fences, no explanation text.',
+            messages: [{ role: 'user', content: promptText }],
+          }),
+        });
+        if (!claudeResp.ok) {
+          const errText = await claudeResp.text();
+          console.warn(`${chunkLabel}[Script] Claude 실패 (${claudeResp.status}): ${errText.slice(0, 200)} → Gemini fallback`);
+        } else {
+          const claudeData = await claudeResp.json();
+          responseText = claudeData.content?.[0]?.text || '[]';
+          claudeUsed = true;
+          console.log(`${chunkLabel}[Script] Claude claude-sonnet-4-6 성공`);
+        }
+      } catch (claudeErr: any) {
+        console.warn(`${chunkLabel}[Script] Claude 네트워크 오류: ${claudeErr.message} → Gemini fallback`);
       }
-      const claudeData = await claudeResp.json();
-      responseText = claudeData.content?.[0]?.text || '[]';
-    } else {
-      // ── Gemini 2.5 Flash fallback (Claude 키 없음) ─────────────────────────
-      console.log(`${chunkLabel}[Script] Gemini 2.5 Flash 사용 (Claude 키 미설정)`);
+    }
+
+    // ── Gemini 2.5 Flash fallback ─────────────────────────────────────────
+    if (!claudeUsed) {
+      console.log(`${chunkLabel}[Script] Gemini 2.5 Flash 사용${anthropicKey ? ' (Claude fallback)' : ' (Claude 키 없음)'}`);
       const ai = getAI();
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
