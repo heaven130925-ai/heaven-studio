@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateAllScenesAudio, generateMotionPrompt } from './services/geminiService';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
@@ -276,21 +276,22 @@ const App: React.FC = () => {
           const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
 
           if (ttsProvider === 'google') {
-            // ── Google TTS: 전체 씬을 한 세션에서 생성 (목소리 일관성) ──
-            try {
-              const narrations = initialAssets.map(a => a.narration);
-              const audioList = await generateAllScenesAudio(narrations, setProgressMessage);
+            // ── Google TTS: 씬별 개별 생성 (음성 잘림 방지) ──
+            for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) return;
-              audioList.forEach((audioData, i) => {
-                if (audioData) {
-                  updateAssetAt(i, { audioData });
-                  console.log(`[TTS] 씬 ${i + 1} Google TTS 배치 완료`);
-                } else {
-                  updateAssetAt(i, { audioData: null });
+              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+              try {
+                const audioData = await generateAudioForScene(initialAssets[i].narration);
+                if (!isAbortedRef.current) {
+                  updateAssetAt(i, { audioData: audioData ?? null });
+                  console.log(`[TTS] 씬 ${i + 1} Google TTS 완료`);
                 }
-              });
-            } catch (e: any) {
-              console.error('[TTS] Google TTS 배치 실패:', e.message);
+              } catch (e: any) {
+                console.error(`[TTS] 씬 ${i + 1} Google TTS 실패:`, e.message);
+              }
+              if (i < initialAssets.length - 1 && !isAbortedRef.current) {
+                await wait(500);
+              }
             }
             return;
           }
@@ -605,7 +606,12 @@ const App: React.FC = () => {
   }, [animatingIndices]);
 
   const handleSelectThumbnail = useCallback((imageBase64: string) => {
-    setThumbnailBaseImage(imageBase64);
+    setThumbnailBaseImage(null); // 먼저 null로 리셋하여 useEffect 재트리거 보장
+    requestAnimationFrame(() => {
+      setThumbnailBaseImage(imageBase64);
+      setShowStoryboard(true);
+      setStoryboardTab('thumbnail');
+    });
   }, []);
 
   const triggerVideoExport = async (enableSubtitles: boolean = true) => {
@@ -655,6 +661,10 @@ const App: React.FC = () => {
     setProgressMessage(`"${project.name}" 프로젝트 불러옴`);
     setViewMode('main');
     setShowStoryboard(true); // 바로 스토리보드로 이동
+    // 프로젝트의 aspect ratio 복원 (없으면 16:9 기본값)
+    const savedRatio = ((project.settings as any)?.aspectRatio as '16:9' | '9:16') || '16:9';
+    setAspectRatio(savedRatio);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, savedRatio);
   };
 
   // Gemini API 키 미설정 시 셋업 화면
@@ -872,6 +882,8 @@ const App: React.FC = () => {
               <ThumbnailEditor
                 scenes={generatedData}
                 topic={currentTopic}
+                selectedImage={thumbnailBaseImage}
+                onImageGenerated={(img) => setThumbnailBaseImage(img)}
               />
             ) : storyboardTab === 'subtitle' ? (
               <SubtitleEditor
@@ -880,6 +892,7 @@ const App: React.FC = () => {
                 onSubConfigChange={handleSubConfigChange}
                 onExportVideo={triggerVideoExport}
                 isExporting={isVideoGenerating}
+                onSelectThumbnail={handleSelectThumbnail}
                 onNarrationChange={(idx, val) => {
                   const updated = [...generatedData];
                   updated[idx] = { ...updated[idx], narration: val };

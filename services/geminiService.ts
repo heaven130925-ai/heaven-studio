@@ -957,11 +957,14 @@ function concatenatePcmBase64(chunks: string[]): string {
 /**
  * TTS 단일 청크 생성 (내부용)
  */
-async function generateTtsChunk(text: string): Promise<string | null> {
+async function generateTtsChunk(text: string): Promise<string> {
   const voiceName = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
   const voiceSpeed = localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
   const speedInstruction = voiceSpeed === '0.7' ? '(천천히 또렷하게 말해주세요) ' : voiceSpeed === '1.3' ? '(빠르게 활기차게 말해주세요) ' : '';
-  const textWithSpeed = speedInstruction + text;
+  // Google TTS 톤/분위기 텍스트 지시 (사용자가 선택한 감정 스타일)
+  const toneInstruction = localStorage.getItem('heaven_google_tts_tone') || '';
+  const moodInstruction = localStorage.getItem('heaven_google_tts_mood') || '';
+  const textWithSpeed = speedInstruction + toneInstruction + moodInstruction + text;
   return retryGeminiRequest("TTS Generation", async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
@@ -972,7 +975,10 @@ async function generateTtsChunk(text: string): Promise<string | null> {
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
       }
     });
-    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+    // 빈 응답 시 재시도 트리거 (retryGeminiRequest가 exception을 retry 조건으로 사용)
+    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!data) throw new Error('TTS returned empty audio — retrying');
+    return data;
   });
 }
 
@@ -1047,8 +1053,7 @@ export const generateAllScenesAudio = async (
   for (let i = 0; i < chunks.length; i++) {
     if (!chunks[i].trim()) continue;
     onProgress?.(`전체 나레이션 음성 생성 중 (${i + 1}/${chunks.length})`);
-    const audio = await generateTtsChunk(chunks[i]);
-    if (audio) audioChunks.push(audio);
+    audioChunks.push(await generateTtsChunk(chunks[i]));
     if (i < chunks.length - 1) await wait(300);
   }
 
@@ -1079,8 +1084,7 @@ export const generateAudioForScene = async (text: string): Promise<string | null
   const results: string[] = [];
   for (let i = 0; i < chunks.length; i++) {
     console.log(`[TTS] 청크 ${i + 1}/${chunks.length}: ${chunks[i].length}자`);
-    const audio = await generateTtsChunk(chunks[i]);
-    if (audio) results.push(audio);
+    results.push(await generateTtsChunk(chunks[i]));
   }
 
   if (results.length === 0) return null;
@@ -1342,11 +1346,11 @@ ${textInstruction}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash-image',
       contents: prompt,
       config: {
-        responseModalities: ['IMAGE'],
-        responseMimeType: 'image/jpeg',
+        responseModalities: [Modality.IMAGE],
+        imageConfig: { aspectRatio: '16:9' },
       },
     });
 
@@ -1361,6 +1365,124 @@ ${textInstruction}
     return null;
   } catch (e) {
     console.error('[Thumbnail] 생성 실패:', e);
+    return null;
+  }
+};
+
+// ── 썸네일 전략 분석 ──────────────────────────────────────────────────────────
+export const analyzeThumbnailStrategy = async (params: {
+  topic: string;
+  characterEnabled: boolean;
+  characterType: string;
+  characterDetails: string;
+  targetAudience: string;
+}): Promise<{ summary: string; mainText: string; subText: string; imagePrompt: string } | null> => {
+  const ai = getAI();
+  if (!ai) return null;
+
+  const charDesc = params.characterEnabled
+    ? `등장 피사체: ${params.characterType} - ${params.characterDetails}`
+    : '피사체 없음 (배경/사물 중심)';
+
+  const prompt = `당신은 유튜브 썸네일 전략가입니다. 다음 정보를 바탕으로 클릭율을 극대화하는 썸네일 전략을 JSON으로 제안하세요.
+
+영상 주제: "${params.topic}"
+${charDesc}
+시청 타겟: ${params.targetAudience}
+
+다음 JSON 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
+{
+  "summary": "전략 분석 요약 (2-3문장, 한국어)",
+  "mainText": "메인 문구 (10자 이내, 임팩트 있게, 한국어)",
+  "subText": "서브 문구 (15자 이내, 한국어)",
+  "imagePrompt": "썸네일 이미지 생성 프롬프트 (한국어, 구체적으로 시각적 요소 묘사, 100자 이내)"
+}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    console.error('[ThumbnailStrategy] 분석 실패:', e);
+    return null;
+  }
+};
+
+// ── 썸네일 V2 생성 ────────────────────────────────────────────────────────────
+export const generateThumbnailV2 = async (params: {
+  topic: string;
+  mainText: string;
+  subText: string;
+  imagePrompt: string;
+  borderStyle: string;
+  thumbnailRatio?: '16:9' | '9:16';
+  characterEnabled: boolean;
+  characterType: string;
+  characterDetails: string;
+  targetAudience: string;
+  showChannelName: boolean;
+  channelName: string;
+  editRequest?: string;
+}): Promise<string | null> => {
+  const ai = getAI();
+  if (!ai) return null;
+
+  const borderDesc: Record<string, string> = {
+    none: '',
+    solid: '테두리: 굵은 단색 테두리로 텍스트 강조.',
+    neon: '테두리: 네온 글로우 효과로 텍스트 발광.',
+    sketch: '테두리: 손그림/낙서 스타일 테두리.',
+  };
+
+  const charDesc = params.characterEnabled ? `등장 피사체: ${params.characterDetails} (${params.characterType})` : '';
+  const channelDesc = params.showChannelName && params.channelName
+    ? `채널명 "${params.channelName}"을 썸네일 하단 모서리에 작게 표시.`
+    : '';
+  const editDesc = params.editRequest ? `\n수정 요청: ${params.editRequest}` : '';
+  const ratio = params.thumbnailRatio || '16:9';
+  const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
+
+  const prompt = `유튜브 썸네일 이미지를 생성하라. ${sizeDesc}.
+
+주제: "${params.topic}"
+시청 타겟: ${params.targetAudience}
+${charDesc}
+메인 텍스트: "${params.mainText}" — 썸네일에 크고 굵게 한국어로 표시
+서브 텍스트: "${params.subText}" — 메인 텍스트 아래 작게 한국어로 표시
+${borderDesc[params.borderStyle] || ''}
+${channelDesc}${editDesc}
+
+이미지 방향: ${params.imagePrompt}
+
+요구사항:
+- 강렬하고 눈길을 끄는 비주얼, 밝고 대비가 강한 색상
+- 텍스트는 크고 굵게, 선명하게 읽기 쉽게
+- 전문적인 유튜브 썸네일 스타일
+- SINGLE FRAME ONLY — 패널, 분할 화면, 만화 컷 금지`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: prompt,
+      config: {
+        responseModalities: [Modality.IMAGE],
+        imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' },
+      },
+    });
+    const parts = response.candidates?.[0]?.content?.parts;
+    if (parts) {
+      for (const part of parts) {
+        if ((part as any).inlineData?.data) return (part as any).inlineData.data;
+      }
+    }
+    return null;
+  } catch (e) {
+    console.error('[ThumbnailV2] 생성 실패:', e);
     return null;
   }
 };

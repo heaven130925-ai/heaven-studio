@@ -90,11 +90,14 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
 
   // 캐릭터 (화풍 적용)
   const styleNote = artStylePrompt ? ` Render in ${artStylePrompt} style.` : '';
+  const sizeNote = type === 'MICRO' ? '5-15% of frame' : type === 'MACRO' ? '60-80% of frame' : '30-40% of frame';
   const charPrompt = type === 'NO_CHAR'
     ? `NO CHARACTER - objects only. No human figures.${styleNote}`
     : hasCharacterRef
     ? `Use CHARACTER REFERENCE image.${styleNote}`
-    : `Stick figure (${type === 'MICRO' ? '5-15%' : type === 'MACRO' ? '60-80%' : '30-40%'}).${styleNote}`;
+    : artStylePrompt
+    ? `Human figure in ${artStylePrompt} style. Size: ${sizeNote}. NO stick figures, NO simple outlines — fully rendered in art style.`
+    : `Stick figure (${sizeNote}).`;
 
   // 스타일
   const style = artStylePrompt
@@ -103,7 +106,9 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
 
   const char = hasCharacterRef
     ? `CHARACTER: Match reference image.${styleNote}`
-    : `CHARACTER: ${VAR_BASE_CHAR}${styleNote}`;
+    : artStylePrompt
+    ? `CHARACTER: Fully rendered human in ${artStylePrompt} style. STRICTLY NO stick figures, NO simple line figures, NO minimalist outlines.`
+    : `CHARACTER: ${VAR_BASE_CHAR}`;
 
   // 텍스트 규칙 (프롬프트 앞 prefix + 뒤 FINAL OVERRIDE 이중 적용)
   let textPrefix = '';

@@ -83,7 +83,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   // 음성 공통
   const [voiceSpeed, setVoiceSpeed] = useState<string>(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const [voiceStability, setVoiceStability] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50'));
-  const [voiceMood, setVoiceMood] = useState<string>(localStorage.getItem('heaven_voice_mood') || '');
+  const [voiceTone, setVoiceTone] = useState<string>(localStorage.getItem('heaven_voice_tone') || '');
+  const [voiceMoodPreset, setVoiceMoodPreset] = useState<string>(localStorage.getItem('heaven_voice_mood') || '');
+  const [googleTtsTone, setGoogleTtsTone] = useState<string>(localStorage.getItem('heaven_google_tts_tone_id') || '');
+  const [googleTtsMood, setGoogleTtsMood] = useState<string>(localStorage.getItem('heaven_google_tts_mood_id') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
   const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google') || 'elevenlabs'
@@ -101,6 +104,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [thumbnailFontSize, setThumbnailFontSize] = useState(80);
   const [thumbnailTextColor, setThumbnailTextColor] = useState('#ffffff');
   const [thumbnailTextY, setThumbnailTextY] = useState(85);
+  const [thumbnailFontFamily, setThumbnailFontFamily] = useState('Impact, "Arial Narrow", sans-serif');
+  const [thumbnailTextAlign, setThumbnailTextAlign] = useState<'left' | 'center' | 'right'>('center');
   const [thumbnailCustomImage, setThumbnailCustomImage] = useState<string | null>(null);
   const thumbnailCanvasRef = useRef<HTMLCanvasElement>(null);
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
@@ -280,18 +285,19 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
       if (thumbnailText.trim()) {
         const yPx = Math.round((thumbnailTextY / 100) * 720);
         const fontSize = thumbnailFontSize;
-        ctx.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
-        ctx.textAlign = 'center';
+        ctx.font = `900 ${fontSize}px ${thumbnailFontFamily}`;
+        ctx.textAlign = thumbnailTextAlign;
+        const xPos = thumbnailTextAlign === 'left' ? 40 : thumbnailTextAlign === 'right' ? 1240 : 640;
         ctx.lineWidth = Math.round(fontSize * 0.12);
         ctx.strokeStyle = 'rgba(0,0,0,0.9)';
         ctx.lineJoin = 'round';
-        ctx.strokeText(thumbnailText, 640, yPx);
+        ctx.strokeText(thumbnailText, xPos, yPx);
         ctx.fillStyle = thumbnailTextColor;
-        ctx.fillText(thumbnailText, 640, yPx);
+        ctx.fillText(thumbnailText, xPos, yPx);
       }
     };
     img.src = base.startsWith('data:') ? base : `data:image/jpeg;base64,${base}`;
-  }, [thumbnailBaseImage, thumbnailCustomImage, thumbnailText, thumbnailFontSize, thumbnailTextColor, thumbnailTextY]);
+  }, [thumbnailBaseImage, thumbnailCustomImage, thumbnailText, thumbnailFontSize, thumbnailTextColor, thumbnailTextY, thumbnailFontFamily, thumbnailTextAlign]);
 
   const handleDownloadThumbnail = useCallback(() => {
     const canvas = thumbnailCanvasRef.current;
@@ -802,25 +808,28 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 </div>
                               ))}
                             </div>
-                            {/* 톤 프리셋 */}
+                            {/* 톤 프리셋 - 안정성(stability) 제어 */}
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
                               <div className="grid grid-cols-4 gap-1.5">
                                 {([
-                                  { id: '낮은목소리', label: '낮은 톤', stability: 85, style: 5 },
-                                  { id: '차분한', label: '차분한', stability: 70, style: 10 },
-                                  { id: '밝은목소리', label: '밝은 톤', stability: 45, style: 45 },
-                                  { id: '활기찬', label: '활기찬', stability: 20, style: 75 },
-                                ] as { id: string; label: string; stability: number; style: number }[]).map(m => (
+                                  { id: '낮은목소리', label: '낮은 톤', stability: 92 },
+                                  { id: '차분한', label: '차분한', stability: 80 },
+                                  { id: '밝은목소리', label: '밝은 톤', stability: 50 },
+                                  { id: '활기찬', label: '활기찬', stability: 20 },
+                                ] as { id: string; label: string; stability: number }[]).map(m => (
                                   <button key={m.id} type="button" onClick={() => {
-                                    setVoiceMood(m.id);
-                                    setVoiceStability(m.stability);
-                                    setVoiceStyle(m.style);
-                                    localStorage.setItem('heaven_voice_mood', m.id);
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                    const newTone = voiceTone === m.id ? '' : m.id;
+                                    setVoiceTone(newTone);
+                                    if (newTone) {
+                                      setVoiceStability(m.stability);
+                                      localStorage.setItem('heaven_voice_tone', m.id);
+                                      localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                    } else {
+                                      localStorage.removeItem('heaven_voice_tone');
+                                    }
                                   }}
-                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceTone === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                     {m.label}
                                   </button>
                                 ))}
@@ -831,45 +840,58 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)] space-y-2">
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">안정성</span>
-                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceTone(''); localStorage.removeItem('heaven_voice_tone'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStability}</span>
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className="text-sm text-slate-400 w-14">스타일</span>
-                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
+                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMoodPreset(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
                                 <span className="text-sm text-purple-400 w-8 text-right">{voiceStyle}</span>
                               </div>
                             </div>
-                            {/* 분위기 프리셋 */}
+                            {/* 분위기 프리셋 - 스타일(style) 제어 */}
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 <span className="text-slate-600 normal-case font-normal">(톤과 동시 선택 가능)</span></p>
                               <div className="grid grid-cols-2 gap-1.5">
                                 {([
-                                  { id: '친근하게', stability: 35, style: 55 },
-                                  { id: '따뜻하게', stability: 55, style: 35 },
-                                  { id: '뉴스형식', stability: 82, style: 8 },
-                                  { id: '부드럽게', stability: 70, style: 20 },
-                                  { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
-                                  { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
-                                  { id: '심각하게', stability: 80, style: 5 },
-                                  { id: '울면서', stability: 10, style: 90 },
-                                ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
+                                  { id: '친근하게', style: 55 },
+                                  { id: '따뜻하게', style: 35 },
+                                  { id: '뉴스형식', style: 0, stabilityOverride: 95 },
+                                  { id: '부드럽게', style: 20 },
+                                  { id: '부드럽고강하게', label: '부드럽고 강하게', style: 60 },
+                                  { id: '강하고따뜻하게', label: '강하고 따뜻하게', style: 75 },
+                                  { id: '심각하게', style: 3, stabilityOverride: 88 },
+                                  { id: '울면서', style: 90 },
+                                ] as { id: string; label?: string; style: number; stabilityOverride?: number }[]).map(m => (
                                   <button key={m.id} type="button" onClick={() => {
-                                    setVoiceMood(m.id);
-                                    setVoiceStability(m.stability);
-                                    setVoiceStyle(m.style);
-                                    localStorage.setItem('heaven_voice_mood', m.id);
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                    const newMood = voiceMoodPreset === m.id ? '' : m.id;
+                                    setVoiceMoodPreset(newMood);
+                                    if (newMood) {
+                                      setVoiceStyle(m.style);
+                                      localStorage.setItem('heaven_voice_mood', m.id);
+                                      localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                      if (m.stabilityOverride !== undefined) {
+                                        setVoiceStability(m.stabilityOverride);
+                                        setVoiceTone('');
+                                        localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stabilityOverride));
+                                        localStorage.removeItem('heaven_voice_tone');
+                                      }
+                                    } else {
+                                      localStorage.removeItem('heaven_voice_mood');
+                                    }
                                   }}
-                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMoodPreset === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                     {m.label || m.id}
                                   </button>
                                 ))}
                               </div>
-                              {voiceMood && (
-                                <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }}
-                                  className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
+                              {(voiceTone || voiceMoodPreset) && (
+                                <button type="button" onClick={() => {
+                                  setVoiceTone(''); setVoiceMoodPreset('');
+                                  localStorage.removeItem('heaven_voice_tone');
+                                  localStorage.removeItem('heaven_voice_mood');
+                                }}
+                                  className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                               )}
                             </div>
                             <button type="button" onClick={saveElSettings} className="shrink-0 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
@@ -904,73 +926,62 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           ))}
                         </div>
                         </div>{/* end voice list scroll wrapper */}
-                        {/* 톤 프리셋 */}
+                        {/* 구글 TTS 톤 - 텍스트 지시로 감정 제어 */}
                         <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤</p>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
                           <div className="grid grid-cols-4 gap-1.5">
                             {([
-                              { id: '낮은목소리', label: '낮은 톤', stability: 85, style: 5 },
-                              { id: '차분한', label: '차분한', stability: 70, style: 10 },
-                              { id: '밝은목소리', label: '밝은 톤', stability: 45, style: 45 },
-                              { id: '활기찬', label: '활기찬', stability: 20, style: 75 },
-                            ] as { id: string; label: string; stability: number; style: number }[]).map(m => (
+                              { id: '낮은톤', label: '낮은 톤', instruction: '(낮고 차분한 목소리로) ' },
+                              { id: '차분한', label: '차분한', instruction: '(차분하고 안정적으로) ' },
+                              { id: '밝은톤', label: '밝은 톤', instruction: '(밝고 생동감 있게) ' },
+                              { id: '활기찬', label: '활기찬', instruction: '(활기차고 열정적으로) ' },
+                            ] as { id: string; label: string; instruction: string }[]).map(m => (
                               <button key={m.id} type="button" onClick={() => {
-                                setVoiceMood(m.id);
-                                setVoiceStability(m.stability);
-                                setVoiceStyle(m.style);
-                                localStorage.setItem('heaven_voice_mood', m.id);
-                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
-                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                const newTone = googleTtsTone === m.id ? '' : m.id;
+                                setGoogleTtsTone(newTone);
+                                localStorage.setItem('heaven_google_tts_tone_id', newTone);
+                                localStorage.setItem('heaven_google_tts_tone', newTone ? m.instruction : '');
                               }}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsTone === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label}
                               </button>
                             ))}
                           </div>
                         </div>
-                        {/* 안정성/스타일 슬라이더 */}
-                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)] space-y-2">
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-400 w-14">안정성</span>
-                            <input type="range" min={0} max={100} value={voiceStability} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { changeVoiceStability(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-teal-500" />
-                            <span className="text-sm text-teal-400 w-8 text-right">{voiceStability}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-slate-400 w-14">스타일</span>
-                            <input type="range" min={0} max={100} value={voiceStyle} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { changeVoiceStyle(Number(e.target.value)); setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-teal-500" />
-                            <span className="text-sm text-teal-400 w-8 text-right">{voiceStyle}</span>
-                          </div>
-                        </div>
-                        {/* 분위기 프리셋 */}
+                        {/* 구글 TTS 분위기 - 텍스트 지시 방식 */}
                         <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 프리셋</p>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 <span className="text-slate-600 normal-case font-normal">(톤과 동시 선택 가능)</span></p>
                           <div className="grid grid-cols-2 gap-1.5">
                             {([
-                              { id: '친근하게', stability: 35, style: 55 },
-                              { id: '따뜻하게', stability: 55, style: 35 },
-                              { id: '뉴스형식', stability: 82, style: 8 },
-                              { id: '부드럽게', stability: 70, style: 20 },
-                              { id: '부드럽고강하게', label: '부드럽고 강하게', stability: 45, style: 65 },
-                              { id: '강하고따뜻하게', label: '강하고 따뜻하게', stability: 40, style: 75 },
-                              { id: '심각하게', stability: 80, style: 5 },
-                              { id: '울면서', stability: 10, style: 90 },
-                            ] as { id: string; label?: string; stability: number; style: number }[]).map(m => (
+                              { id: '친근하게', instruction: '(친근하고 따뜻하게) ' },
+                              { id: '따뜻하게', instruction: '(따뜻하게 공감하며) ' },
+                              { id: '뉴스형식', instruction: '(뉴스 앵커처럼 명확하고 감정 없이) ' },
+                              { id: '부드럽게', instruction: '(부드럽고 온화하게) ' },
+                              { id: '부드럽고강하게', label: '부드럽고 강하게', instruction: '(부드럽지만 확신 있게) ' },
+                              { id: '강하고따뜻하게', label: '강하고 따뜻하게', instruction: '(강하고 열정적으로 따뜻하게) ' },
+                              { id: '심각하게', instruction: '(심각하고 진지하게) ' },
+                              { id: '울면서', instruction: '(슬프고 울먹이는 감정으로) ' },
+                            ] as { id: string; label?: string; instruction: string }[]).map(m => (
                               <button key={m.id} type="button" onClick={() => {
-                                setVoiceMood(m.id);
-                                setVoiceStability(m.stability);
-                                setVoiceStyle(m.style);
-                                localStorage.setItem('heaven_voice_mood', m.id);
-                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
-                                localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                const newMood = googleTtsMood === m.id ? '' : m.id;
+                                setGoogleTtsMood(newMood);
+                                localStorage.setItem('heaven_google_tts_mood_id', newMood);
+                                localStorage.setItem('heaven_google_tts_mood', newMood ? m.instruction : '');
                               }}
-                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label || m.id}
                               </button>
                             ))}
                           </div>
-                          {voiceMood && (
-                            <button type="button" onClick={() => { setVoiceMood(''); localStorage.removeItem('heaven_voice_mood'); }}
-                              className="mt-1 text-xs text-slate-500 hover:text-slate-300">초기화</button>
+                          {(googleTtsTone || googleTtsMood) && (
+                            <button type="button" onClick={() => {
+                              setGoogleTtsTone(''); setGoogleTtsMood('');
+                              localStorage.setItem('heaven_google_tts_tone_id', '');
+                              localStorage.setItem('heaven_google_tts_tone', '');
+                              localStorage.setItem('heaven_google_tts_mood_id', '');
+                              localStorage.setItem('heaven_google_tts_mood', '');
+                            }}
+                              className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                           )}
                         </div>
                       </div>
@@ -1039,6 +1050,58 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         placeholder="썸네일에 넣을 텍스트"
                         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-brand-500"
                       />
+
+                      {/* 폰트 + 정렬 */}
+                      <div className="space-y-2">
+                        {/* 폰트 선택 */}
+                        <div>
+                          <label className="text-xs text-slate-500 mb-1.5 block">폰트</label>
+                          <div className="flex flex-col gap-1">
+                            {([
+                              { label: 'Impact',      value: 'Impact, "Arial Narrow", sans-serif' },
+                              { label: 'Arial Black', value: '"Arial Black", Gadget, sans-serif' },
+                              { label: 'Bold Sans',   value: '"Noto Sans KR", "Malgun Gothic", sans-serif' },
+                              { label: 'Serif',       value: 'Georgia, serif' },
+                              { label: 'Mono',        value: '"Courier New", Courier, monospace' },
+                            ] as { label: string; value: string }[]).map(f => (
+                              <button
+                                key={f.value}
+                                type="button"
+                                onClick={() => setThumbnailFontFamily(f.value)}
+                                style={{ fontFamily: f.value }}
+                                className={`w-full py-2 px-3 rounded-lg text-sm font-bold text-left transition-all border ${
+                                  thumbnailFontFamily === f.value
+                                    ? 'bg-blue-600 border-blue-400 text-white'
+                                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* 정렬 */}
+                        <div>
+                          <label className="text-xs text-slate-500 mb-1.5 block">정렬</label>
+                          <div className="flex gap-1.5">
+                            {([['left', '좌'], ['center', '중'], ['right', '우']] as ['left'|'center'|'right', string][]).map(([val, label]) => (
+                              <button
+                                key={val}
+                                type="button"
+                                onClick={() => setThumbnailTextAlign(val)}
+                                className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all border ${
+                                  thumbnailTextAlign === val
+                                    ? 'bg-blue-600 border-blue-400 text-white'
+                                    : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs text-slate-500 mb-1 block">글자 크기: {thumbnailFontSize}px</label>
@@ -1077,7 +1140,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         onClick={handleDownloadThumbnail}
                         className="w-full py-3 bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-500 hover:to-pink-500 text-white font-black rounded-xl transition-all text-sm"
                       >
-                        썸네일 다운로드 (1280×720)
+                        썸네일 다운로드 (1280×720 JPG)
                       </button>
                     )}
 

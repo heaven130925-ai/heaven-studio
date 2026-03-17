@@ -18,6 +18,7 @@ interface Props {
   onNarrationChange?: (index: number, narration: string) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
+  onSelectThumbnail?: (imageBase64: string) => void;
 }
 
 // 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
@@ -124,7 +125,7 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onExportVideo, isExporting }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onExportVideo, isExporting, onSelectThumbnail }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -134,6 +135,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [currentSubTime, setCurrentSubTime] = useState(0);
+  // Google TTS용 구두점 가중치 기반 자막 타이밍
+  const [googleTtsGroups, setGoogleTtsGroups] = useState<{ text: string; startTime: number; endTime: number }[] | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playIdRef = useRef(0);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -189,19 +192,27 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   }, [scene?.subtitleData?.words, subConfig.maxCharsPerChunk]);
 
   // ── 자막 텍스트 계산 ──
-  // 1순위: AI 의미 단위 (meaningChunks)
-  // 2순위: ElevenLabs words 기반 그룹 (실제 타임스탬프, 드리프트 없음)
+  // 1순위: ElevenLabs words 기반 그룹 (실제 타임스탬프, 드리프트 없음 — 가장 정확)
+  // 2순위: AI 의미 단위 (wordGroups 없을 때만)
   // 3순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
   const getSubtitleText = useCallback((t: number): string => {
-    if (useMeaningChunks && meaningChunks && meaningChunks.length > 0) {
-      if (t < meaningChunks[0].startTime) return meaningChunks[0].text;
-      const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => t >= chunk.startTime && t < chunk.endTime);
-      return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
-    }
+    // 1순위: ElevenLabs words 기반 (가장 정확)
     if (wordGroups && wordGroups.length > 0) {
       if (t < wordGroups[0].startTime) return wordGroups[0].text;
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
+    }
+    // 2순위: Google TTS 구두점 가중치 타이밍
+    if (googleTtsGroups && googleTtsGroups.length > 0) {
+      if (t < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
+      const g = googleTtsGroups.find(grp => t >= grp.startTime && t < grp.endTime);
+      return g ? g.text : googleTtsGroups[googleTtsGroups.length - 1].text;
+    }
+    // 3순위: AI 의미 단위 (meaningChunks)
+    if (meaningChunks && meaningChunks.length > 0) {
+      if (t < meaningChunks[0].startTime) return meaningChunks[0].text;
+      const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => t >= chunk.startTime && t < chunk.endTime);
+      return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
     }
     // Fallback: 나레이션을 maxChars 단위로 쪼개서 시간 균등 분배
     const dur = durationRef.current;
@@ -218,7 +229,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (cur.trim()) textChunks.push(cur.trim());
     if (textChunks.length === 0) return narration;
     return textChunks[Math.min(Math.floor(t / (dur / textChunks.length)), textChunks.length - 1)] || narration;
-  }, [wordGroups, narration, subConfig.maxCharsPerChunk]);
+  }, [wordGroups, googleTtsGroups, meaningChunks, narration, subConfig.maxCharsPerChunk]);
 
   // 재생 중이거나 currentSubTime > 0 (일시정지/자연종료 후 잠시)면 자막 텍스트 표시
   const displaySubtitleText = (isPlaying || currentSubTime > 0) ? getSubtitleText(currentSubTime) : narration;
@@ -237,6 +248,57 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     };
     img.src = `data:image/jpeg;base64,${scene.imageData}`;
   }, [scene?.imageData]); // eslint-disable-line
+
+  // ── 씬 변경 시 Google TTS 그룹 초기화 ──
+  useEffect(() => { setGoogleTtsGroups(null); }, [selectedIdx]);
+
+  // ── Google TTS용: 구두점 가중치 기반 비례 자막 타이밍 ──
+  function createProportionalSubtitles(
+    text: string,
+    duration: number,
+    maxChars: number
+  ): { text: string; startTime: number; endTime: number }[] {
+    if (!text || duration <= 0) return [];
+    // 문장/절 단위로 청크 분리
+    const chunks: string[] = [];
+    let cur = '';
+    for (let i = 0; i < text.length; i++) {
+      cur += text[i];
+      const isSentenceEnd = '.!?。！？'.includes(text[i]);
+      const isClauseEnd = ',，、'.includes(text[i]);
+      if ((isSentenceEnd && cur.length >= 4) || (isClauseEnd && cur.length >= maxChars * 0.6) || cur.length >= maxChars) {
+        chunks.push(cur.trim());
+        cur = '';
+      }
+    }
+    if (cur.trim()) chunks.push(cur.trim());
+    if (chunks.length === 0) return [];
+
+    // 구두점 pause 가중치 (현실적인 한국어 TTS 포즈 기준)
+    // 문장 끝 +2 ≈ +0.27s, 쉼표 +1 ≈ +0.13s (기존 6/3보다 낮춰서 자막 지연 방지)
+    const weights = chunks.map(c => {
+      let w = c.length;
+      w += (c.match(/[.!?。！？]/g) || []).length * 2;
+      w += (c.match(/[,，、]/g) || []).length * 1;
+      return Math.max(w, 2);
+    });
+    const total = weights.reduce((a, b) => a + b, 0);
+
+    // 0.1s 앞당겨 표시: TTS가 음절을 말하기 직전에 자막이 나오도록
+    const EARLY = 0.1;
+    const result: { text: string; startTime: number; endTime: number }[] = [];
+    let t = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      const d = (weights[i] / total) * duration;
+      result.push({
+        text: chunks[i],
+        startTime: Math.max(0, t - EARLY),
+        endTime: t + d - EARLY,
+      });
+      t += d;
+    }
+    return result;
+  }
 
   // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) — 끝 0.6s 패딩 추가 ──
   async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
@@ -322,18 +384,21 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
       isManualPauseRef.current = false;
 
-      // 마지막 자막 word 끝 시간에서 멈춰 다음 씬 내용 블리드 방지
+      // ElevenLabs words 기준으로만 클리핑 (정확한 타임스탬프 보유)
+      // Google TTS(meaningChunks만 있을 때)는 클리핑 금지 — 오디오 잘림 방지
       const words = scene?.subtitleData?.words;
       const lastWordEnd = words && words.length > 0 ? words[words.length - 1].end : null;
-      const chunks = scene?.subtitleData?.meaningChunks;
-      const lastChunkEnd = chunks && chunks.length > 0 && isFinite(chunks[chunks.length - 1].endTime)
-        ? chunks[chunks.length - 1].endTime : null;
-      const subtitleEnd = lastChunkEnd ?? lastWordEnd;
-      const effectiveDuration = subtitleEnd
-        ? Math.min(contentDuration, subtitleEnd + 0.3)
+      const effectiveDuration = lastWordEnd
+        ? Math.min(contentDuration, lastWordEnd + 0.5)
         : contentDuration;
 
       durationRef.current = effectiveDuration;
+
+      // Google TTS (wordGroups/meaningChunks 없을 때) → 구두점 가중치 타이밍 생성
+      if ((!wordGroups || wordGroups.length === 0) && (!scene?.subtitleData?.meaningChunks?.length)) {
+        setGoogleTtsGroups(createProportionalSubtitles(narration, effectiveDuration, subConfig.maxCharsPerChunk ?? 15));
+      }
+
       const offset = Math.min(pausedAtRef.current, Math.max(0, effectiveDuration - 0.05));
 
       const source = ctx.createBufferSource();
@@ -356,7 +421,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         }
         setIsPlaying(false);
       };
-      const playDuration = effectiveDuration - offset;
+      // +0.5s 버퍼: PCM 마지막 음절 잘림 방지 (패딩 1.5s 범위 내)
+      const playDuration = effectiveDuration - offset + 0.5;
       source.start(0, offset, playDuration > 0 ? playDuration : undefined);
       sourceRef.current = source;
       // startTimeRef 조정: elapsed = ctx.currentTime - startTimeRef = offset (시작 직후)
@@ -758,24 +824,31 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       {/* ─── 오른쪽: 씬 목록 ─── */}
       <div className="flex-1 overflow-y-auto py-2 px-2">
         {scenes.map((s, i) => (
-          <button key={i} onClick={() => setSelectedIdx(i)}
-            className={`w-full flex items-start gap-3 px-3 py-3 text-left transition-all rounded-xl mb-0.5 ${
-              i === selectedIdx
-                ? 'border border-red-500/50 bg-red-900/15 shadow-[0_0_14px_rgba(239,68,68,0.3)]'
-                : 'hover:bg-slate-800/60 border border-transparent'
-            }`}
-          >
-            <div className="w-32 h-[72px] rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">
-              {s.imageData
-                ? <img src={`data:image/jpeg;base64,${s.imageData}`} className="w-full h-full object-cover" alt="" />
-                : <div className="w-4 h-4 border border-slate-600 border-t-transparent animate-spin rounded-full" />
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[10px] text-slate-500 font-bold mb-0.5">씬 {i + 1}</p>
-              <p className="text-xs text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
-            </div>
-          </button>
+          <div key={i} className={`flex items-start gap-3 px-3 py-3 rounded-xl mb-0.5 transition-all ${
+            i === selectedIdx
+              ? 'border border-red-500/50 bg-red-900/15 shadow-[0_0_14px_rgba(239,68,68,0.3)]'
+              : 'hover:bg-slate-800/60 border border-transparent'
+          }`}>
+            <button onClick={() => setSelectedIdx(i)} className="flex items-start gap-3 flex-1 text-left min-w-0">
+              <div className="w-32 h-[72px] rounded-lg overflow-hidden shrink-0 bg-slate-800 flex items-center justify-center">
+                {s.imageData
+                  ? <img src={`data:image/jpeg;base64,${s.imageData}`} className="w-full h-full object-cover" alt="" />
+                  : <div className="w-4 h-4 border border-slate-600 border-t-transparent animate-spin rounded-full" />
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-slate-500 font-bold mb-0.5">씬 {i + 1}</p>
+                <p className="text-xs text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
+              </div>
+            </button>
+            {s.imageData && onSelectThumbnail && (
+              <button
+                onClick={() => onSelectThumbnail(s.imageData!)}
+                className="shrink-0 p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
+                title="썸네일로 선택"
+              >⭐</button>
+            )}
+          </div>
         ))}
       </div>
     </div>

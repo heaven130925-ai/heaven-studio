@@ -63,10 +63,12 @@ function createThumbnail(base64Image: string, maxWidth: number = 200): Promise<s
  */
 function getCurrentSettings() {
   const elevenLabsModel = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL) || CONFIG.DEFAULT_ELEVENLABS_MODEL;
+  const aspectRatio = (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9';
 
   return {
     imageModel: getSelectedImageModel(),
-    elevenLabsModel
+    elevenLabsModel,
+    aspectRatio,
   };
 }
 
