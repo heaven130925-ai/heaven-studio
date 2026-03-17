@@ -775,7 +775,7 @@ const App: React.FC = () => {
 
       {/* 메인 뷰 */}
       {viewMode === 'main' && (
-      <main className="py-2">
+      <main className="py-2 overflow-x-hidden">
         {/* 기존 스토리보드로 돌아가기 배너 */}
         {generatedData.length > 0 && !showStoryboard && (
           <div className="max-w-7xl mx-auto px-4 mb-6">
