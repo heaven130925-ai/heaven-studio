@@ -250,10 +250,23 @@ const App: React.FC = () => {
       let targetTopic = topic;
 
       if (audioOnly && preexistingNarrations.length > 0) {
-        // ── 기존 씬 오디오 재생성 (AI 대본 생성 없이) ──
+        // ── 케이스 1: 기존 씬 오디오 재생성 (AI 대본 생성 없이) ──
         setProgressMessage(`기존 ${preexistingNarrations.length}개 씬 오디오 재생성 중...`);
         initialAssets = preexistingNarrations.map(a => ({
           ...a, audioData: null, subtitleData: null, audioDuration: null
+        }));
+        assetsRef.current = initialAssets;
+      } else if (audioOnly && sourceText) {
+        // ── 케이스 2: 수동 대본 → AI 없이 문단별 씬 분리 후 오디오 생성 ──
+        setProgressMessage('대본 파싱 중...');
+        const lines = sourceText.split(/\n{2,}|\n(?=\d+[.)]\s)/).map(l => l.trim()).filter(l => l.length > 5);
+        initialAssets = (lines.length > 0 ? lines : [sourceText]).map((line, i) => ({
+          sceneNumber: i + 1,
+          narration: line.replace(/^\d+[.)]\s*/, '').trim(),
+          visualPrompt: '',
+          imageData: null, audioData: null, audioDuration: null,
+          subtitleData: null, videoData: null, videoDuration: null,
+          status: 'pending' as const
         }));
         assetsRef.current = initialAssets;
       } else {
