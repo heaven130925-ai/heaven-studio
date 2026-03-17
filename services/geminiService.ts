@@ -683,6 +683,10 @@ export const generateImageForScene = async (
   const isImagen3 = selectedModel.startsWith('imagen-3');
   const isImagen4 = selectedModel.startsWith('imagen-4');
   const isImagenModel = isImagen3 || isImagen4;
+  // Nano Banana 모델 (gemini-3-pro-image-preview, gemini-3.1-flash-image-preview)은 Gemini 경로 사용
+  const isNanoBanana = selectedModel.startsWith('gemini-3');
+  // 실제 Gemini 이미지 모델 ID 결정 (Nano Banana 선택 시 해당 모델 직접 사용)
+  const geminiImageModel = isNanoBanana ? selectedModel : 'gemini-2.5-flash-image';
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
@@ -834,7 +838,7 @@ ${styleDesc.instruction}`
         });
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-image',
+          model: geminiImageModel,
           contents: { parts },
           config: {
             responseModalities: [Modality.IMAGE],

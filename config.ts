@@ -8,6 +8,22 @@
 // 이미지 생성 모델 목록
 export const IMAGE_MODELS = [
   {
+    id: 'gemini-3-pro-image-preview',
+    name: 'Nano Banana Pro 🍌👑 NEW',
+    provider: 'Google',
+    pricePerImage: 0.06,
+    description: '최고급 Nano Banana Pro — 최고품질, 1K 해상도, 유료 API키 필요',
+    speed: '보통'
+  },
+  {
+    id: 'gemini-3.1-flash-image-preview',
+    name: 'Nano Banana 2 🍌 NEW',
+    provider: 'Google',
+    pricePerImage: 0.0315,
+    description: '최신 Nano Banana 2 — 한글 텍스트 깨끗, Flash 속도, 유료 API키 필요',
+    speed: '빠름'
+  },
+  {
     id: 'imagen-4.0-fast-generate-001',
     name: 'Imagen 4 Fast ⚡',
     provider: 'Google',
@@ -123,6 +139,8 @@ export const PRICING = {
   USD_TO_KRW: 1450,
 
   IMAGE: {
+    'gemini-3-pro-image-preview': 0.06,
+    'gemini-3.1-flash-image-preview': 0.0315,
     'imagen-4.0-fast-generate-001': 0.02,
     'imagen-4.0-generate-001': 0.04,
     'imagen-4.0-ultra-generate-001': 0.06,
