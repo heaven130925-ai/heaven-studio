@@ -461,6 +461,17 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                       <span className={`text-sm font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-white/25'}`}>
                         {manualScript.length.toLocaleString()}자
                       </span>
+                      {/* 롱폼(16:9)에서만 예상 시간 표시 */}
+                      {aspectRatio === '16:9' && manualScript.trim().length > 0 && (() => {
+                        const totalSec = Math.round(manualScript.trim().length / 5.5); // 한국어 약 330자/분 → 5.5자/초
+                        const m = Math.floor(totalSec / 60);
+                        const s = totalSec % 60;
+                        return (
+                          <span className="text-sm text-emerald-400/80 font-mono">
+                            ⏱ 약 {m > 0 ? `${m}분 ` : ''}{s}초
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

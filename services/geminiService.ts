@@ -43,6 +43,24 @@ const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
 };
 
 /**
+ * 나레이션에서 섹션 마커(파트1:, 씬1:, 나레이션: 등)를 제거
+ */
+const cleanNarration = (text: string): string => {
+  return text
+    // 파트N: / 파트 N: / [파트N] / [파트 N]
+    .replace(/^[\[【]?\s*파트\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
+    // 씬N: / 씬 N: / [씬N]
+    .replace(/^[\[【]?\s*씬\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
+    // 나레이션N: / 나레이션:
+    .replace(/^나레이션\s*\d*\s*[:：]\s*/gim, '')
+    // Part N: / Section N: (영문)
+    .replace(/^(Part|Section|Scene|Chapter)\s*\d+\s*[:：]?\s*/gim, '')
+    // [숫자] 또는 숫자. 로 시작하는 섹션 번호
+    .replace(/^\[\d+\]\s*/gim, '')
+    .trim();
+};
+
+/**
  * 프롬프트에서 민감한 키워드를 안전한 대체어로 변환
  */
 const sanitizePrompt = (prompt: string, attemptIndex: number = 0): string => {
@@ -355,7 +373,7 @@ const generateScriptSingle = async (
 
     return scenes.map((scene: any, idx: number) => ({
       sceneNumber: scene.sceneNumber || idx + 1,
-      narration: scene.narration || "",
+      narration: cleanNarration(scene.narration || ""),
       visualPrompt: scene.image_prompt_english || "",
       analysis: scene.analysis || {}
     }));
@@ -759,9 +777,12 @@ export const generateImageForScene = async (
           : textMode === 'english'
           ? `⚠️ RULE: Only Latin/English characters allowed. No Korean (한글), no Chinese, no Japanese.`
           : '';
-        parts.push({
-          text: `⛔ ABSOLUTE RULE — SINGLE FRAME: Generate exactly ONE continuous unified image. Panels, comic strips, split screens, grids, storyboard layouts, multiple cuts, and any dividing borders/lines are STRICTLY FORBIDDEN. ONE scene only. Panels = CRITICAL FAILURE.\n${textModeRule}`
-        });
+        const absoluteRules = [
+          `⛔ RULE #1 — ONE SINGLE IMAGE ONLY: Generate exactly ONE continuous, unified image filling the entire canvas.`,
+          `FORBIDDEN FOREVER: panels, comic strips, split screens, grids, multiple cuts, storyboard layouts, borders/lines dividing the image, before/after comparisons, side-by-side images, triptychs, diptychs, collages. Any form of image division = INSTANT FAILURE.`,
+          textModeRule,
+        ].filter(Boolean).join('\n');
+        parts.push({ text: absoluteRules });
 
         if (hasCharacterRef) {
           // ─── 캐릭터 일관성 모드 ───
@@ -793,16 +814,20 @@ export const generateImageForScene = async (
           });
 
           parts.push({
-            text: `Generate an illustration of the person shown in the reference photo above, placed in a new scene.
+            text: `You MUST draw the EXACT SAME PERSON shown in the reference photo(s) above. Character identity must be 100% consistent.
 
-MANDATORY — copy these features from the reference photo exactly:
-• Face: same face shape, same eyes (color + shape), same nose, same lips, same skin tone
-• Hair: same color, same length, same style — do not change at all
-• Overall look: this person must be instantly recognizable as the same individual${descBlock}
+COPY THESE FEATURES EXACTLY — zero deviation allowed:
+• Face shape: reproduce identically (jaw, cheekbones, forehead)
+• Eyes: same shape, same color, same distance apart
+• Nose: same shape and size
+• Lips: same shape and fullness
+• Skin tone: identical
+• Hair: SAME COLOR, SAME LENGTH, SAME STYLE — absolutely no changes${descBlock}
 
-Scene to illustrate (visual description only — do NOT render any of this as text in the image): ${sceneAction}${styleHint}
+This person must be INSTANTLY RECOGNIZABLE as the same individual from the reference. Do NOT invent a new face. Do NOT alter any physical features.
 
-DO NOT invent a new face. DO NOT change hair color or style. Reproduce the reference person faithfully.`
+New scene to place them in (DO NOT render any of this as text/letters in the image):
+${sceneAction}${styleHint}`
           });
 
         } else {

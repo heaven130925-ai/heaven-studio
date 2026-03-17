@@ -386,6 +386,8 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         contentEditable
         suppressContentEditableWarning
         onInput={() => onChange(parseSegments())}
+        onDragStart={e => e.preventDefault()}
+        onDrop={e => e.preventDefault()}
         data-placeholder={placeholder}
         className="w-full min-h-[38px] bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 text-center empty:before:content-[attr(data-placeholder)] empty:before:text-slate-500"
         style={{
@@ -956,12 +958,15 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                         left: `${mainPos.x}%`, top: `${mainPos.y}%`,
                         transform: 'translate(-50%, 0)',
                         lineHeight: 1.2, whiteSpace: 'nowrap',
+                        userSelect: 'none', WebkitUserSelect: 'none',
                       }}
                       onMouseDown={handleMouseDown('main')}
+                      onDragStart={e => e.preventDefault()}
+                      draggable={false}
                       title="드래그하여 위치 조정"
                     >
                       {renderSegmentsHTML(mainSegments, mainColor, mainSizePct)}
-                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] text-yellow-300 bg-black/60 px-1 rounded opacity-60 whitespace-nowrap">↕ 드래그</span>
+                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] text-yellow-300 bg-black/60 px-1 rounded opacity-60 whitespace-nowrap pointer-events-none">↕ 드래그</span>
                     </div>
                   )}
 
@@ -973,8 +978,11 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                         left: `${subPos.x}%`, top: `${subPos.y}%`,
                         transform: 'translate(-50%, 0)',
                         lineHeight: 1.2, whiteSpace: 'nowrap',
+                        userSelect: 'none', WebkitUserSelect: 'none',
                       }}
                       onMouseDown={handleMouseDown('sub')}
+                      onDragStart={e => e.preventDefault()}
+                      draggable={false}
                       title="드래그하여 위치 조정"
                     >
                       {renderSegmentsHTML(subSegments, subColor, subSizePct)}

@@ -112,8 +112,8 @@ export const getFinalVisualPrompt = (scene: any, hasCharacterRef: boolean = fals
 
   // ── 절대 금지 규칙 (프롬프트 맨 앞 + 맨 뒤 이중 적용) ──────────────
   // 단일 프레임 강제 (항상)
-  const singleFrameTop = `⛔ ABSOLUTE RULE #1 — SINGLE FRAME: Generate exactly ONE continuous image. Panels, comic strips, split screens, grids, multiple cuts, storyboard layouts, and any dividing borders/lines are STRICTLY FORBIDDEN. The ENTIRE canvas must be a single unified scene. Generating multiple panels = CRITICAL FAILURE.`;
-  const singleFrameBottom = `⛔ FINAL CHECK — SINGLE FRAME ONLY: ONE image, ONE scene, NO panels, NO splits, NO borders.`;
+  const singleFrameTop = `⛔ ABSOLUTE RULE #1 — ONE SINGLE IMAGE: Generate exactly ONE continuous, unified image. The entire canvas = one scene. FORBIDDEN: panels, comic strips, split-screens, grids, multiple cuts, storyboard layouts, before/after comparisons, triptychs, diptychs, collages, any borders or lines dividing the image. ONE scene = ONLY valid output. Multiple frames = INSTANT FAILURE.`;
+  const singleFrameBottom = `⛔ FINAL CHECK — SINGLE FRAME: ONE image, ONE scene, NO panels, NO splits, NO borders, NO divided canvas of any kind.`;
 
   // 텍스트 규칙
   let textTop = '';
