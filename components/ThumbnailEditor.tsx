@@ -18,6 +18,7 @@ type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type CharType = 'person' | 'animal' | 'object';
 type BorderStyle = 'none' | 'solid' | 'neon' | 'sketch';
 type TargetAudience = 'young' | 'adult' | 'senior' | 'global';
+type TextTheme = 'war' | 'cute' | 'news' | 'default';
 
 interface Strategy {
   summary: string;
@@ -40,12 +41,53 @@ const BORDER_OPTIONS: { id: BorderStyle; label: string; icon: string }[] = [
   { id: 'sketch', label: '손그림/낙서', icon: '✏️' },
 ];
 
-/** 캔버스로 배경이미지 + 한글 텍스트 합성 */
+/** 주제 기반 텍스트 테마 감지 */
+function detectTextTheme(topic: string, charType: CharType, charEnabled: boolean): TextTheme {
+  const t = topic;
+  // 전쟁/범죄/충격/사건 계열
+  if (/전쟁|군사|폭탄|미사일|전투|탱크|무기|테러|공격|침공|핵|폭격|살인|범죄|사건|사고|재난|화재|충격|사망|위기|위험|비밀|폭로|스캔들|전략|전술|분쟁|학살|해킹|납치|실종|공습|폭발/.test(t)) return 'war';
+  // 귀여운/동물/어린이 계열
+  if ((charEnabled && charType === 'animal') || /귀여|강아지|고양이|아기|키즈|어린이|동화|캐릭터|펫|반려|유아|토끼|햄스터|판다|곰돌|뽀로로|애니|만화|포켓몬/.test(t)) return 'cute';
+  // 뉴스/정보/분석 계열
+  if (/뉴스|경제|정치|사회|시사|분석|통계|리포트|이슈|주식|부동산|금융|대선|선거|법원|재판|회의|외교|기자|앵커/.test(t)) return 'news';
+  return 'default';
+}
+
+/** 멀티라인 텍스트 그리기 (최대 너비 초과 시 자동 줄바꿈) */
+function drawMultiLine(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  _centerX: number,
+  startY: number,
+  maxWidth: number,
+  lineHeight: number,
+  drawFn: (line: string, y: number) => void
+): number {
+  const words = text.split('');
+  let line = '';
+  let y = startY;
+  // 글자 단위로 줄바꿈 (한국어)
+  for (const char of words) {
+    const test = line + char;
+    if (ctx.measureText(test).width > maxWidth && line.length > 0) {
+      drawFn(line, y);
+      line = char;
+      y += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+  if (line) drawFn(line, y);
+  return y + lineHeight;
+}
+
+/** 캔버스로 배경이미지 + 한글 텍스트 합성 (테마별 스타일 적용) */
 async function applyTextOverlay(
   bgBase64: string,
   mainText: string,
   subText: string,
-  ratio: '16:9' | '9:16'
+  ratio: '16:9' | '9:16',
+  theme: TextTheme
 ): Promise<string> {
   return new Promise((resolve) => {
     const W = ratio === '9:16' ? 1080 : 1280;
@@ -57,40 +99,149 @@ async function applyTextOverlay(
 
     const img = new Image();
     img.onload = () => {
-      // 배경 그리기
       ctx.drawImage(img, 0, 0, W, H);
 
-      if (mainText || subText) {
-        // 메인 텍스트 크기 / 위치
-        const mainSize = Math.round(W * 0.095);
-        const subSize  = Math.round(W * 0.055);
-        const topY     = Math.round(H * 0.04);
+      if (!mainText && !subText) {
+        resolve(canvas.toDataURL('image/jpeg', 0.95));
+        return;
+      }
 
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'top';
-        ctx.lineJoin     = 'round';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.lineJoin     = 'round';
 
-        const drawText = (text: string, y: number, size: number, fillColor: string, strokeColor: string) => {
-          if (!text) return;
-          ctx.font      = `900 ${size}px "Noto Sans KR","맑은 고딕","Apple SD Gothic Neo","Arial Black",sans-serif`;
-          ctx.lineWidth = size * 0.09;
-          ctx.strokeStyle = strokeColor;
+      const mainSize  = Math.round(W * 0.092);
+      const subSize   = Math.round(W * 0.052);
+      const topY      = Math.round(H * 0.04);
+      const maxW      = W * 0.88;
+
+      if (theme === 'war') {
+        // ── 전쟁/충격: Impact + 빨간 박스 배경 ──────────────────
+        const mainFont = `900 ${mainSize}px Impact,"Arial Black","Noto Sans KR",sans-serif`;
+        const subFont  = `700 ${subSize}px Impact,"Arial Black","Noto Sans KR",sans-serif`;
+
+        const drawWarLine = (text: string, y: number, size: number, isMain: boolean) => {
+          const font = isMain ? mainFont : subFont;
+          ctx.font = font;
+          const tw = ctx.measureText(text).width;
+          const pad = size * 0.22;
+          const bh  = size * 1.38;
+          // 배경 박스
+          ctx.fillStyle = isMain ? '#CC0000' : 'rgba(0,0,0,0.78)';
+          ctx.fillRect(W / 2 - tw / 2 - pad, y - size * 0.12, tw + pad * 2, bh);
+          // 텍스트
+          ctx.lineWidth   = size * 0.05;
+          ctx.strokeStyle = '#000000';
           ctx.strokeText(text, W / 2, y);
-          ctx.fillStyle = fillColor;
+          ctx.fillStyle = '#FFFFFF';
           ctx.fillText(text, W / 2, y);
         };
 
-        // 메인: 흰색 + 검정 스트로크
-        drawText(mainText, topY, mainSize, '#FFFFFF', '#000000');
-        // 서브: 노란색 + 검정 스트로크
-        if (subText) drawText(subText, topY + mainSize * 1.25, subSize, '#FFE600', '#000000');
+        ctx.font = mainFont;
+        let nextY = topY;
+        if (mainText) {
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawWarLine(line, y, mainSize, true));
+        }
+        if (subText) {
+          ctx.font = subFont;
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => {
+            drawWarLine(line, y, subSize, false);
+            // 서브는 노란 텍스트
+            ctx.font = subFont;
+            ctx.fillStyle = '#FFE600';
+            ctx.fillText(line, W / 2, y);
+          });
+        }
+
+      } else if (theme === 'cute') {
+        // ── 귀여운/동물: 핑크 글로우 + 흰 텍스트 ───────────────
+        const mainFont = `900 ${mainSize}px "Arial Rounded MT Bold","Noto Sans KR","맑은 고딕",sans-serif`;
+        const subFont  = `700 ${subSize}px "Arial Rounded MT Bold","Noto Sans KR","맑은 고딕",sans-serif`;
+
+        const drawCuteLine = (text: string, y: number, size: number, isMain: boolean) => {
+          const font = isMain ? mainFont : subFont;
+          ctx.font = font;
+          // 핑크 글로우 외곽
+          ctx.shadowColor   = isMain ? '#FF69B4' : '#FF1493';
+          ctx.shadowBlur    = size * 0.5;
+          ctx.lineWidth     = size * 0.11;
+          ctx.strokeStyle   = isMain ? '#FF69B4' : '#FF1493';
+          ctx.strokeText(text, W / 2, y);
+          ctx.shadowBlur = 0;
+          // 흰 텍스트
+          ctx.lineWidth   = size * 0.04;
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.strokeText(text, W / 2, y);
+          ctx.fillStyle = isMain ? '#FFFFFF' : '#FFE600';
+          ctx.fillText(text, W / 2, y);
+        };
+
+        ctx.font = mainFont;
+        let nextY = topY;
+        if (mainText) {
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawCuteLine(line, y, mainSize, true));
+        }
+        if (subText) {
+          ctx.font = subFont;
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawCuteLine(line, y, subSize, false));
+        }
+        ctx.shadowBlur = 0;
+
+      } else if (theme === 'news') {
+        // ── 뉴스/정보: 깔끔 + 파란 서브 ─────────────────────────
+        const mainFont = `700 ${mainSize}px "Noto Sans KR","맑은 고딕","Arial",sans-serif`;
+        const subFont  = `400 ${subSize}px "Noto Sans KR","맑은 고딕","Arial",sans-serif`;
+
+        const drawNewsLine = (text: string, y: number, size: number, isMain: boolean) => {
+          const font = isMain ? mainFont : subFont;
+          ctx.font = font;
+          ctx.lineWidth   = size * 0.07;
+          ctx.strokeStyle = '#000022';
+          ctx.strokeText(text, W / 2, y);
+          ctx.fillStyle = isMain ? '#FFFFFF' : '#87CEEB';
+          ctx.fillText(text, W / 2, y);
+        };
+
+        ctx.font = mainFont;
+        let nextY = topY;
+        if (mainText) {
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawNewsLine(line, y, mainSize, true));
+        }
+        if (subText) {
+          ctx.font = subFont;
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawNewsLine(line, y, subSize, false));
+        }
+
+      } else {
+        // ── 기본: 흰색 메인 + 노란 서브 + 검정 스트로크 ─────────
+        const mainFont = `900 ${mainSize}px "Noto Sans KR","맑은 고딕","Arial Black",sans-serif`;
+        const subFont  = `900 ${subSize}px "Noto Sans KR","맑은 고딕","Arial Black",sans-serif`;
+
+        const drawDefaultLine = (text: string, y: number, size: number, isMain: boolean) => {
+          const font = isMain ? mainFont : subFont;
+          ctx.font = font;
+          ctx.lineWidth   = size * 0.09;
+          ctx.strokeStyle = '#000000';
+          ctx.strokeText(text, W / 2, y);
+          ctx.fillStyle = isMain ? '#FFFFFF' : '#FFE600';
+          ctx.fillText(text, W / 2, y);
+        };
+
+        ctx.font = mainFont;
+        let nextY = topY;
+        if (mainText) {
+          nextY = drawMultiLine(ctx, mainText, W / 2, topY, maxW, mainSize * 1.4, (line, y) => drawDefaultLine(line, y, mainSize, true));
+        }
+        if (subText) {
+          ctx.font = subFont;
+          drawMultiLine(ctx, subText, W / 2, nextY + subSize * 0.3, maxW, subSize * 1.35, (line, y) => drawDefaultLine(line, y, subSize, false));
+        }
       }
 
       resolve(canvas.toDataURL('image/jpeg', 0.95));
     };
     img.onerror = () => {
-      // 이미지 로드 실패 시 base64 그대로 반환
-      resolve(`data:image/jpeg;base64,${bgBase64}`);
+      resolve(bgBase64.startsWith('data:') ? bgBase64 : `data:image/jpeg;base64,${bgBase64}`);
     };
     img.src = bgBase64.startsWith('data:') ? bgBase64 : `data:image/jpeg;base64,${bgBase64}`;
   });
@@ -205,8 +356,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         editRequest: editReq,
       });
       if (bgBase64) {
-        // 캔버스로 한글 텍스트 합성
-        const composited = await applyTextOverlay(bgBase64, mainText, subText, thumbnailRatio);
+        const theme = detectTextTheme(topic, charType, charEnabled);
+        const composited = await applyTextOverlay(bgBase64, mainText, subText, thumbnailRatio, theme);
         setGeneratedImage(composited);
         onImageGenerated?.(composited);
       }
@@ -263,7 +414,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   // ── 렌더 ─────────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="max-w-2xl mx-auto w-full p-6 flex flex-col justify-center min-h-full">
+      {/* 위에서 1/3 지점 기준 배치: justify-start + 상단 패딩 */}
+      <div className="max-w-2xl mx-auto w-full px-6 pb-6 pt-[13%]">
         <div className="space-y-5">
 
         {/* ── STEP 1: 주제 입력 ── */}
@@ -549,7 +701,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         {step === 6 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <BackButton toStep={5} />
+              {/* strategy 없으면(별표 경로) step1로, 있으면 step5로 */}
+              <BackButton toStep={strategy ? 5 : 1} />
               <p className="text-sm font-bold text-white">썸네일 생성 완료</p>
               <div className="w-12" />
             </div>
