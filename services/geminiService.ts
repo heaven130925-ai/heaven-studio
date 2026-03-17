@@ -1443,7 +1443,9 @@ export const generateThumbnailV2 = async (params: {
   const channelDesc = params.showChannelName && params.channelName
     ? `채널명 "${params.channelName}"을 썸네일 하단 모서리에 작게 표시.`
     : '';
-  const editDesc = params.editRequest ? `\n수정 요청: ${params.editRequest}` : '';
+  const editDesc = params.editRequest
+    ? `\n수정 요청 (아래 사항만 변경하고 나머지 구도·색상·스타일·분위기는 완전히 동일하게 유지할 것): ${params.editRequest}`
+    : '';
   const ratio = params.thumbnailRatio || '16:9';
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
