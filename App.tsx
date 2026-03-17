@@ -17,7 +17,7 @@ import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
-import { downloadAudioZip } from './utils/csvHelper';
+import { downloadMergedAudio } from './utils/csvHelper';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -517,8 +517,8 @@ const App: React.FC = () => {
       // 오디오만 생성: ZIP 다운로드 후 종료 (스토리보드 미표시)
       if (audioOnly) {
         audioOnlyRef.current = false;
-        setProgressMessage('오디오 ZIP 다운로드 중...');
-        await downloadAudioZip(assetsRef.current);
+        setProgressMessage('오디오 통합 WAV 생성 중...');
+        await downloadMergedAudio(assetsRef.current);
         setProgressMessage('오디오 다운로드 완료!');
         assetsRef.current = [];
         setGeneratedData([]);
