@@ -200,22 +200,22 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // 2순위: AI 의미 단위 (wordGroups 없을 때만)
   // 3순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
   const getSubtitleText = useCallback((t: number): string => {
+    const DELAY = 0.4; // 자막 지연 (초) — 양수일수록 늦게 표시
+    const tAdj = Math.max(0, t - DELAY);
     // 1순위: ElevenLabs words 기반 (가장 정확)
     if (wordGroups && wordGroups.length > 0) {
-      if (t < wordGroups[0].startTime) return wordGroups[0].text;
-      const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
+      if (tAdj < wordGroups[0].startTime) return wordGroups[0].text;
+      const g = wordGroups.find(grp => tAdj >= grp.startTime && tAdj < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
     // 2순위: Google TTS 구두점 가중치 타이밍
     if (googleTtsGroups && googleTtsGroups.length > 0) {
-      if (t < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
-      const g = googleTtsGroups.find(grp => t >= grp.startTime && t < grp.endTime);
+      if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
+      const g = googleTtsGroups.find(grp => tAdj >= grp.startTime && tAdj < grp.endTime);
       return g ? g.text : googleTtsGroups[googleTtsGroups.length - 1].text;
     }
     // 3순위: AI 의미 단위 (meaningChunks)
     if (meaningChunks && meaningChunks.length > 0) {
-      const EARLY = -0.2;
-      const tAdj = t + EARLY;
       if (tAdj < meaningChunks[0].startTime) return meaningChunks[0].text;
       const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => tAdj >= chunk.startTime && tAdj < chunk.endTime);
       return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
@@ -304,7 +304,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     });
     const total = weights.reduce((a, b) => a + b, 0);
 
-    const EARLY = -0.2;
+    const EARLY = -0.4;
     const result: { text: string; startTime: number; endTime: number }[] = [];
     let t = 0;
     for (let i = 0; i < chunks.length; i++) {

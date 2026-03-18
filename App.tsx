@@ -298,7 +298,7 @@ const App: React.FC = () => {
 
         const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
         console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, scenes=${scriptScenes.length}`);
-        if (isAutoTopic && !imageOnly) {
+        if (isAutoTopic && !imageOnly && !audioOnly) {
           const scriptText = scriptScenes.map(s => s.narration).join('\n');
           setInputManualScript(scriptText);
           setInputActiveTab('manual');
