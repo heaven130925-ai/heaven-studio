@@ -47,6 +47,8 @@ const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
  */
 const cleanNarration = (text: string): string => {
   return text
+    // 청크 지시문 전체 제거: [파트 3/6 - 전체 대본의 일부입니다. 이 파트의 내용만 시각화하세요.]
+    .replace(/\[파트\s*\d+\/\d+\s*-[^\]]*\]\s*/gi, '')
     // 파트N: / 파트 N: / [파트N] / [파트 N]
     .replace(/^[\[【]?\s*파트\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
     // 씬N: / 씬 N: / [씬N]
@@ -411,8 +413,9 @@ const generateScriptSingle = async (
       console.warn(`${chunkLabel}[Warning] 씬이 ${scenes.length}개만 생성됨. 대본이 제대로 분할되지 않았을 수 있음.`);
     }
 
-    return scenes.map((scene: any, idx: number) => ({
-      sceneNumber: scene.sceneNumber || idx + 1,
+    const sorted = [...scenes].sort((a: any, b: any) => (a.sceneNumber || 0) - (b.sceneNumber || 0));
+    return sorted.map((scene: any, idx: number) => ({
+      sceneNumber: idx + 1,
       narration: cleanNarration(scene.narration || ""),
       visualPrompt: scene.image_prompt_english || "",
       analysis: scene.analysis || {}
