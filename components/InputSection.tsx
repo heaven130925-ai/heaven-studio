@@ -471,7 +471,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                       </span>
                       {/* 롱폼(16:9)에서만 예상 시간 표시 */}
                       {aspectRatio === '16:9' && manualScript.trim().length > 0 && (() => {
-                        const totalSec = Math.round(manualScript.trim().length / 5.5); // 한국어 약 330자/분 → 5.5자/초
+                        const totalSec = Math.round(manualScript.trim().length / 7.2); // 한국어 나레이션 약 432자/분 → 7.2자/초
                         const m = Math.floor(totalSec / 60);
                         const s = totalSec % 60;
                         return (
