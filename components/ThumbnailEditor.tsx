@@ -584,15 +584,26 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
       const isNanoBanana = selectedModel.startsWith('gemini-3');
 
-      if (uploadedBgImage && !editReq && isNanoBanana) {
-        // Nano Banana + 업로드 이미지: AI가 텍스트를 이미지에 직접 굽기
-        const { editImageWithGemini } = await import('../services/geminiService');
-        const raw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
-        const textPrompt = `이 이미지를 유튜브 썸네일로 만들어줘. 메인 제목: "${mainText}"${subText ? `, 부제목: "${subText}"` : ''}. 텍스트를 굵고 눈에 띄게 이미지에 직접 넣어줘.`;
-        const edited = await editImageWithGemini(raw, textPrompt);
-        rawBg = edited ? `data:image/jpeg;base64,${edited}` : uploadedBgImage;
-      } else if (uploadedBgImage && !editReq) {
-        rawBg = uploadedBgImage;
+      if (uploadedBgImage && !editReq) {
+        if (isNanoBanana) {
+          // Nano Banana + 업로드 이미지: generateThumbnailV2에 이미지 직접 전달 → 텍스트 굽기
+          const { generateThumbnailV2 } = await import('../services/geminiService');
+          const inputRaw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
+          const b64 = await generateThumbnailV2({
+            topic, mainText, subText,
+            imagePrompt: strategy?.imagePrompt || '',
+            borderStyle, thumbnailRatio,
+            characterEnabled: charEnabled, characterType: charType,
+            characterDetails: getCharacterDetails(),
+            targetAudience: targetAudience ? getTargetLabel(targetAudience as TargetAudience) : '전연령',
+            showChannelName, channelName,
+            model: selectedModel,
+            inputImage: inputRaw,
+          });
+          rawBg = b64 ? (b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`) : uploadedBgImage;
+        } else {
+          rawBg = uploadedBgImage;
+        }
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
         const b64 = await generateThumbnailV2({

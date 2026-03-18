@@ -1558,6 +1558,7 @@ export const generateThumbnailV2 = async (params: {
   channelName: string;
   editRequest?: string;
   model?: string;
+  inputImage?: string; // base64 — 업로드된 배경 이미지 (Nano Banana에 직접 전달)
 }): Promise<string | null> => {
   const ai = getAI();
   if (!ai) return null;
@@ -1622,9 +1623,16 @@ Visual direction: ${params.imagePrompt}
 4. Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style.`;
 
   try {
+    // 업로드 이미지가 있으면 이미지+텍스트 같이 전달 (Nano Banana 이미지 편집)
+    const contents = (isNanoBanana && params.inputImage)
+      ? { parts: [
+          { inlineData: { data: params.inputImage, mimeType: 'image/jpeg' } },
+          { text: `이 이미지를 기반으로 유튜브 썸네일을 만들어줘. 이미지 구도와 분위기는 최대한 유지하면서 아래 텍스트를 크고 선명하게 추가해줘.\n\n${prompt}` }
+        ]}
+      : prompt;
     const response = await ai.models.generateContent({
       model: thumbnailModel,
-      contents: prompt,
+      contents,
       config: {
         responseModalities: [Modality.IMAGE],
         imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' },
