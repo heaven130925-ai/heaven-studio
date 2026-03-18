@@ -336,6 +336,7 @@ const App: React.FC = () => {
                 }
               } catch (e: any) {
                 console.error(`[TTS] 씬 ${i + 1} Google TTS 실패:`, e.message);
+                setProgressMessage(`⚠️ 씬 ${i + 1} Google TTS 실패: ${e?.message || e}`);
               }
               if (i < initialAssets.length - 1 && !isAbortedRef.current) {
                 await wait(500);
@@ -390,8 +391,9 @@ const App: React.FC = () => {
                       console.log(`[TTS] 씬 ${i + 1} Google TTS 폴백 시도...`);
                       const fallbackAudio = await generateAudioForScene(assetsRef.current[i].narration);
                       updateAssetAt(i, { audioData: fallbackAudio });
-                  } catch (fallbackError) {
+                  } catch (fallbackError: any) {
                       console.error(`[TTS] 씬 ${i + 1} Google TTS 폴백도 실패:`, fallbackError);
+                      setProgressMessage(`⚠️ 씬 ${i + 1} 오디오 생성 실패: ${fallbackError?.message || fallbackError}`);
                   }
               }
 

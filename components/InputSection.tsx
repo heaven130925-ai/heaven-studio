@@ -186,7 +186,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
       audioRef.current = audio;
       audio.play().catch(() => setPlayingGeminiVoiceId(null));
       audio.onended = () => { setPlayingGeminiVoiceId(null); audioRef.current = null; URL.revokeObjectURL(url); };
-    } catch { setPlayingGeminiVoiceId(null); }
+    } catch (err: any) {
+      setPlayingGeminiVoiceId(null);
+      alert(`Google TTS 오류: ${err?.message || err}`);
+    }
   };
 
 const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, elVoiceId); setElevenLabsModelId(elModelId); };
