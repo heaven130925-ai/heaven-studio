@@ -462,9 +462,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
       };
       progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
-    } catch (e) {
+    } catch (e: any) {
       console.error('Audio error:', e);
       setIsPlaying(false);
+      alert(`오디오 재생 오류: ${e?.message || e}`);
     }
   }, [isPlaying, scene]);
 
