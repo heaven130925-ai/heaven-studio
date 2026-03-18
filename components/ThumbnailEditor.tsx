@@ -584,7 +584,14 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
       const isNanoBanana = selectedModel.startsWith('gemini-3');
 
-      if (uploadedBgImage && !editReq) {
+      if (uploadedBgImage && !editReq && isNanoBanana) {
+        // Nano Banana + 업로드 이미지: AI가 텍스트를 이미지에 직접 굽기
+        const { editImageWithGemini } = await import('../services/geminiService');
+        const raw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
+        const textPrompt = `이 이미지를 유튜브 썸네일로 만들어줘. 메인 제목: "${mainText}"${subText ? `, 부제목: "${subText}"` : ''}. 텍스트를 굵고 눈에 띄게 이미지에 직접 넣어줘.`;
+        const edited = await editImageWithGemini(raw, textPrompt);
+        rawBg = edited ? `data:image/jpeg;base64,${edited}` : uploadedBgImage;
+      } else if (uploadedBgImage && !editReq) {
         rawBg = uploadedBgImage;
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
