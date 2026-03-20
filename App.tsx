@@ -26,11 +26,11 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 type ViewMode = 'main' | 'gallery';
 
 const App: React.FC = () => {
-  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || '')
+  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || 'heaven31')
     .split(',').map((p: string) => p.trim()).filter(Boolean);
   const savedPass = localStorage.getItem('heaven_access') || '';
   const [isAuthenticated, setIsAuthenticated] = useState(
-    allowedPasswords.length === 0 || allowedPasswords.includes(savedPass)
+    allowedPasswords.includes(savedPass)
   );
 
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
