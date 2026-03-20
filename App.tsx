@@ -231,7 +231,8 @@ const App: React.FC = () => {
     sourceText: string | null,
     sceneCount: number = 0,
     imageOnly: boolean = false,
-    audioOnly: boolean = false
+    audioOnly: boolean = false,
+    autoRun: boolean = false
   ) => {
     console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}, imageOnly=${imageOnly}`);
     if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
@@ -316,8 +317,9 @@ const App: React.FC = () => {
         if (isAbortedRef.current) return;
 
         const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
-        console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, scenes=${scriptScenes.length}`);
-        if (isAutoTopic && !imageOnly && !audioOnly) {
+        console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, autoRun=${autoRun}, scenes=${scriptScenes.length}`);
+        // autoRun=true이면 대본 확인 단계 없이 바로 이미지+오디오 생성
+        if (isAutoTopic && !imageOnly && !audioOnly && !autoRun) {
           const scriptText = scriptScenes.map(s => s.narration).join('\n');
           setInputManualScript(scriptText);
           setInputActiveTab('manual');
@@ -328,6 +330,12 @@ const App: React.FC = () => {
           setProgressMessage(`✅ 대본 완성 (${scriptScenes.length}개 씬) — 아래 대본 확인 후 "스토리보드 생성"을 눌러주세요.`);
           isProcessingRef.current = false;
           return;
+        }
+        // autoRun: 대본을 manual 탭에도 채워놓기 (나중에 참고용)
+        if (autoRun) {
+          const scriptText = scriptScenes.map(s => s.narration).join('\n');
+          setInputManualScript(scriptText);
+          setShowStoryboard(true);
         }
 
         initialAssets = scriptScenes.map(scene => ({

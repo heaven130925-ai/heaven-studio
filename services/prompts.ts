@@ -156,8 +156,21 @@ ${textBottom ? textBottom : ''}
 };
 
 // 트렌드 검색 프롬프트
-export const getTrendSearchPrompt = (category: string, _usedTopicsString: string) =>
-  `Search for 4 interesting and trending "${category}" topics suitable for video content. Return JSON: [{rank, topic, reason}]`;
+export const getTrendSearchPrompt = (category: string, usedTopicsString: string) => {
+  const used = usedTopicsString ? `\n이미 사용된 주제 (반드시 제외): ${usedTopicsString}` : '';
+  return `다음 카테고리에 맞는 흥미로운 유튜브 영상 주제 10개를 추천해주세요.
+
+카테고리: ${category}
+${used}
+
+조건:
+- 한국 시청자들이 흥미롭게 볼 수 있는 구체적인 주제
+- 클릭을 유발하는 제목 형태 (예: "조선시대 가장 충격적인 사건 TOP5", "절대 몰랐던 돈 버는 방법")
+- 각 주제는 5~15분 분량의 영상으로 만들 수 있어야 함
+- 이미 사용된 주제와 절대 중복 금지
+
+JSON 배열로만 반환 (다른 텍스트 없이): [{"rank": 1, "topic": "주제명", "reason": "선정 이유 한 줄"}]`;
+};
 
 // 스크립트 생성 프롬프트
 export const getScriptGenerationPrompt = (
@@ -165,16 +178,18 @@ export const getScriptGenerationPrompt = (
   sourceContext?: string | null,
   maxScenes?: number,
   preSegmented?: boolean,   // JS에서 [SCENE_BLOCK_N] 으로 미리 분할된 경우
-  hasCharacterRef?: boolean  // 캐릭터 참조 이미지 여부
+  hasCharacterRef?: boolean,  // 캐릭터 참조 이미지 여부
+  writingGuide?: string       // 사용자 글쓰기 지침
 ) => {
   const isManual = !!sourceContext;
 
   // ─── 자동 주제 모드: 주제어로부터 대본 직접 생성 ───────────────────────
   if (!isManual) {
     const sceneTarget = maxScenes ? `정확히 ${maxScenes}개` : `5~10개`;
+    const guideSection = writingGuide?.trim() ? `\n## 글쓰기 지침 (반드시 따를 것)\n${writingGuide.trim()}\n` : '';
     return `
 # Task: "${topic}" 주제로 한국어 영상 대본 생성
-
+${guideSection}
 ## 지시사항
 주제 "${topic}"에 대해 시청자가 흥미롭게 볼 수 있는 영상 나레이션 대본을 직접 작성하라.
 

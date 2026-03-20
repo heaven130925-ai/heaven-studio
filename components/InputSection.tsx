@@ -4,7 +4,7 @@ import ThumbnailEditor from './ThumbnailEditor';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
-import { generateGeminiTtsPreview, analyzeCharacterReference } from '../services/geminiService';
+import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics } from '../services/geminiService';
 
 
 function pcmBase64ToWavUrl(base64Pcm: string): string {
@@ -21,7 +21,7 @@ function pcmBase64ToWavUrl(base64Pcm: string): string {
 }
 
 interface InputSectionProps {
-  onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean, audioOnly?: boolean) => void;
+  onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean, audioOnly?: boolean, autoRun?: boolean) => void;
   step: GenerationStep;
   activeTab: 'auto' | 'manual';
   onTabChange: (tab: 'auto' | 'manual') => void;
@@ -116,6 +116,14 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [thumbnailCustomImage, setThumbnailCustomImage] = useState<string | null>(null);
   const thumbnailCanvasRef = useRef<HTMLCanvasElement>(null);
   const thumbnailFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 2단계 완전 자동화
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [suggestedTopics, setSuggestedTopics] = useState<Array<{rank: number; topic: string; reason: string}>>([]);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [autoRunMode, setAutoRunMode] = useState(false);
+  const [writingGuide, setWritingGuide] = useState(localStorage.getItem('heaven_writing_guide') || '');
+  const [showWritingGuide, setShowWritingGuide] = useState(false);
 
   // 프로젝트
   const [projects, setProjects] = useState<ProjectSettings[]>([]);
@@ -233,9 +241,9 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault(); if (isProcessing) return;
     const refImages = buildRefImages();
-    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, sceneCount); }
+    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, sceneCount, false, false, autoRunMode); }
     else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, sceneCount); }
-  }, [isProcessing, activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual]);
+  }, [isProcessing, activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual, autoRunMode]);
 
   const handleImagesOnly = useCallback(() => {
     if (isProcessing) return;
@@ -460,11 +468,106 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
                 {activeTab === 'auto' ? (
-                  <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden">
-                    <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} disabled={isProcessing}
-                      placeholder="주제를 입력하세요 (예: 예수님 탄생, 우주의 신비, 한국의 역사...)"
-                      className="block w-full bg-transparent text-white py-5 px-6 focus:ring-0 focus:outline-none placeholder-white/20 text-lg disabled:opacity-50" />
-                    <div className="px-6 pb-4 text-sm text-white/25">입력한 주제로 AI가 대본을 자동으로 생성합니다.</div>
+                  <div className="flex flex-col gap-3">
+                    {/* 직접 입력 */}
+                    <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden">
+                      <input type="text" value={topic} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopic(e.target.value)} disabled={isProcessing}
+                        placeholder="주제를 입력하거나 아래에서 카테고리를 선택하세요..."
+                        className="block w-full bg-transparent text-white py-4 px-6 focus:ring-0 focus:outline-none placeholder-white/20 text-base disabled:opacity-50" />
+                    </div>
+
+                    {/* 카테고리 선택 */}
+                    {(() => {
+                      const CATEGORIES = [
+                        { id: '한국 야담/기담/미스터리', label: '야담/기담', icon: '👻' },
+                        { id: '경제/재테크/투자', label: '경제/재테크', icon: '💰' },
+                        { id: '한국사/세계사', label: '역사', icon: '📜' },
+                        { id: '과학/우주/자연', label: '과학/우주', icon: '🔭' },
+                        { id: '뉴스/시사/사회', label: '뉴스/시사', icon: '📰' },
+                        { id: '건강/의학/심리', label: '건강/심리', icon: '🧠' },
+                        { id: '종교/영성/철학', label: '종교/철학', icon: '✝️' },
+                        { id: '연예/스포츠/문화', label: '연예/스포츠', icon: '🎬' },
+                      ];
+                      return (
+                        <div>
+                          <div className="grid grid-cols-4 gap-1.5 mb-2">
+                            {CATEGORIES.map(cat => (
+                              <button key={cat.id} type="button"
+                                onClick={async () => {
+                                  setSelectedCategory(cat.id);
+                                  setSuggestedTopics([]);
+                                  setIsLoadingTopics(true);
+                                  try {
+                                    const result = await findTrendingTopics(cat.id, []);
+                                    if (Array.isArray(result)) setSuggestedTopics(result);
+                                  } catch (e) { console.error('주제 추천 실패:', e); }
+                                  finally { setIsLoadingTopics(false); }
+                                }}
+                                disabled={isProcessing || isLoadingTopics}
+                                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border text-xs font-bold transition-all ${
+                                  selectedCategory === cat.id
+                                    ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
+                                    : 'bg-white/[0.04] border-white/[0.08] text-white/60 hover:bg-white/[0.08] hover:text-white'
+                                }`}>
+                                <span className="text-base">{cat.icon}</span>
+                                <span className="leading-tight text-center">{cat.label}</span>
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 주제 목록 */}
+                          {isLoadingTopics && (
+                            <div className="text-center py-3 text-amber-300/80 text-sm animate-pulse">주제 추천 중...</div>
+                          )}
+                          {!isLoadingTopics && suggestedTopics.length > 0 && (
+                            <div className="bg-black/40 border border-amber-500/20 rounded-xl p-2 space-y-1">
+                              <p className="text-[10px] text-amber-400/60 font-bold px-1 mb-1.5">클릭하면 주제가 선택됩니다</p>
+                              {suggestedTopics.map((t: {rank: number; topic: string; reason: string}) => (
+                                <button key={t.rank} type="button"
+                                  onClick={() => setTopic(t.topic)}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all border ${
+                                    topic === t.topic
+                                      ? 'bg-amber-500/20 border-amber-400/50 text-amber-100'
+                                      : 'bg-white/[0.03] border-transparent hover:bg-white/[0.07] hover:border-white/10 text-white/80'
+                                  }`}>
+                                  <span className="text-amber-400/60 text-xs mr-1.5">{t.rank}.</span>{t.topic}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* 글쓰기 지침 + 자동실행 토글 */}
+                    <div className="flex items-center gap-2">
+                      <button type="button"
+                        onClick={() => setShowWritingGuide((v: boolean) => !v)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/50 hover:text-white/80 text-xs font-bold transition-colors">
+                        ✍️ 글쓰기 지침 {showWritingGuide ? '▲' : '▼'}
+                      </button>
+                      <label className="flex items-center gap-2 ml-auto cursor-pointer select-none">
+                        <span className="text-xs text-white/50 font-bold">전체 자동 실행</span>
+                        <div onClick={() => setAutoRunMode((v: boolean) => !v)}
+                          className={`relative w-10 h-5 rounded-full transition-colors cursor-pointer ${autoRunMode ? 'bg-green-500' : 'bg-white/20'}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${autoRunMode ? 'left-5' : 'left-0.5'}`} />
+                        </div>
+                      </label>
+                    </div>
+                    {showWritingGuide && (
+                      <textarea
+                        value={writingGuide}
+                        onChange={(e) => { setWritingGuide(e.target.value); localStorage.setItem('heaven_writing_guide', e.target.value); }}
+                        placeholder={"AI 글쓰기 지침 (예: 반말 사용, 호기심을 자극하는 문체, 각 씬은 2문장 이내)"}
+                        className="w-full bg-black/50 border border-violet-500/30 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-violet-400"
+                        rows={3}
+                      />
+                    )}
+                    {autoRunMode && (
+                      <div className="text-xs text-green-400/70 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                        ✅ 전체 자동 실행: 대본 생성 후 이미지+오디오까지 자동으로 진행됩니다
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden flex flex-col flex-1 min-h-0">
