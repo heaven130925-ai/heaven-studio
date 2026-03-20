@@ -1633,10 +1633,9 @@ Visual direction: ${params.imagePrompt}
     const response = await ai.models.generateContent({
       model: thumbnailModel,
       contents,
-      config: {
-        responseModalities: [Modality.IMAGE],
-        imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' },
-      },
+      config: (isNanoBanana && params.inputImage)
+        ? { responseModalities: [Modality.TEXT, Modality.IMAGE] }
+        : { responseModalities: [Modality.IMAGE], imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' } },
     });
     const parts = response.candidates?.[0]?.content?.parts;
     if (parts) {
