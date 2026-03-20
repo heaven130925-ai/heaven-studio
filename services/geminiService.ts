@@ -1207,14 +1207,27 @@ export const generateAudioForScene = async (text: string): Promise<string | null
   // Google Cloud TTS 경로 (Neural2/Wavenet — MP3 반환, 한도 없음)
   if (provider === 'gcloud') {
     const { generateGCloudTTS } = await import('./googleCloudTTSService');
-    // Google Cloud TTS는 5000자 한도 → 청크 분할
     const chunks = splitTtsText(text, 4500);
     if (chunks.length === 1) return generateGCloudTTS(chunks[0]);
-    // 청크가 여러 개면 순차 생성 (MP3 이어붙이기 불가 → 첫 청크만 반환)
-    // TODO: 긴 텍스트는 추후 MP3 concat 지원
-    const results: (string | null)[] = [];
-    for (const chunk of chunks) results.push(await generateGCloudTTS(chunk));
-    return results.find(r => r !== null) || null;
+    // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)
+    const parts: string[] = [];
+    for (const chunk of chunks) {
+      const b64 = await generateGCloudTTS(chunk);
+      if (b64) parts.push(b64);
+    }
+    if (parts.length === 0) return null;
+    if (parts.length === 1) return parts[0];
+    // base64 디코드 → 바이너리 합치기 → 다시 base64
+    const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+    const total = buffers.reduce((sum, b) => sum + b.length, 0);
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const buf of buffers) { merged.set(buf, offset); offset += buf.length; }
+    let binary = '';
+    for (let i = 0; i < merged.length; i += 65536) {
+      binary += String.fromCharCode(...merged.subarray(i, i + 65536));
+    }
+    return btoa(binary);
   }
 
   // Gemini TTS 경로 (기존)
