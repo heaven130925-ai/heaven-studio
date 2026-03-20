@@ -1202,6 +1202,22 @@ export const generateAllScenesAudio = async (
  * - 400자 초과 시 청크 분할 후 이어붙이기
  */
 export const generateAudioForScene = async (text: string): Promise<string | null> => {
+  const provider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'google';
+
+  // Google Cloud TTS 경로 (Neural2/Wavenet — MP3 반환, 한도 없음)
+  if (provider === 'gcloud') {
+    const { generateGCloudTTS } = await import('./googleCloudTTSService');
+    // Google Cloud TTS는 5000자 한도 → 청크 분할
+    const chunks = splitTtsText(text, 4500);
+    if (chunks.length === 1) return generateGCloudTTS(chunks[0]);
+    // 청크가 여러 개면 순차 생성 (MP3 이어붙이기 불가 → 첫 청크만 반환)
+    // TODO: 긴 텍스트는 추후 MP3 concat 지원
+    const results: (string | null)[] = [];
+    for (const chunk of chunks) results.push(await generateGCloudTTS(chunk));
+    return results.find(r => r !== null) || null;
+  }
+
+  // Gemini TTS 경로 (기존)
   const chunks = splitTtsText(text, 400);
 
   if (chunks.length === 1) {

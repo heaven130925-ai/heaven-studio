@@ -92,9 +92,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [googleTtsTone, setGoogleTtsTone] = useState<string>(localStorage.getItem('heaven_google_tts_tone_id') || '');
   const [googleTtsMood, setGoogleTtsMood] = useState<string>(localStorage.getItem('heaven_google_tts_mood_id') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
-  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google'>(
-    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google') || 'elevenlabs'
+  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud'>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud') || 'elevenlabs'
   );
+  const [gcloudApiKey, setGcloudApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '');
+  const [gcloudVoice, setGcloudVoice] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A');
+  const [playingGcloudVoice, setPlayingGcloudVoice] = useState<string | null>(null);
 
   // Google TTS
   const [geminiTtsVoice, setGeminiTtsVoice] = useState<GeminiTtsVoiceId>(CONFIG.DEFAULT_GEMINI_TTS_VOICE);
@@ -781,12 +784,17 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     {/* TTS 제공자 탭 */}
                     <div className="flex gap-2 shrink-0">
                       <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.35)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
-                        Google TTS
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
+                        Gemini TTS
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
                       </button>
+                      <button type="button" onClick={() => { setVoiceSubTab('gcloud'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'gcloud'); }}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'gcloud' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
+                        Cloud TTS
+                        <span className={`w-1.5 h-1.5 rounded-full ${gcloudApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
+                      </button>
                       <button type="button" onClick={() => { setVoiceSubTab('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'elevenlabs'); }}
-                        className={`flex-1 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.35)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600/20 text-purple-200 border-purple-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         ElevenLabs
                         <span className={`w-1.5 h-1.5 rounded-full ${elApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
@@ -925,6 +933,70 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               )}
                             </div>
                             <button type="button" onClick={saveElSettings} className="shrink-0 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
+                      </div>
+                    )}
+
+                    {voiceSubTab === 'gcloud' && (
+                      <div className="flex-1 flex flex-col min-h-0 gap-3">
+                        {/* API 키 입력 */}
+                        <div className="shrink-0 space-y-1.5">
+                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Google Cloud TTS API Key</label>
+                          <input
+                            type="password"
+                            value={gcloudApiKey}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGcloudApiKey(e.target.value)}
+                            onBlur={(e: React.ChangeEvent<HTMLInputElement>) => { localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY, e.target.value); }}
+                            placeholder="AIza..."
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                          />
+                          <p className="text-[10px] text-slate-500">Google Cloud Console → Text-to-Speech API 활성화 후 API 키 발급</p>
+                        </div>
+
+                        {/* 목소리 선택 */}
+                        <div className="shrink-0 space-y-1.5">
+                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">목소리 선택</label>
+                          <div className="grid grid-cols-2 gap-1.5 overflow-y-auto">
+                            {(['ko-KR-Neural2-A','ko-KR-Neural2-B','ko-KR-Neural2-C','ko-KR-Neural2-D','ko-KR-Wavenet-A','ko-KR-Wavenet-B','ko-KR-Wavenet-C','ko-KR-Wavenet-D'] as const).map(v => {
+                              const labels: Record<string, string> = {
+                                'ko-KR-Neural2-A': 'Neural2-A 여',
+                                'ko-KR-Neural2-B': 'Neural2-B 남',
+                                'ko-KR-Neural2-C': 'Neural2-C 여',
+                                'ko-KR-Neural2-D': 'Neural2-D 남',
+                                'ko-KR-Wavenet-A': 'Wavenet-A 여',
+                                'ko-KR-Wavenet-B': 'Wavenet-B 남',
+                                'ko-KR-Wavenet-C': 'Wavenet-C 남',
+                                'ko-KR-Wavenet-D': 'Wavenet-D 여',
+                              };
+                              const isSelected = gcloudVoice === v;
+                              return (
+                                <button key={v} type="button"
+                                  onClick={async () => {
+                                    setGcloudVoice(v);
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE, v);
+                                    if (!gcloudApiKey) return;
+                                    setPlayingGcloudVoice(v);
+                                    try {
+                                      const { previewGCloudTTS } = await import('../services/googleCloudTTSService');
+                                      const b64 = await previewGCloudTTS('안녕하세요. 테스트 목소리입니다.', v);
+                                      if (b64) {
+                                        const audio = new Audio(`data:audio/mp3;base64,${b64}`);
+                                        audio.play();
+                                      }
+                                    } catch {}
+                                    setPlayingGcloudVoice(null);
+                                  }}
+                                  className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition-colors ${isSelected ? 'bg-blue-600/20 text-blue-200 border-blue-500/60' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
+                                  {playingGcloudVoice === v ? '▶ 재생 중' : labels[v]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <p className="shrink-0 text-[10px] text-slate-500 bg-slate-800/50 rounded-xl p-2">
+                          Neural2: 월 100만자 무료 · 이후 $16/100만자<br/>
+                          Wavenet: 월 100만자 무료 · 이후 $4/100만자
+                        </p>
                       </div>
                     )}
 

@@ -262,7 +262,9 @@ export const CONFIG = {
     SUBTITLE_CONFIG: 'heaven_subtitle_config',
     PROJECTS: 'heaven_projects',
     GEMINI_TTS_VOICE: 'heaven_gemini_tts_voice',
-    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google'
+    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google' | 'gcloud'
+    GCLOUD_TTS_API_KEY: 'heaven_gcloud_tts_key',  // Google Cloud TTS API 키
+    GCLOUD_TTS_VOICE: 'heaven_gcloud_tts_voice',  // ko-KR-Neural2-A 등
     VOICE_SPEED: 'heaven_voice_speed',          // '0.7' | '1.0' | '1.3'
     VOICE_STABILITY: 'heaven_voice_stability',   // '0'-'100' (ElevenLabs)
     VOICE_STYLE: 'heaven_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
