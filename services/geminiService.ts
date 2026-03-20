@@ -349,7 +349,8 @@ const generateScriptSingle = async (
 
     console.log(`${chunkLabel}[Script] 입력: ${inputLength}자, 목표 씬: ${estimatedSceneCount}개, maxOutputTokens: ${maxOutputTokens}`);
 
-    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented);
+    const writingGuide = localStorage.getItem('heaven_writing_guide') || '';
+    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented, undefined, writingGuide);
     const anthropicKey = localStorage.getItem('heaven_anthropic_key');
     let responseText: string;
 
