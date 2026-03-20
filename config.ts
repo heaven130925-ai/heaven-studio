@@ -72,8 +72,8 @@ export const IMAGE_MODELS = [
     speed: '보통'
   },
   {
-    id: 'veo-3.0-generate-preview',
-    name: 'Veo 3 영상',
+    id: 'veo-3.1-generate-preview',
+    name: 'Veo 3.1 Fast 영상',
     provider: 'Google',
     pricePerImage: 0,
     description: '실사 동영상 생성 (구독 20크레딧/영상, 2~5분 소요)',

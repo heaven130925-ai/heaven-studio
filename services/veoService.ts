@@ -8,7 +8,7 @@ const getAI = () => new GoogleGenAI({ apiKey: getGeminiApiKey() });
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const VEO_MODELS = [
-  { id: 'veo-3.0-generate-preview', label: 'Veo 3', credits: 20 },
+  { id: 'veo-3.1-generate-preview', label: 'Veo 3.1 Fast', credits: 20 },
   { id: 'veo-2.0-generate-001', label: 'Veo 2', credits: 5 },
 ] as const;
 
@@ -18,7 +18,7 @@ export const VEO_MODELS = [
  */
 export async function generateVeoVideo(
   prompt: string,
-  model: string = 'veo-3.0-generate-preview',
+  model: string = 'veo-3.1-generate-preview',
   aspectRatio: '16:9' | '9:16' = '9:16',
   durationSeconds: number = 8,
   onProgress?: (msg: string) => void
