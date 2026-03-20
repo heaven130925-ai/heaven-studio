@@ -941,14 +941,20 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         {/* API 키 입력 */}
                         <div className="shrink-0 space-y-1.5">
                           <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Google Cloud TTS API Key</label>
-                          <input
-                            type="password"
-                            value={gcloudApiKey}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGcloudApiKey(e.target.value)}
-                            onBlur={(e: React.ChangeEvent<HTMLInputElement>) => { localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY, e.target.value); }}
-                            placeholder="AIza..."
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="password"
+                              value={gcloudApiKey}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGcloudApiKey(e.target.value)}
+                              placeholder="AIza..."
+                              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                            />
+                            <button type="button"
+                              onClick={() => { localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY, gcloudApiKey); alert('저장됨'); }}
+                              className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold">
+                              저장
+                            </button>
+                          </div>
                           <p className="text-[10px] text-slate-500">Google Cloud Console → Text-to-Speech API 활성화 후 API 키 발급</p>
                         </div>
 
