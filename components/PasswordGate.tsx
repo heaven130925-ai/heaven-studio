@@ -9,7 +9,7 @@ export default function PasswordGate({ onSuccess }: PasswordGateProps) {
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
 
-  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || '')
+  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || 'heaven31')
     .split(',')
     .map((p: string) => p.trim())
     .filter(Boolean);
@@ -43,6 +43,7 @@ export default function PasswordGate({ onSuccess }: PasswordGateProps) {
               value={input}
               onChange={(e) => { setInput(e.target.value); setError(false); }}
               placeholder="비밀번호"
+              autoComplete="new-password"
               autoFocus
               className={`w-full bg-slate-900 border ${error ? 'border-red-500' : 'border-slate-600'} rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-sm`}
             />

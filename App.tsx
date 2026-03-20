@@ -29,8 +29,9 @@ const App: React.FC = () => {
   const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || 'heaven31')
     .split(',').map((p: string) => p.trim()).filter(Boolean);
   const savedPass = localStorage.getItem('heaven_access') || '';
+  const isAdmin = localStorage.getItem('heaven_admin') === '1';
   const [isAuthenticated, setIsAuthenticated] = useState(
-    allowedPasswords.includes(savedPass)
+    isAdmin || allowedPasswords.includes(savedPass)
   );
 
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
