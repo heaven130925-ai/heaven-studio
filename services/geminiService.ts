@@ -47,8 +47,13 @@ const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
  */
 const cleanNarration = (text: string): string => {
   return text
-    // 청크 지시문 전체 제거: [파트 3/6 - 전체 대본의 일부입니다. 이 파트의 내용만 시각화하세요.]
-    .replace(/\[파트\s*\d+\/\d+\s*-[^\]]*\]\s*/gi, '')
+    // 청크 지시문 전체 제거 (멀티라인 포함): [파트 3/6 - 전체 대본의 일부입니다. 이 파트의 내용만 시각화하세요.]
+    .replace(/\[파트\s*\d+\/\d+[\s\S]*?\]\s*/gi, '')
+    // AI가 [파트 부분만 제거하고 /N - ...] 남긴 경우: /3 - 전체 대본의 일부입니다...] 제거
+    .replace(/\/\d+\s*-[^\]]*\]\s*/gi, '')
+    // 전체 대본 관련 문구가 포함된 줄 전체 제거
+    .replace(/^.*전체 대본의 일부.*$/gim, '')
+    .replace(/^.*이 파트의 내용만.*$/gim, '')
     // 파트N: / 파트 N: / [파트N] / [파트 N]
     .replace(/^[\[【]?\s*파트\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
     // 씬N: / 씬 N: / [씬N]
@@ -579,11 +584,16 @@ export const generateScriptChunked = async (
     }
   }
 
+  // 최종 씬 번호 순서대로 정렬 후 1부터 재번호
+  const finalScenes = allScenes
+    .sort((a, b) => (a.sceneNumber || 0) - (b.sceneNumber || 0))
+    .map((scene, idx) => ({ ...scene, sceneNumber: idx + 1 }));
+
   console.log(`[Chunked Script] ========================================`);
-  console.log(`[Chunked Script] 총 ${allScenes.length}개 씬 생성 완료`);
+  console.log(`[Chunked Script] 총 ${finalScenes.length}개 씬 생성 완료`);
   console.log(`[Chunked Script] ========================================`);
 
-  return allScenes;
+  return finalScenes;
 };
 
 /**
