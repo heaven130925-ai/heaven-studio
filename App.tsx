@@ -25,14 +25,32 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 type ViewMode = 'main' | 'gallery';
 
+const GIST_RAW_URL = 'https://gist.githubusercontent.com/heaven130925-ai/7094a8ac89c8438b922d5ad79da79a6b/raw';
+
 const App: React.FC = () => {
-  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || 'heaven31')
-    .split(',').map((p: string) => p.trim()).filter(Boolean);
   const savedPass = localStorage.getItem('heaven_access') || '';
   const isAdmin = localStorage.getItem('heaven_admin') === '1';
-  const [isAuthenticated, setIsAuthenticated] = useState(
-    isAdmin || allowedPasswords.includes(savedPass)
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState(isAdmin);
+  const [allowedPasswords, setAllowedPasswords] = useState<string[]>([]);
+
+  // Gist에서 비밀번호 목록 로드
+  useEffect(() => {
+    if (isAdmin) return;
+    fetch(`${GIST_RAW_URL}?t=${Date.now()}`)
+      .then(r => r.text())
+      .then(text => {
+        const passwords = text.split('\n').map(p => p.trim()).filter(Boolean);
+        setAllowedPasswords(passwords);
+        if (passwords.includes(savedPass)) setIsAuthenticated(true);
+      })
+      .catch(() => {
+        // Gist 로드 실패 시 기본 비번 사용
+        const fallback = ('heaven31')
+          .split(',').map((p: string) => p.trim()).filter(Boolean);
+        setAllowedPasswords(fallback);
+        if (fallback.includes(savedPass)) setIsAuthenticated(true);
+      });
+  }, []); // eslint-disable-line
 
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
@@ -805,7 +823,7 @@ const App: React.FC = () => {
   }
 
   if (!isAuthenticated) {
-    return <PasswordGate onSuccess={() => setIsAuthenticated(true)} />;
+    return <PasswordGate allowedPasswords={allowedPasswords} onSuccess={() => setIsAuthenticated(true)} />;
   }
 
   return (

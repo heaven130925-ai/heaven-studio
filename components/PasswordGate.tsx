@@ -2,17 +2,13 @@ import React, { useState } from 'react';
 
 interface PasswordGateProps {
   onSuccess: () => void;
+  allowedPasswords?: string[];
 }
 
-export default function PasswordGate({ onSuccess }: PasswordGateProps) {
+export default function PasswordGate({ onSuccess, allowedPasswords = [] }: PasswordGateProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
-
-  const allowedPasswords = (import.meta.env.VITE_ACCESS_PASSWORDS || 'heaven31')
-    .split(',')
-    .map((p: string) => p.trim())
-    .filter(Boolean);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
