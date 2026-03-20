@@ -479,18 +479,18 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     {/* 카테고리 선택 */}
                     {(() => {
                       const CATEGORIES = [
-                        { id: '한국 야담/기담/미스터리', label: '야담/기담', icon: '👻' },
-                        { id: '경제/재테크/투자', label: '경제/재테크', icon: '💰' },
-                        { id: '한국사/세계사', label: '역사', icon: '📜' },
-                        { id: '과학/우주/자연', label: '과학/우주', icon: '🔭' },
-                        { id: '뉴스/시사/사회', label: '뉴스/시사', icon: '📰' },
-                        { id: '건강/의학/심리', label: '건강/심리', icon: '🧠' },
-                        { id: '종교/영성/철학', label: '종교/철학', icon: '✝️' },
-                        { id: '연예/스포츠/문화', label: '연예/스포츠', icon: '🎬' },
+                        { id: '한국 야담/기담/미스터리', label: '야담/기담', sub: 'MYSTERY' },
+                        { id: '경제/재테크/투자', label: '경제/재테크', sub: 'ECONOMY' },
+                        { id: '한국사/세계사', label: '역사', sub: 'HISTORY' },
+                        { id: '과학/우주/자연', label: '과학/우주', sub: 'SCIENCE' },
+                        { id: '뉴스/시사/사회', label: '뉴스/시사', sub: 'NEWS' },
+                        { id: '건강/의학/심리', label: '건강/심리', sub: 'HEALTH' },
+                        { id: '종교/영성/철학', label: '종교/철학', sub: 'RELIGION' },
+                        { id: '연예/스포츠/문화', label: '연예/스포츠', sub: 'CULTURE' },
                       ];
                       return (
                         <div>
-                          <div className="grid grid-cols-4 gap-1.5 mb-2">
+                          <div className="grid grid-cols-4 gap-2 mb-2">
                             {CATEGORIES.map(cat => (
                               <button key={cat.id} type="button"
                                 onClick={async () => {
@@ -504,13 +504,18 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                   finally { setIsLoadingTopics(false); }
                                 }}
                                 disabled={isProcessing || isLoadingTopics}
-                                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl border text-xs font-bold transition-all ${
+                                className={`relative p-2.5 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
                                   selectedCategory === cat.id
-                                    ? 'bg-amber-500/20 border-amber-400/60 text-amber-200'
-                                    : 'bg-white/[0.04] border-white/[0.08] text-white/60 hover:bg-white/[0.08] hover:text-white'
+                                    ? 'border-red-400/80 bg-red-900/30 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
+                                    : 'border-white/[0.1] bg-slate-800/70 hover:border-white/30 hover:bg-slate-700/70'
                                 }`}>
-                                <span className="text-base">{cat.icon}</span>
-                                <span className="leading-tight text-center">{cat.label}</span>
+                                <p className="text-sm font-black text-white leading-tight">{cat.label}</p>
+                                <p className="text-[9px] text-slate-500 mt-0.5 font-bold tracking-wider">{cat.sub}</p>
+                                {selectedCategory === cat.id && (
+                                  <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
+                                    <CheckIcon />
+                                  </div>
+                                )}
                               </button>
                             ))}
                           </div>

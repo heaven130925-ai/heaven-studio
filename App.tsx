@@ -435,6 +435,33 @@ const App: React.FC = () => {
           const imageModel = getSelectedImageModel();
           const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
 
+          // ── Veo 영상 생성 모드 ──────────────────────────────────────────────
+          if (imageModel.startsWith('veo-')) {
+            const { generateVeoVideo } = await import('./services/veoService');
+            for (let i = 0; i < initialAssets.length; i++) {
+              if (isAbortedRef.current) break;
+              updateAssetAt(i, { status: 'generating' });
+              try {
+                setProgressMessage(`씬 ${i + 1}/${initialAssets.length} Veo 영상 생성 중 (2~5분 소요)...`);
+                const videoUrl = await generateVeoVideo(
+                  initialAssets[i].visualPrompt,
+                  imageModel,
+                  aspectRatio,
+                  8,
+                  (msg) => setProgressMessage(`씬 ${i + 1}/${initialAssets.length} — ${msg}`)
+                );
+                if (videoUrl && !isAbortedRef.current) {
+                  updateAssetAt(i, { videoData: videoUrl, videoDuration: 8, status: 'completed' });
+                }
+              } catch (e: any) {
+                console.error(`씬 ${i + 1} Veo 실패:`, e.message);
+                setProgressMessage(`⚠️ 씬 ${i + 1} Veo 실패: ${e.message}`);
+                updateAssetAt(i, { status: 'error' });
+              }
+            }
+            return;
+          }
+
           for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) break;
               updateAssetAt(i, { status: 'generating' });

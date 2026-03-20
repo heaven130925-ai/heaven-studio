@@ -71,6 +71,22 @@ export const IMAGE_MODELS = [
     description: '참조이미지 지원, 화풍 일관성',
     speed: '보통'
   },
+  {
+    id: 'veo-3.0-generate-preview',
+    name: 'Veo 3 영상',
+    provider: 'Google',
+    pricePerImage: 0,
+    description: '실사 동영상 생성 (구독 20크레딧/영상, 2~5분 소요)',
+    speed: '느림'
+  },
+  {
+    id: 'veo-2.0-generate-001',
+    name: 'Veo 2 영상',
+    provider: 'Google',
+    pricePerImage: 0,
+    description: '실사 동영상 생성 (구독 5크레딧/영상, 2~5분 소요)',
+    speed: '느림'
+  },
 ] as const;
 
 export type ImageModelId = typeof IMAGE_MODELS[number]['id'];
