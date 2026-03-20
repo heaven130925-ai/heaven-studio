@@ -493,15 +493,9 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           <div className="grid grid-cols-4 gap-2 mb-2">
                             {CATEGORIES.map(cat => (
                               <button key={cat.id} type="button"
-                                onClick={async () => {
+                                onClick={() => {
                                   setSelectedCategory(cat.id);
                                   setSuggestedTopics([]);
-                                  setIsLoadingTopics(true);
-                                  try {
-                                    const result = await findTrendingTopics(cat.id, []);
-                                    if (Array.isArray(result)) setSuggestedTopics(result);
-                                  } catch (e) { console.error('주제 추천 실패:', e); }
-                                  finally { setIsLoadingTopics(false); }
                                 }}
                                 disabled={isProcessing || isLoadingTopics}
                                 className={`relative p-2.5 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
@@ -519,6 +513,24 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             ))}
                           </div>
+
+                          {/* 주제 추천 버튼 */}
+                          {selectedCategory && (
+                            <button type="button"
+                              onClick={async () => {
+                                setSuggestedTopics([]);
+                                setIsLoadingTopics(true);
+                                try {
+                                  const result = await findTrendingTopics(selectedCategory, []);
+                                  if (Array.isArray(result)) setSuggestedTopics(result);
+                                } catch (e) { console.error('주제 추천 실패:', e); }
+                                finally { setIsLoadingTopics(false); }
+                              }}
+                              disabled={isProcessing || isLoadingTopics}
+                              className="w-full py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 font-bold text-sm transition-all disabled:opacity-50">
+                              {isLoadingTopics ? '주제 추천 중...' : suggestedTopics.length > 0 ? '🔄 다시 추천받기' : '주제 추천받기'}
+                            </button>
+                          )}
 
                           {/* 주제 목록 */}
                           {isLoadingTopics && (
