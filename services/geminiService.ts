@@ -432,17 +432,30 @@ function splitIntoSentences(text: string): string[] {
 }
 
 /**
- * 문장 배열을 N개 블록으로 균등 분배
+ * 문장 배열을 N개 블록으로 분배 — 글자 수 기준 균등 분배
+ * (문장 개수 기준은 긴 문장/짧은 문장 혼재 시 나레이션 길이 불균등 문제 발생)
  */
 function groupSentencesIntoBlocks(sentences: string[], blockCount: number): string[] {
+  const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
+  const targetCharsPerBlock = totalChars / blockCount;
+
   const blocks: string[] = [];
-  const perBlock = sentences.length / blockCount;
-  for (let i = 0; i < blockCount; i++) {
-    const startIdx = Math.round(i * perBlock);
-    const endIdx = Math.round((i + 1) * perBlock);
-    const group = sentences.slice(startIdx, Math.min(endIdx, sentences.length)).join(' ');
-    if (group.trim()) blocks.push(group.trim());
+  let current: string[] = [];
+  let currentChars = 0;
+
+  for (const sentence of sentences) {
+    current.push(sentence);
+    currentChars += sentence.length;
+    // 목표 글자 수 도달 && 아직 블록 여유 있으면 블록 확정
+    if (currentChars >= targetCharsPerBlock && blocks.length < blockCount - 1) {
+      blocks.push(current.join(' ').trim());
+      current = [];
+      currentChars = 0;
+    }
   }
+  // 나머지 문장을 마지막 블록으로
+  if (current.length > 0) blocks.push(current.join(' ').trim());
+
   return blocks;
 }
 
