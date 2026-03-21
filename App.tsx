@@ -664,10 +664,15 @@ const App: React.FC = () => {
     const scene = assetsRef.current[idx];
     if (!scene?.narration?.trim()) return;
     try {
+      // isAbortedRef 우회: 직접 assetsRef + setGeneratedData 사용
       const audioData = await generateAudioForScene(scene.narration);
       if (audioData) {
-        updateAssetAt(idx, { audioData, audioDuration: null });
-        setGeneratedData([...assetsRef.current]);
+        if (assetsRef.current[idx]) {
+          assetsRef.current[idx] = { ...assetsRef.current[idx], audioData, audioDuration: null };
+          setGeneratedData([...assetsRef.current]);
+        }
+      } else {
+        alert(`씬 ${idx + 1} 음성 생성 실패: 응답 없음 (TTS 설정 확인 필요)`);
       }
     } catch (e: any) {
       console.error(`[TTS] 씬 ${idx + 1} 음성 생성 실패:`, e.message);

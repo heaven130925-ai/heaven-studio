@@ -1368,7 +1368,7 @@ export const generateAudioForScene = async (text: string): Promise<string | null
       try {
         const { generateGCloudTTS } = await import('./googleCloudTTSService');
         const chunks = splitTtsText(text, 4500);
-        if (chunks.length === 1) return generateGCloudTTS(chunks[0]);
+        if (chunks.length === 1) return await generateGCloudTTS(chunks[0]);
         // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)
         const parts: string[] = [];
         for (const chunk of chunks) {
