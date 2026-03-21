@@ -91,6 +91,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [voiceMoodPreset, setVoiceMoodPreset] = useState<string>(localStorage.getItem('heaven_voice_mood') || '');
   const [googleTtsTone, setGoogleTtsTone] = useState<string>(localStorage.getItem('heaven_google_tts_tone_id') || '');
   const [googleTtsMood, setGoogleTtsMood] = useState<string>(localStorage.getItem('heaven_google_tts_mood_id') || '');
+  const [gcloudTone, setGcloudTone] = useState<string>(localStorage.getItem('heaven_gcloud_tone_id') || '');
+  const [gcloudMood, setGcloudMood] = useState<string>(localStorage.getItem('heaven_gcloud_mood_id') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
   const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud' | 'azure'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure') || 'elevenlabs'
@@ -1450,6 +1452,64 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </button>
                             ))}
                           </div>
+                        </div>
+                        {/* 톤 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {([
+                              { id: '낮은톤', label: '낮은 톤', instruction: '(낮고 차분한 목소리로) ' },
+                              { id: '차분한', label: '차분한', instruction: '(차분하고 안정적으로) ' },
+                              { id: '밝은톤', label: '밝은 톤', instruction: '(밝고 생동감 있게) ' },
+                              { id: '활기찬', label: '활기찬', instruction: '(활기차고 열정적으로) ' },
+                            ] as { id: string; label: string; instruction: string }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                const newTone = gcloudTone === m.id ? '' : m.id;
+                                setGcloudTone(newTone);
+                                localStorage.setItem('heaven_gcloud_tone_id', newTone);
+                                localStorage.setItem('heaven_gcloud_tone', newTone ? m.instruction : '');
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${gcloudTone === m.id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* 분위기 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 <span className="text-slate-600 normal-case font-normal">(톤과 동시 선택 가능)</span></p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {([
+                              { id: '친근하게', instruction: '(친근하고 따뜻하게) ' },
+                              { id: '따뜻하게', instruction: '(따뜻하게 공감하며) ' },
+                              { id: '뉴스형식', instruction: '(뉴스 앵커처럼 명확하게) ' },
+                              { id: '부드럽게', instruction: '(부드럽고 온화하게) ' },
+                              { id: '부드럽고강하게', label: '부드럽고 강하게', instruction: '(부드럽지만 확신 있게) ' },
+                              { id: '강하고따뜻하게', label: '강하고 따뜻하게', instruction: '(강하고 열정적으로 따뜻하게) ' },
+                              { id: '심각하게', instruction: '(심각하고 진지하게) ' },
+                              { id: '울면서', instruction: '(슬프고 울먹이는 감정으로) ' },
+                            ] as { id: string; label?: string; instruction: string }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                const newMood = gcloudMood === m.id ? '' : m.id;
+                                setGcloudMood(newMood);
+                                localStorage.setItem('heaven_gcloud_mood_id', newMood);
+                                localStorage.setItem('heaven_gcloud_mood', newMood ? m.instruction : '');
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${gcloudMood === m.id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
+                                {m.label || m.id}
+                              </button>
+                            ))}
+                          </div>
+                          {(gcloudTone || gcloudMood) && (
+                            <button type="button" onClick={() => {
+                              setGcloudTone(''); setGcloudMood('');
+                              localStorage.removeItem('heaven_gcloud_tone_id');
+                              localStorage.removeItem('heaven_gcloud_mood_id');
+                              localStorage.removeItem('heaven_gcloud_tone');
+                              localStorage.removeItem('heaven_gcloud_mood');
+                            }}
+                              className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
+                          )}
                         </div>
                       </div>
                     )}
