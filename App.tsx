@@ -106,8 +106,20 @@ const App: React.FC = () => {
   const isAbortedRef = useRef(false);
   const isProcessingRef = useRef(false);
 
-  const characterProfilesRef = useRef<CharacterInfo[]>([]);
-  const [charactersList, setCharactersList] = useState<CharacterInfo[]>([]);
+  // 캐릭터 프로필 localStorage 저장/로드
+  const CHAR_PROFILES_KEY = 'heaven_character_profiles';
+  const loadSavedCharacterProfiles = (): CharacterInfo[] => {
+    try {
+      const saved = localStorage.getItem(CHAR_PROFILES_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  };
+  const saveCharacterProfiles = (profiles: CharacterInfo[]) => {
+    try { localStorage.setItem(CHAR_PROFILES_KEY, JSON.stringify(profiles)); } catch {}
+  };
+
+  const characterProfilesRef = useRef<CharacterInfo[]>(loadSavedCharacterProfiles());
+  const [charactersList, setCharactersList] = useState<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [showCharacterSetup, setShowCharacterSetup] = useState(false);
   const pendingInitialAssetsRef = useRef<GeneratedAsset[]>([]);
   const pendingRefImgsRef = useRef<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
@@ -196,6 +208,7 @@ const App: React.FC = () => {
   // 캐릭터 설정 완료 → 에셋 생성 시작
   const handleCharactersDone = useCallback(async (updatedChars: CharacterInfo[]) => {
     characterProfilesRef.current = updatedChars.filter(c => c.imageData);
+    saveCharacterProfiles(characterProfilesRef.current);
     setShowCharacterSetup(false);
     setShowStoryboard(true);
 
@@ -502,14 +515,23 @@ const App: React.FC = () => {
           pendingTargetTopicRef.current = targetTopic;
           // 화면 즉시 표시 후 캐릭터 추출은 백그라운드
           setCharactersList([]);
+          // 저장된 프로필 먼저 표시
+          const savedProfs = loadSavedCharacterProfiles();
+          setCharactersList(savedProfs);
           setShowCharacterSetup(true);
           setStep(GenerationStep.CHARACTER_SETUP);
           setProgressMessage('캐릭터 이미지를 설정하세요');
           isProcessingRef.current = false;
-          // 백그라운드에서 캐릭터 자동 추출
+          // 백그라운드에서 이번 대본 캐릭터 추출 → 기존 목록에 없는 캐릭터만 추가
           const scriptText = scriptScenes.map(s => s.narration).join('\n');
           extractCharactersFromScript(scriptText)
-            .then(chars => setCharactersList(chars))
+            .then(newChars => {
+              setCharactersList((prev: CharacterInfo[]) => {
+                const existingNames = new Set(prev.map((c: CharacterInfo) => c.name));
+                const added = newChars.filter((c: CharacterInfo) => !existingNames.has(c.name));
+                return added.length > 0 ? [...prev, ...added] : prev;
+              });
+            })
             .catch(() => {});
           return;
         }
@@ -667,8 +689,17 @@ const App: React.FC = () => {
                           await wait(2000); // 재시도 전 대기
                       }
 
-                      // Scene 객체 전체를 넘겨서 prompts.ts가 분석 정보를 활용하도록 함
-                      const img = await generateImage(assetsRef.current[i], refImgs);
+                      // 씬별 캐릭터 레퍼런스 주입 (저장된 캐릭터 프로필 활용)
+                      const profiles = characterProfilesRef.current;
+                      const narration = assetsRef.current[i].narration;
+                      const matchedChars = profiles
+                        .filter((c: CharacterInfo) => c.imageData && narration.includes(c.name))
+                        .map((c: CharacterInfo) => c.imageData as string)
+                        .slice(0, 2);
+                      const sceneRefImgs = matchedChars.length > 0
+                        ? { ...refImgs, character: matchedChars }
+                        : refImgs;
+                      const img = await generateImage(assetsRef.current[i], sceneRefImgs);
                       if (isAbortedRef.current) break;
 
                       if (img) {
