@@ -215,8 +215,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
-    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.2s 딜레이로 보정)
-    const DELAY = 0.2;
+    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.3s 딜레이로 보정)
+    const DELAY = 0.3;
     const tAdj = Math.max(0, t - DELAY);
     if (googleTtsGroups && googleTtsGroups.length > 0) {
       if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
@@ -302,11 +302,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (cur.trim()) chunks.push(cur.trim());
     if (chunks.length === 0) return [];
 
-    // 구두점 pause 가중치
+    // 구두점 pause 가중치 (Gemini TTS 문장 pause ~0.6s 기준 캘리브레이션)
     const weights = chunks.map(c => {
       let w = c.length;
-      w += (c.match(/[.!?。！？]/g) || []).length * 3;
-      w += (c.match(/[,，、]/g) || []).length * 1;
+      w += (c.match(/[.!?。！？]/g) || []).length * 5;
+      w += (c.match(/[,，、]/g) || []).length * 2;
       return Math.max(w, 2);
     });
     const total = weights.reduce((a, b) => a + b, 0);
