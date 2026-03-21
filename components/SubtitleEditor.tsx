@@ -342,15 +342,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) — 끝 0.6s 패딩 추가 ──
   async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
     const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    // fetch 로 네이티브 base64 디코딩 (JS 루프보다 10~50배 빠름)
+    const resp = await fetch(`data:application/octet-stream;base64,${b64}`);
+    const arrayBuf = await resp.arrayBuffer();
     let decoded: AudioBuffer;
     try {
-      decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
+      decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
     } catch {
-      // Gemini TTS PCM16 24kHz
-      const pcm = new Int16Array(bytes.buffer);
+      // Gemini TTS PCM16 24kHz fallback
+      const pcm = new Int16Array(arrayBuf);
       const buf = ctx.createBuffer(1, pcm.length, 24000);
       const ch = buf.getChannelData(0);
       for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
