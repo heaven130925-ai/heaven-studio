@@ -659,24 +659,20 @@ const App: React.FC = () => {
     }
   }, [currentReferenceImages]);
 
-  // 씬 음성 개별 생성 핸들러 (SubtitleEditor에서 호출)
-  const handleGenerateSceneAudio = useCallback(async (idx: number) => {
+  // 씬 음성 개별 생성 핸들러 (SubtitleEditor에서 호출) — audioData 반환
+  const handleGenerateSceneAudio = useCallback(async (idx: number): Promise<string | null> => {
     const scene = assetsRef.current[idx];
-    if (!scene?.narration?.trim()) return;
+    if (!scene?.narration?.trim()) return null;
     try {
-      // isAbortedRef 우회: 직접 assetsRef + setGeneratedData 사용
       const audioData = await generateAudioForScene(scene.narration);
-      if (audioData) {
-        if (assetsRef.current[idx]) {
-          assetsRef.current[idx] = { ...assetsRef.current[idx], audioData, audioDuration: null };
-          setGeneratedData([...assetsRef.current]);
-        }
-      } else {
-        alert(`씬 ${idx + 1} 음성 생성 실패: 응답 없음 (TTS 설정 확인 필요)`);
+      if (audioData && assetsRef.current[idx]) {
+        assetsRef.current[idx] = { ...assetsRef.current[idx], audioData, audioDuration: null };
+        setGeneratedData([...assetsRef.current]);
       }
+      return audioData;
     } catch (e: any) {
       console.error(`[TTS] 씬 ${idx + 1} 음성 생성 실패:`, e.message);
-      alert(`씬 ${idx + 1} 음성 생성 실패: ${e?.message || e}`);
+      return null;
     }
   }, []); // eslint-disable-line
 

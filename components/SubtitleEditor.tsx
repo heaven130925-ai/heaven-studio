@@ -20,7 +20,7 @@ interface Props {
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
   onSelectThumbnail?: (imageBase64: string) => void;
-  onGenerateAudio?: (index: number) => Promise<void>;
+  onGenerateAudio?: (index: number) => Promise<string | null>;
 }
 
 // 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
@@ -391,12 +391,12 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       return;
     }
 
-    if (!scene?.audioData) {
+    let audioData = scene?.audioData ?? null;
+    if (!audioData) {
       if (!onGenerateAudio) return;
       setIsGeneratingAudio(true);
-      try { await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
-      // 생성 후 scene은 부모에서 업데이트됨 — 다음 클릭에 재생됨
-      return;
+      try { audioData = await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
+      if (!audioData) return;
     }
     const thisPlayId = ++playIdRef.current;
     try {
@@ -408,7 +408,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       if (ctx.state === 'suspended') await ctx.resume();
       setIsPlaying(true);
 
-      const { buffer, contentDuration } = await decodeAudioBuffer(scene.audioData, ctx);
+      const { buffer, contentDuration } = await decodeAudioBuffer(audioData, ctx);
       if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
       isManualPauseRef.current = false;
 
