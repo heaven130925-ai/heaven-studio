@@ -21,6 +21,7 @@ interface Props {
   isExporting?: boolean;
   onSelectThumbnail?: (imageBase64: string) => void;
   onGenerateAudio?: (index: number) => Promise<string | null>;
+  onDeleteScene?: (index: number) => void;
 }
 
 // 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
@@ -127,7 +128,7 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
@@ -215,8 +216,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
-    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.1s 딜레이로 보정)
-    const DELAY = 0.1;
+    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.25s 딜레이로 보정)
+    const DELAY = 0.25;
     const tAdj = Math.max(0, t - DELAY);
     if (googleTtsGroups && googleTtsGroups.length > 0) {
       if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
@@ -905,13 +906,27 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 <p className="text-sm text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
               </div>
             </button>
-            {s.imageData && onSelectThumbnail && (
-              <button
-                onClick={() => onSelectThumbnail(s.imageData!)}
-                className="shrink-0 p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
-                title="썸네일로 선택"
-              >⭐</button>
-            )}
+            <div className="flex flex-col gap-1 shrink-0">
+              {s.imageData && onSelectThumbnail && (
+                <button
+                  onClick={() => onSelectThumbnail(s.imageData!)}
+                  className="p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
+                  title="썸네일로 선택"
+                >⭐</button>
+              )}
+              {onDeleteScene && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`씬 ${i + 1}을 삭제할까요?`)) {
+                      if (selectedIdx >= i && selectedIdx > 0) setSelectedIdx(selectedIdx - 1);
+                      onDeleteScene(i);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 transition-all text-xs font-bold"
+                  title="씬 삭제"
+                >✕</button>
+              )}
+            </div>
           </div>
         ))}
       </div>

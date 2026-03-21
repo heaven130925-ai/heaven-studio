@@ -706,6 +706,14 @@ const App: React.FC = () => {
     }
   }, []); // eslint-disable-line
 
+  // 씬 삭제 핸들러
+  const handleDeleteScene = useCallback((idx: number) => {
+    const updated = assetsRef.current.filter((_, i) => i !== idx)
+      .map((s, i) => ({ ...s, sceneNumber: i + 1 }));
+    assetsRef.current = updated;
+    setGeneratedData([...updated]);
+  }, []);
+
   // 프롬프트 수정 후 재생성 핸들러
   const handleRegenerateWithPrompt = useCallback(async (idx: number, customPrompt: string) => {
     if (assetsRef.current[idx]) {
@@ -1121,6 +1129,7 @@ const App: React.FC = () => {
                 isExporting={isVideoGenerating}
                 onSelectThumbnail={handleSelectThumbnail}
                 onGenerateAudio={handleGenerateSceneAudio}
+                onDeleteScene={handleDeleteScene}
                 onNarrationChange={(idx, val) => {
                   const updated = [...assetsRef.current];
                   // 자막 전체 비울 때만 오디오 삭제
