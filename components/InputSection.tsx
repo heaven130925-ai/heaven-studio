@@ -125,6 +125,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [topicSource, setTopicSource] = useState<'google' | 'youtube'>('google');
   const [youtubeChannels, setYoutubeChannels] = useState(localStorage.getItem('heaven_yt_channels') || '');
   const [youtubeApiKey, setYoutubeApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY) || '');
+  const [youtubeTimeRange, setYoutubeTimeRange] = useState<'3months' | '6months' | '1year' | 'all'>('6months');
   const [autoRunMode, setAutoRunMode] = useState(false);
   const [writingGuide, setWritingGuide] = useState(localStorage.getItem('heaven_writing_guide') || '');
   const [showWritingGuide, setShowWritingGuide] = useState(false);
@@ -588,9 +589,20 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 </button>
                               </div>
 
-                              {/* YouTube 채널 입력 */}
+                              {/* YouTube 설정 */}
                               {topicSource === 'youtube' && (
-                                <div className="flex flex-col gap-1">
+                                <div className="flex flex-col gap-1.5">
+                                  {/* 기간 선택 */}
+                                  <div className="flex gap-1">
+                                    {([['3months','3개월'],['6months','6개월'],['1year','1년'],['all','전체']] as const).map(([val, label]) => (
+                                      <button key={val} type="button" onClick={() => setYoutubeTimeRange(val)}
+                                        className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all border ${
+                                          youtubeTimeRange === val
+                                            ? 'bg-red-600/30 border-red-500/50 text-red-200'
+                                            : 'border-white/10 text-white/40 hover:text-white/70'
+                                        }`}>{label}</button>
+                                    ))}
+                                  </div>
                                   <input type="text" value={youtubeApiKey}
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeApiKey(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY, e.target.value); }}
                                     placeholder="YouTube Data API 키"
@@ -611,8 +623,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                   try {
                                     let result;
                                     if (topicSource === 'youtube') {
-                                      const channelIds = youtubeChannels.split(',').map(s => s.trim()).filter(Boolean);
-                                      result = await findYouTubeTopics(selectedCategory, channelIds);
+                                      const channelIds = youtubeChannels.split(',').map((s: string) => s.trim()).filter(Boolean);
+                                      result = await findYouTubeTopics(selectedCategory, channelIds, youtubeTimeRange);
                                     } else {
                                       result = await findTrendingTopics(selectedCategory, []);
                                     }

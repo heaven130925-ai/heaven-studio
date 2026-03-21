@@ -253,49 +253,117 @@ const retryGeminiRequest = async <T>(
   throw lastError;
 };
 
-// YouTube Data API로 인기 채널에서 주제 추출
-export const findYouTubeTopics = async (category: string, channelIds: string[]): Promise<Array<{rank: number; topic: string; reason: string}>> => {
+// YouTube Data API로 바이럴 영상 기반 주제 추출
+// - timeRange: 기간 필터 (3months/6months/1year/all)
+// - 바이럴 지수 = 조회수 ÷ 구독자수 (구독자 대비 폭발적 조회수 우선)
+export const findYouTubeTopics = async (
+  category: string,
+  channelIds: string[],
+  timeRange: '3months' | '6months' | '1year' | 'all' = '6months'
+): Promise<Array<{rank: number; topic: string; reason: string}>> => {
   const apiKey = localStorage.getItem('heaven_youtube_key') || '';
   if (!apiKey) throw new Error('YouTube API 키가 없습니다. 설정에서 입력해주세요.');
 
-  // 채널별 인기 영상 수집
-  const allTitles: string[] = [];
-  const channels = channelIds.length > 0 ? channelIds : [];
+  const BASE = 'https://www.googleapis.com/youtube/v3';
 
-  if (channels.length === 0) {
-    // 채널 없으면 키워드 검색
-    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(category)}&type=video&order=viewCount&maxResults=20&regionCode=KR&relevanceLanguage=ko&key=${apiKey}`;
-    const res = await fetch(searchUrl);
-    if (!res.ok) throw new Error(`YouTube API 오류: ${res.status}`);
-    const data = await res.json();
-    for (const item of (data.items || [])) {
-      allTitles.push(item.snippet?.title || '');
+  // 기간 계산
+  let publishedAfter = '';
+  if (timeRange !== 'all') {
+    const d = new Date();
+    if (timeRange === '3months') d.setMonth(d.getMonth() - 3);
+    else if (timeRange === '6months') d.setMonth(d.getMonth() - 6);
+    else if (timeRange === '1year') d.setFullYear(d.getFullYear() - 1);
+    publishedAfter = d.toISOString();
+  }
+
+  // 1단계: 영상 검색
+  const allVideoIds: string[] = [];
+  const videoChannelMap: Record<string, string> = {};
+  const videoTitles: Record<string, string> = {};
+
+  const searchItems = async (params: Record<string, string>) => {
+    const qs = new URLSearchParams({ ...params, key: apiKey, ...(publishedAfter ? { publishedAfter } : {}) });
+    const res = await fetch(`${BASE}/search?${qs}`);
+    if (!res.ok) throw new Error(`YouTube 검색 오류: ${res.status}`);
+    return (await res.json()).items || [];
+  };
+
+  if (channelIds.length > 0) {
+    for (const channelId of channelIds.slice(0, 4)) {
+      const items = await searchItems({ part: 'snippet', channelId: channelId.trim(), type: 'video', maxResults: '30', order: 'date' });
+      for (const item of items) {
+        const vid = item.id?.videoId; if (!vid) continue;
+        allVideoIds.push(vid);
+        videoChannelMap[vid] = item.snippet?.channelId || '';
+        videoTitles[vid] = item.snippet?.title || '';
+      }
     }
   } else {
-    for (const channelId of channels.slice(0, 3)) {
-      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId.trim()}&type=video&order=viewCount&maxResults=15&key=${apiKey}`;
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const data = await res.json();
-      for (const item of (data.items || [])) {
-        allTitles.push(item.snippet?.title || '');
-      }
+    const items = await searchItems({ part: 'snippet', q: category, type: 'video', maxResults: '50', order: 'viewCount', regionCode: 'KR', relevanceLanguage: 'ko' });
+    for (const item of items) {
+      const vid = item.id?.videoId; if (!vid) continue;
+      allVideoIds.push(vid);
+      videoChannelMap[vid] = item.snippet?.channelId || '';
+      videoTitles[vid] = item.snippet?.title || '';
     }
   }
 
-  if (allTitles.length === 0) throw new Error('YouTube에서 영상을 찾지 못했습니다.');
+  if (allVideoIds.length === 0) throw new Error('해당 기간에 영상을 찾지 못했습니다.');
 
-  // Gemini로 제목 분석 → 주제 추출
+  // 2단계: 영상 조회수 배치 조회
+  const videoStats: Record<string, number> = {};
+  for (let i = 0; i < allVideoIds.length; i += 50) {
+    const chunk = allVideoIds.slice(i, i + 50);
+    const qs = new URLSearchParams({ part: 'statistics', id: chunk.join(','), key: apiKey });
+    const res = await fetch(`${BASE}/videos?${qs}`);
+    if (!res.ok) continue;
+    for (const item of (await res.json()).items || []) {
+      videoStats[item.id] = parseInt(item.statistics?.viewCount || '0');
+    }
+  }
+
+  // 3단계: 채널 구독자수 배치 조회
+  const uniqueChannelIds = [...new Set(Object.values(videoChannelMap))].filter(Boolean);
+  const channelStats: Record<string, number> = {};
+  for (let i = 0; i < uniqueChannelIds.length; i += 50) {
+    const chunk = uniqueChannelIds.slice(i, i + 50);
+    const qs = new URLSearchParams({ part: 'statistics', id: chunk.join(','), key: apiKey });
+    const res = await fetch(`${BASE}/channels?${qs}`);
+    if (!res.ok) continue;
+    for (const item of (await res.json()).items || []) {
+      channelStats[item.id] = parseInt(item.statistics?.subscriberCount || '1');
+    }
+  }
+
+  // 4단계: 바이럴 지수 계산 (조회수 ÷ 구독자수) → 정렬
+  const viralVideos = allVideoIds
+    .map(vid => {
+      const views = videoStats[vid] || 0;
+      const subs = Math.max(channelStats[videoChannelMap[vid]] || 1, 1);
+      return { title: videoTitles[vid], views, subs, viralRatio: Math.round(views / subs) };
+    })
+    .filter(v => v.views > 0)
+    .sort((a, b) => b.viralRatio - a.viralRatio)
+    .slice(0, 20);
+
+  if (viralVideos.length === 0) throw new Error('통계 데이터를 가져오지 못했습니다.');
+
+  // 5단계: Gemini로 바이럴 패턴 분석 → 새 주제 추천
   const ai = getAI();
-  const prompt = `다음은 유튜브 인기 영상 제목 목록입니다:
-${allTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+  const videoList = viralVideos.map((v, i) =>
+    `${i + 1}. "${v.title}" — 조회수 ${v.views.toLocaleString()} / 구독자 ${v.subs.toLocaleString()} → 바이럴 지수 ${v.viralRatio}배`
+  ).join('\n');
 
-위 제목들에서 "${category}" 카테고리와 관련된 영상 주제를 분석해서,
-비슷한 스타일로 새 영상에서 다룰 수 있는 주제 10개를 추천해주세요.
-제목 그대로 복사하지 말고, 영감을 받아 새로운 주제를 만들어주세요.
+  const prompt = `다음은 "${category}" 카테고리에서 바이럴 지수(조회수÷구독자) 기준 상위 유튜브 영상들입니다 (기간: ${timeRange === 'all' ? '전체' : timeRange === '1year' ? '최근 1년' : timeRange === '6months' ? '최근 6개월' : '최근 3개월'}):
 
-JSON 배열로만 답하세요:
-[{"rank":1,"topic":"주제 제목","reason":"이유"},...]`;
+${videoList}
+
+바이럴 지수가 높을수록 구독자 수에 비해 폭발적인 조회수를 얻은 영상입니다.
+이 영상들의 성공 패턴을 분석해서, 비슷한 방식으로 새 영상에서 다룰 수 있는 참신한 주제 10개를 추천해주세요.
+제목을 그대로 복사하지 말고 영감을 받아 새 주제로 만드세요.
+
+JSON 배열로만:
+[{"rank":1,"topic":"주제 제목","reason":"바이럴 패턴 분석 포함한 이유"},...]`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
