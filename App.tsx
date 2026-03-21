@@ -350,23 +350,24 @@ const App: React.FC = () => {
       const runAudio = async () => {
           const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
 
-          if (ttsProvider === 'google') {
-            // ── Google TTS: 씬별 개별 생성 (음성 잘림 방지) ──
+          if (ttsProvider === 'google' || ttsProvider === 'gcloud') {
+            // ── Google TTS / Google Cloud TTS: 씬별 개별 생성 ──
+            const providerLabel = ttsProvider === 'gcloud' ? 'Cloud TTS' : 'Google TTS';
             for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) return;
-              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중...`);
+              setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중... (${providerLabel})`);
               try {
                 const audioData = await generateAudioForScene(initialAssets[i].narration);
                 if (!isAbortedRef.current) {
                   updateAssetAt(i, { audioData: audioData ?? null });
-                  console.log(`[TTS] 씬 ${i + 1} Google TTS 완료`);
+                  console.log(`[TTS] 씬 ${i + 1} ${providerLabel} 완료`);
                 }
               } catch (e: any) {
-                console.error(`[TTS] 씬 ${i + 1} Google TTS 실패:`, e.message);
-                setProgressMessage(`⚠️ 씬 ${i + 1} Google TTS 실패: ${e?.message || e}`);
+                console.error(`[TTS] 씬 ${i + 1} ${providerLabel} 실패:`, e.message);
+                setProgressMessage(`⚠️ 씬 ${i + 1} ${providerLabel} 실패: ${e?.message || e}`);
               }
               if (i < initialAssets.length - 1 && !isAbortedRef.current) {
-                await wait(500);
+                await wait(300);
               }
             }
             return;
