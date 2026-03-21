@@ -132,6 +132,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [autoGenProgress, setAutoGenProgress] = useState<string | null>(null);
+  const autoGenDoneRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
@@ -163,6 +165,23 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
   const [useMeaningChunks, setUseMeaningChunks] = useState(true);
+
+  // ── 자막 탭 진입 시 음성 없는 씬 자동 생성 ──
+  useEffect(() => {
+    if (!onGenerateAudio || autoGenDoneRef.current) return;
+    const missing = scenes.map((s, i) => i).filter(i => scenes[i]?.narration?.trim() && !scenes[i]?.audioData);
+    if (missing.length === 0) return;
+    autoGenDoneRef.current = true;
+    (async () => {
+      for (let k = 0; k < missing.length; k++) {
+        const idx = missing[k];
+        setAutoGenProgress(`음성 생성 중... ${k + 1}/${missing.length}씬`);
+        try { await onGenerateAudio(idx); } catch {}
+      }
+      setAutoGenProgress(null);
+    })();
+  }, []); // eslint-disable-line
+
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
@@ -651,6 +670,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             </div>
           )}
         </div>
+
+        {/* 자동 음성 생성 진행 표시 */}
+        {autoGenProgress && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-blue-900/30 border-b border-blue-500/20 text-blue-300 text-xs font-bold shrink-0">
+            <div className="w-3 h-3 border-2 border-blue-300/40 border-t-blue-300 rounded-full animate-spin" />
+            {autoGenProgress}
+          </div>
+        )}
 
         {/* 오디오 플레이어 */}
         <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-900 border-b border-white/[0.07] shrink-0">
