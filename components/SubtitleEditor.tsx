@@ -165,18 +165,18 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   const [useMeaningChunks, setUseMeaningChunks] = useState(true);
 
-  // ── audioData가 바뀌면 백그라운드에서 미리 디코딩 → 캐시 ──
+  // ── audioData가 바뀌면 백그라운드에서 즉시 디코딩 → 캐시 ──
   useEffect(() => {
     const audioData = scenes[selectedIdx]?.audioData;
     if (!audioData) return;
     const idx = selectedIdx;
     decodedCacheRef.current.delete(idx);
-    let ctx = audioCtxRef.current;
-    if (!ctx || ctx.state === 'closed') {
+    // AudioContext 없으면 생성 (suspended 상태여도 decodeAudioData는 동작함)
+    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
       const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
-      try { ctx = new AC(); audioCtxRef.current = ctx; } catch { return; }
+      try { audioCtxRef.current = new AC(); } catch { return; }
     }
-    decodeAudioBuffer(audioData, ctx).then(result => {
+    decodeAudioBuffer(audioData, audioCtxRef.current).then(result => {
       decodedCacheRef.current.set(idx, result);
     }).catch(() => {});
   }, [selectedIdx, scenes[selectedIdx]?.audioData]); // eslint-disable-line
@@ -339,17 +339,23 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     return result;
   }
 
-  // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) — 끝 0.6s 패딩 추가 ──
+  // ── AudioBuffer 디코더 (MP3 + PCM16 자동 감지) — 끝 패딩 추가 ──
   async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
     const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
-    // fetch 로 네이티브 base64 디코딩 (JS 루프보다 10~50배 빠름)
     const resp = await fetch(`data:application/octet-stream;base64,${b64}`);
     const arrayBuf = await resp.arrayBuffer();
+    const hdr = new Uint8Array(arrayBuf, 0, 4);
+    // MP3(0xFF Ex), ID3, OGG, RIFF(WAV), AAC 헤더 감지 → decodeAudioData 사용
+    const isMp3OrContainer =
+      (hdr[0] === 0xFF && (hdr[1] & 0xE0) === 0xE0) ||
+      (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) ||
+      (hdr[0] === 0x4F && hdr[1] === 0x67) ||
+      (hdr[0] === 0x52 && hdr[1] === 0x49);
     let decoded: AudioBuffer;
-    try {
+    if (isMp3OrContainer) {
       decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
-    } catch {
-      // Gemini TTS PCM16 24kHz fallback
+    } else {
+      // Gemini TTS: PCM16 24kHz raw — decodeAudioData 시도 없이 바로 변환
       const pcm = new Int16Array(arrayBuf);
       const buf = ctx.createBuffer(1, pcm.length, 24000);
       const ch = buf.getChannelData(0);
