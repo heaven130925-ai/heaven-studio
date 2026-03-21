@@ -92,12 +92,16 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   const [googleTtsTone, setGoogleTtsTone] = useState<string>(localStorage.getItem('heaven_google_tts_tone_id') || '');
   const [googleTtsMood, setGoogleTtsMood] = useState<string>(localStorage.getItem('heaven_google_tts_mood_id') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
-  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud'>(
-    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud') || 'elevenlabs'
+  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud' | 'azure'>(
+    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure') || 'elevenlabs'
   );
   const [gcloudApiKey, setGcloudApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '');
   const [gcloudVoice, setGcloudVoice] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A');
   const [playingGcloudVoice, setPlayingGcloudVoice] = useState<string | null>(null);
+  const [azureApiKey, setAzureApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '');
+  const [azureRegion, setAzureRegion] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) || '');
+  const [azureVoice, setAzureVoice] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE) || 'ko-KR-SunHiNeural');
+  const [playingAzureVoice, setPlayingAzureVoice] = useState<string | null>(null);
 
   // Google TTS
   const [geminiTtsVoice, setGeminiTtsVoice] = useState<GeminiTtsVoiceId>(CONFIG.DEFAULT_GEMINI_TTS_VOICE);
@@ -1072,6 +1076,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         Gemini TTS
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
                       </button>
+                      <button type="button" onClick={() => { setVoiceSubTab('azure'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'azure'); }}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'azure' ? 'bg-sky-600/20 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
+                        Azure TTS
+                        <span className={`w-1.5 h-1.5 rounded-full ${azureApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
+                      </button>
                       <button type="button" onClick={() => { setVoiceSubTab('gcloud'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'gcloud'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'gcloud' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Cloud TTS
@@ -1217,6 +1226,91 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               )}
                             </div>
                             <button type="button" onClick={saveElSettings} className="shrink-0 w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-xl text-sm">설정 저장</button>
+                      </div>
+                    )}
+
+                    {voiceSubTab === 'azure' && (
+                      <div className="flex-1 flex flex-col min-h-0 gap-3">
+                        {/* API 키 */}
+                        <div className="shrink-0 space-y-1.5">
+                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">Azure Speech API Key</label>
+                          {azureApiKey && localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) === azureApiKey ? (
+                            <div className="flex gap-2 items-center">
+                              <span className="flex-1 bg-slate-800 border border-emerald-600/50 rounded-xl px-3 py-2 text-emerald-400 text-sm">✓ 저장됨 ({azureApiKey.slice(0,6)}••••)</span>
+                              <button type="button" onClick={() => { setAzureApiKey(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY); }}
+                                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">변경</button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input type="password" value={azureApiKey} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAzureApiKey(e.target.value)}
+                                placeholder="Azure API 키"
+                                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500"/>
+                              <button type="button" onClick={() => { localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY, azureApiKey); }}
+                                className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold">저장</button>
+                            </div>
+                          )}
+                        </div>
+                        {/* 지역 */}
+                        <div className="shrink-0 space-y-1.5">
+                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">지역 (Region)</label>
+                          {azureRegion && localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) === azureRegion ? (
+                            <div className="flex gap-2 items-center">
+                              <span className="flex-1 bg-slate-800 border border-emerald-600/50 rounded-xl px-3 py-2 text-emerald-400 text-sm">✓ {azureRegion}</span>
+                              <button type="button" onClick={() => { setAzureRegion(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION); }}
+                                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">변경</button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input type="text" value={azureRegion} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAzureRegion(e.target.value)}
+                                placeholder="koreacentral / japaneast"
+                                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500"/>
+                              <button type="button" onClick={() => { localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION, azureRegion); }}
+                                className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold">저장</button>
+                            </div>
+                          )}
+                        </div>
+                        {/* 목소리 선택 */}
+                        <div className="shrink-0 space-y-1.5">
+                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">목소리 선택</label>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(['ko-KR-SunHiNeural','ko-KR-InJoonNeural','ko-KR-JiMinNeural','ko-KR-SeoHyeonNeural','ko-KR-YuJinNeural','ko-KR-BongJinNeural','ko-KR-GookMinNeural','ko-KR-SoonBokNeural','ko-KR-HyunsuMultilingualNeural'] as const).map(v => {
+                              const labels: Record<string, string> = {
+                                'ko-KR-SunHiNeural': 'SunHi 여',
+                                'ko-KR-InJoonNeural': 'InJoon 남',
+                                'ko-KR-JiMinNeural': 'JiMin 여',
+                                'ko-KR-SeoHyeonNeural': 'SeoHyeon 여',
+                                'ko-KR-YuJinNeural': 'YuJin 여',
+                                'ko-KR-BongJinNeural': 'BongJin 남',
+                                'ko-KR-GookMinNeural': 'GookMin 남',
+                                'ko-KR-SoonBokNeural': 'SoonBok 여',
+                                'ko-KR-HyunsuMultilingualNeural': 'Hyunsu 남',
+                              };
+                              const isSelected = azureVoice === v;
+                              return (
+                                <button key={v} type="button"
+                                  onClick={async () => {
+                                    setAzureVoice(v);
+                                    localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE, v);
+                                    if (!azureApiKey || !azureRegion) return;
+                                    setPlayingAzureVoice(v);
+                                    try {
+                                      const { previewAzureTTS } = await import('../services/azureTTSService');
+                                      const b64 = await previewAzureTTS('안녕하세요. 테스트 목소리입니다.', v);
+                                      if (b64) new Audio(`data:audio/mp3;base64,${b64}`).play();
+                                    } catch {}
+                                    setPlayingAzureVoice(null);
+                                  }}
+                                  className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition-colors ${isSelected ? 'bg-sky-600/20 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
+                                  {playingAzureVoice === v ? '▶ 재생 중' : labels[v]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <p className="shrink-0 text-[10px] text-slate-500 bg-slate-800/50 rounded-xl p-2">
+                          월 500,000자 무료 · 이후 $16/100만자<br/>
+                          SunHi·InJoon 추천 (자연스러운 한국어)
+                        </p>
                       </div>
                     )}
 

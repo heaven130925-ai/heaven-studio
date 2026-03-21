@@ -1358,6 +1358,39 @@ export const generateAllScenesAudio = async (
 export const generateAudioForScene = async (text: string): Promise<string | null> => {
   const provider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'google';
 
+  // Azure TTS 경로 (Neural — MP3 반환, 월 50만자 무료)
+  if (provider === 'azure') {
+    const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '';
+    if (!apiKey) {
+      console.warn('[TTS] Azure API 키 없음 → Gemini TTS 폴백');
+    } else {
+      try {
+        const { generateAzureTTS } = await import('./azureTTSService');
+        const chunks = splitTtsText(text, 4500);
+        if (chunks.length === 1) return await generateAzureTTS(chunks[0]);
+        const parts: string[] = [];
+        for (const chunk of chunks) {
+          const b64 = await generateAzureTTS(chunk);
+          if (b64) parts.push(b64);
+        }
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+        const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+        const total = buffers.reduce((sum, b) => sum + b.length, 0);
+        const merged = new Uint8Array(total);
+        let off = 0;
+        for (const buf of buffers) { merged.set(buf, off); off += buf.length; }
+        let binary = '';
+        for (let i = 0; i < merged.length; i += 65536) {
+          binary += String.fromCharCode(...merged.subarray(i, i + 65536));
+        }
+        return btoa(binary);
+      } catch (e) {
+        console.warn('[TTS] Azure 실패 → Gemini TTS 폴백:', e);
+      }
+    }
+  }
+
   // Google Cloud TTS 경로 (Neural2/Wavenet — MP3 반환, 한도 없음)
   if (provider === 'gcloud') {
     const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '';
