@@ -11,7 +11,7 @@ import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
 import { generateVideoFromImage, generateTextToVideo, getFalApiKey } from './services/falService';
-import { saveProject, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
+import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [inputActiveTab, setInputActiveTab] = useState<'auto' | 'manual'>('auto');
   const [inputManualScript, setInputManualScript] = useState<string>('');
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
+  const currentProjectIdRef = useRef<string | null>(null); // 현재 열린 프로젝트 ID (자동저장용)
   // 참조 이미지 상태 (강도 포함)
   const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const [needsKey, setNeedsKey] = useState(false);
@@ -146,6 +147,16 @@ const App: React.FC = () => {
     if (assetsRef.current[index]) {
       assetsRef.current[index] = { ...assetsRef.current[index], ...updates };
       if (!audioOnlyRef.current) setGeneratedData([...assetsRef.current]);
+    }
+  };
+
+  // 현재 프로젝트 자동저장 (이미지 편집 후 호출)
+  const autoSaveProject = async () => {
+    if (!currentProjectIdRef.current) return;
+    try {
+      await updateProjectAssets(currentProjectIdRef.current, assetsRef.current);
+    } catch (e) {
+      console.error('[AutoSave] 자동저장 실패:', e);
     }
   };
 
@@ -623,6 +634,7 @@ const App: React.FC = () => {
       // 자동 저장 (비용 정보 포함)
       try {
         const savedProject = await saveProject(targetTopic, assetsRef.current, undefined, costRef.current);
+        currentProjectIdRef.current = savedProject.id;
         refreshProjects();
         setProgressMessage(`"${savedProject.name}" 저장됨 | ${costMsg}`);
       } catch (e) {
@@ -670,6 +682,7 @@ const App: React.FC = () => {
           addCost('image', imagePrice, 1);
           setProgressMessage(`씬 ${idx + 1} 이미지 재생성 완료! (+${formatKRW(imagePrice)})`);
           success = true;
+          autoSaveProject();
         } else if (!img) {
           throw new Error('이미지 데이터가 비어있습니다');
         }
@@ -712,7 +725,8 @@ const App: React.FC = () => {
       .map((s, i) => ({ ...s, sceneNumber: i + 1 }));
     assetsRef.current = updated;
     setGeneratedData([...updated]);
-  }, []);
+    autoSaveProject();
+  }, []); // eslint-disable-line
 
   // 프롬프트 수정 후 재생성 핸들러
   const handleRegenerateWithPrompt = useCallback(async (idx: number, customPrompt: string) => {
@@ -856,6 +870,7 @@ const App: React.FC = () => {
 
   // 프로젝트 불러오기 핸들러
   const handleLoadProject = (project: SavedProject) => {
+    currentProjectIdRef.current = project.id; // 불러온 프로젝트 ID 추적
     // 저장된 에셋을 현재 상태로 로드
     assetsRef.current = project.assets;
     setGeneratedData([...project.assets]);
@@ -1158,6 +1173,7 @@ const App: React.FC = () => {
                     if (edited) {
                       updateAssetAt(idx, { imageData: edited, status: 'completed' });
                       setProgressMessage(`씬 ${idx + 1} 이미지 편집 완료`);
+                      autoSaveProject();
                     } else {
                       updateAssetAt(idx, { status: 'error' });
                       setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패`);

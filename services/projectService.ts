@@ -120,6 +120,43 @@ export async function saveProject(
 }
 
 /**
+ * 기존 프로젝트 에셋 업데이트 (ID 유지)
+ */
+export async function updateProjectAssets(
+  projectId: string,
+  assets: GeneratedAsset[]
+): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([STORE_NAME], 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    // 기존 프로젝트 읽기
+    const getReq = store.get(projectId);
+    getReq.onsuccess = async () => {
+      const existing: SavedProject | undefined = getReq.result;
+      if (!existing) { resolve(); return; }
+      // 썸네일 업데이트 (첫 번째 이미지)
+      const firstImageAsset = assets.find(a => a.imageData);
+      const thumbnail = firstImageAsset?.imageData
+        ? await createThumbnail(firstImageAsset.imageData)
+        : existing.thumbnail;
+      const updated: SavedProject = {
+        ...existing,
+        assets: assets.map(a => ({ ...a })),
+        thumbnail,
+      };
+      const putReq = store.put(updated);
+      putReq.onsuccess = () => {
+        console.log(`[Project] 프로젝트 자동 저장 완료: ${existing.name}`);
+        resolve();
+      };
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+/**
  * 저장된 프로젝트 목록 가져오기
  */
 export async function getSavedProjects(): Promise<SavedProject[]> {
