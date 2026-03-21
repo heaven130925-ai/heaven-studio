@@ -179,7 +179,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     decodeAudioBuffer(audioData, ctx).then(result => {
       decodedCacheRef.current.set(idx, result);
     }).catch(() => {});
-  }, [selectedIdx, scene?.audioData]); // eslint-disable-line
+  }, [selectedIdx, scenes[selectedIdx]?.audioData]); // eslint-disable-line
 
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
