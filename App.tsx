@@ -659,6 +659,22 @@ const App: React.FC = () => {
     }
   }, [currentReferenceImages]);
 
+  // 씬 음성 개별 생성 핸들러 (SubtitleEditor에서 호출)
+  const handleGenerateSceneAudio = useCallback(async (idx: number) => {
+    const scene = assetsRef.current[idx];
+    if (!scene?.narration?.trim()) return;
+    try {
+      const audioData = await generateAudioForScene(scene.narration);
+      if (audioData) {
+        updateAssetAt(idx, { audioData, audioDuration: null });
+        setGeneratedData([...assetsRef.current]);
+      }
+    } catch (e: any) {
+      console.error(`[TTS] 씬 ${idx + 1} 음성 생성 실패:`, e.message);
+      alert(`씬 ${idx + 1} 음성 생성 실패: ${e?.message || e}`);
+    }
+  }, []); // eslint-disable-line
+
   // 프롬프트 수정 후 재생성 핸들러
   const handleRegenerateWithPrompt = useCallback(async (idx: number, customPrompt: string) => {
     if (assetsRef.current[idx]) {
@@ -1073,6 +1089,7 @@ const App: React.FC = () => {
                 onExportVideo={triggerVideoExport}
                 isExporting={isVideoGenerating}
                 onSelectThumbnail={handleSelectThumbnail}
+                onGenerateAudio={handleGenerateSceneAudio}
                 onNarrationChange={(idx, val) => {
                   const updated = [...assetsRef.current];
                   // 자막 전체 비울 때만 오디오 삭제

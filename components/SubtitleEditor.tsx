@@ -20,6 +20,7 @@ interface Props {
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
   onSelectThumbnail?: (imageBase64: string) => void;
+  onGenerateAudio?: (index: number) => Promise<void>;
 }
 
 // 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
@@ -126,10 +127,11 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
@@ -668,6 +670,20 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
             }
           </button>
+          {!hasAudio && onGenerateAudio && (
+            <button
+              onClick={async () => {
+                setIsGeneratingAudio(true);
+                try { await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
+              }}
+              disabled={isGeneratingAudio}
+              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/35 disabled:opacity-40 transition-all shrink-0 flex items-center gap-1"
+            >
+              {isGeneratingAudio
+                ? <><div className="w-3 h-3 border-2 border-blue-300/40 border-t-blue-300 rounded-full animate-spin" />생성 중</>
+                : '음성 생성'}
+            </button>
+          )}
           <div
             ref={progressBarRef}
             className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
