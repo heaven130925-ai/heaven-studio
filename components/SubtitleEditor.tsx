@@ -215,8 +215,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
-    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.4s 딜레이로 보정)
-    const DELAY = 0.4;
+    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.2s 딜레이로 보정)
+    const DELAY = 0.2;
     const tAdj = Math.max(0, t - DELAY);
     if (googleTtsGroups && googleTtsGroups.length > 0) {
       if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
@@ -302,11 +302,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (cur.trim()) chunks.push(cur.trim());
     if (chunks.length === 0) return [];
 
-    // 구두점 pause 가중치 — 문장 끝 실제 pause를 반영해 자막 drift 방지
+    // 구두점 pause 가중치
     const weights = chunks.map(c => {
       let w = c.length;
-      w += (c.match(/[.!?。！？]/g) || []).length * 6;  // 문장 끝 긴 pause
-      w += (c.match(/[,，、]/g) || []).length * 3;       // 쉼표 짧은 pause
+      w += (c.match(/[.!?。！？]/g) || []).length * 3;
+      w += (c.match(/[,，、]/g) || []).length * 1;
       return Math.max(w, 2);
     });
     const total = weights.reduce((a, b) => a + b, 0);
@@ -405,9 +405,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       setIsGeneratingAudio(true);
       try { audioData = await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
       if (!audioData) return;
-      el = new Audio(audioDataUrl(audioData));
-      el.preload = 'auto';
-      audioRef.current = el;
+      // preload effect가 이미 element를 만들었으면 재사용, 없으면 새로 생성
+      if (!audioRef.current) {
+        el = new Audio(audioDataUrl(audioData));
+        el.preload = 'auto';
+        audioRef.current = el;
+      } else {
+        el = audioRef.current;
+      }
     } else {
       el = audioRef.current;
     }
