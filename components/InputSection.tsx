@@ -1056,19 +1056,6 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {/* 🎙️ 음성 설정 패널 */}
                 {activePanel === 'voice' && (
                   <div className="flex-1 flex flex-col min-h-0 gap-2">
-                    {/* 말하기 속도 */}
-                    <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
-                      <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
-                      <div className="flex gap-2">
-                        {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
-                          <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
-                            className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* TTS 제공자 탭 */}
                     <div className="flex gap-2 shrink-0">
                       <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
@@ -1139,6 +1126,18 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 </div>
                               ))}
                             </div>
+                            {/* 말하기 속도 */}
+                            <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                              <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
+                              <div className="flex gap-2">
+                                {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                                  <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
+                                    className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-purple-500/30'}`}>
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                             {/* 톤 프리셋 - 안정성(stability) 제어 */}
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
@@ -1167,19 +1166,6 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               </div>
                             </div>
 
-                            {/* 안정성/스타일 슬라이더 */}
-                            <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)] space-y-2">
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm text-slate-400 w-14">안정성</span>
-                                <input type="range" min={0} max={100} value={voiceStability} onChange={(e) => { changeVoiceStability(Number(e.target.value)); setVoiceTone(''); localStorage.removeItem('heaven_voice_tone'); }} className="flex-1 accent-purple-500" />
-                                <span className="text-sm text-purple-400 w-8 text-right">{voiceStability}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm text-slate-400 w-14">스타일</span>
-                                <input type="range" min={0} max={100} value={voiceStyle} onChange={(e) => { changeVoiceStyle(Number(e.target.value)); setVoiceMoodPreset(''); localStorage.removeItem('heaven_voice_mood'); }} className="flex-1 accent-purple-500" />
-                                <span className="text-sm text-purple-400 w-8 text-right">{voiceStyle}</span>
-                              </div>
-                            </div>
                             {/* 분위기 프리셋 - 스타일(style) 제어 */}
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 <span className="text-slate-600 normal-case font-normal">(톤과 동시 선택 가능)</span></p>
@@ -1269,47 +1255,115 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </div>
                           )}
                         </div>
-                        {/* 목소리 선택 */}
-                        <div className="shrink-0 space-y-1.5">
-                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">목소리 선택</label>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            {(['ko-KR-SunHiNeural','ko-KR-InJoonNeural','ko-KR-JiMinNeural','ko-KR-SeoHyeonNeural','ko-KR-YuJinNeural','ko-KR-BongJinNeural','ko-KR-GookMinNeural','ko-KR-SoonBokNeural','ko-KR-HyunsuMultilingualNeural'] as const).map(v => {
-                              const labels: Record<string, string> = {
-                                'ko-KR-SunHiNeural': 'SunHi 여',
-                                'ko-KR-InJoonNeural': 'InJoon 남',
-                                'ko-KR-JiMinNeural': 'JiMin 여',
-                                'ko-KR-SeoHyeonNeural': 'SeoHyeon 여',
-                                'ko-KR-YuJinNeural': 'YuJin 여',
-                                'ko-KR-BongJinNeural': 'BongJin 남',
-                                'ko-KR-GookMinNeural': 'GookMin 남',
-                                'ko-KR-SoonBokNeural': 'SoonBok 여',
-                                'ko-KR-HyunsuMultilingualNeural': 'Hyunsu 남',
-                              };
-                              const isSelected = azureVoice === v;
-                              return (
-                                <button key={v} type="button"
-                                  onClick={async () => {
-                                    setAzureVoice(v);
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE, v);
-                                    if (!azureApiKey || !azureRegion) return;
-                                    setPlayingAzureVoice(v);
-                                    try {
-                                      const { previewAzureTTS } = await import('../services/azureTTSService');
-                                      const b64 = await previewAzureTTS('안녕하세요. 테스트 목소리입니다.', v);
-                                      if (b64) new Audio(`data:audio/mp3;base64,${b64}`).play();
-                                    } catch {}
-                                    setPlayingAzureVoice(null);
-                                  }}
-                                  className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition-colors ${isSelected ? 'bg-sky-600/20 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
-                                  {playingAzureVoice === v ? '▶ 재생 중' : labels[v]}
-                                </button>
-                              );
-                            })}
+                        {/* 성우 선택 - Gemini 스타일 리스트 */}
+                        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.12)]">
+                          {([
+                            { id: 'ko-KR-SunHiNeural', label: 'SunHi', desc: '여성 · 기본 추천', gender: 'female' },
+                            { id: 'ko-KR-InJoonNeural', label: 'InJoon', desc: '남성 · 기본 추천', gender: 'male' },
+                            { id: 'ko-KR-JiMinNeural', label: 'JiMin', desc: '여성 · 활기찬', gender: 'female' },
+                            { id: 'ko-KR-SeoHyeonNeural', label: 'SeoHyeon', desc: '여성 · 차분한', gender: 'female' },
+                            { id: 'ko-KR-YuJinNeural', label: 'YuJin', desc: '여성', gender: 'female' },
+                            { id: 'ko-KR-BongJinNeural', label: 'BongJin', desc: '남성', gender: 'male' },
+                            { id: 'ko-KR-GookMinNeural', label: 'GookMin', desc: '남성', gender: 'male' },
+                            { id: 'ko-KR-SoonBokNeural', label: 'SoonBok', desc: '여성 · 노인', gender: 'female' },
+                            { id: 'ko-KR-HyunsuMultilingualNeural', label: 'Hyunsu', desc: '남성 · 다국어', gender: 'male' },
+                          ] as { id: string; label: string; desc: string; gender: string }[]).map(voice => (
+                            <div key={voice.id} className={`flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.05] hover:bg-white/[0.05] transition-colors ${azureVoice === voice.id ? 'bg-sky-600/20' : ''}`}>
+                              <button type="button" onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!azureApiKey || !azureRegion) return;
+                                setPlayingAzureVoice(voice.id);
+                                try {
+                                  const { previewAzureTTS } = await import('../services/azureTTSService');
+                                  const b64 = await previewAzureTTS('안녕하세요. 테스트 목소리입니다.', voice.id);
+                                  if (b64) new Audio(`data:audio/mp3;base64,${b64}`).play();
+                                } catch {}
+                                setPlayingAzureVoice(null);
+                              }}
+                                className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs ${playingAzureVoice === voice.id ? 'bg-sky-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-sky-600 hover:text-white'}`}>
+                                {playingAzureVoice === voice.id ? '■' : '▶'}
+                              </button>
+                              <button type="button" onClick={() => { setAzureVoice(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE, voice.id); }} className="flex-1 text-left">
+                                <div className="text-sm text-white font-bold">{voice.label}</div>
+                                <div className="text-xs text-slate-500">{voice.desc}</div>
+                              </button>
+                              {voice.gender === 'male'
+                                ? <span className="text-[10px] text-blue-400 font-bold">남</span>
+                                : <span className="text-[10px] text-pink-400 font-bold">여</span>}
+                            </div>
+                          ))}
+                        </div>
+                        {/* 말하기 속도 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]">
+                          <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
+                          <div className="flex gap-2">
+                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                              <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
+                                className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-sky-500/30'}`}>
+                                {label}
+                              </button>
+                            ))}
                           </div>
                         </div>
+                        {/* 톤 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {([
+                              { id: '낮은톤', label: '낮은 톤', instruction: '(낮고 차분한 목소리로) ' },
+                              { id: '차분한', label: '차분한', instruction: '(차분하고 안정적으로) ' },
+                              { id: '밝은톤', label: '밝은 톤', instruction: '(밝고 생동감 있게) ' },
+                              { id: '활기찬', label: '활기찬', instruction: '(활기차고 열정적으로) ' },
+                            ] as { id: string; label: string; instruction: string }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                const newTone = googleTtsTone === m.id ? '' : m.id;
+                                setGoogleTtsTone(newTone);
+                                localStorage.setItem('heaven_google_tts_tone_id', newTone);
+                                localStorage.setItem('heaven_google_tts_tone', newTone ? m.instruction : '');
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsTone === m.id ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {/* 분위기 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">분위기 <span className="text-slate-600 normal-case font-normal">(톤과 동시 선택 가능)</span></p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {([
+                              { id: '친근하게', instruction: '(친근하고 따뜻하게) ' },
+                              { id: '따뜻하게', instruction: '(따뜻하게 공감하며) ' },
+                              { id: '뉴스형식', instruction: '(뉴스 앵커처럼 명확하게) ' },
+                              { id: '부드럽게', instruction: '(부드럽고 온화하게) ' },
+                              { id: '부드럽고강하게', label: '부드럽고 강하게', instruction: '(부드럽지만 확신 있게) ' },
+                              { id: '강하고따뜻하게', label: '강하고 따뜻하게', instruction: '(강하고 열정적으로 따뜻하게) ' },
+                              { id: '심각하게', instruction: '(심각하고 진지하게) ' },
+                              { id: '울면서', instruction: '(슬프고 울먹이는 감정으로) ' },
+                            ] as { id: string; label?: string; instruction: string }[]).map(m => (
+                              <button key={m.id} type="button" onClick={() => {
+                                const newMood = googleTtsMood === m.id ? '' : m.id;
+                                setGoogleTtsMood(newMood);
+                                localStorage.setItem('heaven_google_tts_mood_id', newMood);
+                                localStorage.setItem('heaven_google_tts_mood', newMood ? m.instruction : '');
+                              }}
+                                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsMood === m.id ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
+                                {m.label || m.id}
+                              </button>
+                            ))}
+                          </div>
+                          {(googleTtsTone || googleTtsMood) && (
+                            <button type="button" onClick={() => {
+                              setGoogleTtsTone(''); setGoogleTtsMood('');
+                              localStorage.setItem('heaven_google_tts_tone_id', '');
+                              localStorage.setItem('heaven_google_tts_tone', '');
+                              localStorage.setItem('heaven_google_tts_mood_id', '');
+                              localStorage.setItem('heaven_google_tts_mood', '');
+                            }} className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
+                          )}
+                        </div>
                         <p className="shrink-0 text-[10px] text-slate-500 bg-slate-800/50 rounded-xl p-2">
-                          월 500,000자 무료 · 이후 $16/100만자<br/>
-                          SunHi·InJoon 추천 (자연스러운 한국어)
+                          월 500,000자 무료 · 이후 $16/100만자
                         </p>
                       </div>
                     )}
@@ -1348,51 +1402,55 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           )}
                         </div>
 
-                        {/* 목소리 선택 */}
-                        <div className="shrink-0 space-y-1.5">
-                          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">목소리 선택</label>
-                          <div className="grid grid-cols-2 gap-1.5 overflow-y-auto">
-                            {(['ko-KR-Neural2-A','ko-KR-Neural2-B','ko-KR-Neural2-C','ko-KR-Neural2-D','ko-KR-Wavenet-A','ko-KR-Wavenet-B','ko-KR-Wavenet-C','ko-KR-Wavenet-D'] as const).map(v => {
-                              const labels: Record<string, string> = {
-                                'ko-KR-Neural2-A': 'Neural2-A 여',
-                                'ko-KR-Neural2-B': 'Neural2-B 남',
-                                'ko-KR-Neural2-C': 'Neural2-C 여',
-                                'ko-KR-Neural2-D': 'Neural2-D 남',
-                                'ko-KR-Wavenet-A': 'Wavenet-A 여',
-                                'ko-KR-Wavenet-B': 'Wavenet-B 남',
-                                'ko-KR-Wavenet-C': 'Wavenet-C 남',
-                                'ko-KR-Wavenet-D': 'Wavenet-D 여',
-                              };
-                              const isSelected = gcloudVoice === v;
-                              return (
-                                <button key={v} type="button"
-                                  onClick={async () => {
-                                    setGcloudVoice(v);
-                                    localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE, v);
-                                    if (!gcloudApiKey) return;
-                                    setPlayingGcloudVoice(v);
-                                    try {
-                                      const { previewGCloudTTS } = await import('../services/googleCloudTTSService');
-                                      const b64 = await previewGCloudTTS('안녕하세요. 테스트 목소리입니다.', v);
-                                      if (b64) {
-                                        const audio = new Audio(`data:audio/mp3;base64,${b64}`);
-                                        audio.play();
-                                      }
-                                    } catch {}
-                                    setPlayingGcloudVoice(null);
-                                  }}
-                                  className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition-colors ${isSelected ? 'bg-blue-600/20 text-blue-200 border-blue-500/60' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}>
-                                  {playingGcloudVoice === v ? '▶ 재생 중' : labels[v]}
-                                </button>
-                              );
-                            })}
+                        {/* 성우 선택 - Gemini 스타일 리스트 */}
+                        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)]">
+                          {([
+                            { id: 'ko-KR-Neural2-A', label: 'Neural2-A', desc: 'Neural2 · 고품질', gender: 'female' },
+                            { id: 'ko-KR-Neural2-B', label: 'Neural2-B', desc: 'Neural2 · 고품질', gender: 'male' },
+                            { id: 'ko-KR-Neural2-C', label: 'Neural2-C', desc: 'Neural2 · 고품질', gender: 'female' },
+                            { id: 'ko-KR-Neural2-D', label: 'Neural2-D', desc: 'Neural2 · 고품질', gender: 'male' },
+                            { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A', desc: 'Wavenet · 저렴', gender: 'female' },
+                            { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B', desc: 'Wavenet · 저렴', gender: 'male' },
+                            { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C', desc: 'Wavenet · 저렴', gender: 'male' },
+                            { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D', desc: 'Wavenet · 저렴', gender: 'female' },
+                          ] as { id: string; label: string; desc: string; gender: string }[]).map(voice => (
+                            <div key={voice.id} className={`flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.05] hover:bg-white/[0.05] transition-colors ${gcloudVoice === voice.id ? 'bg-blue-600/20' : ''}`}>
+                              <button type="button" onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!gcloudApiKey) return;
+                                setPlayingGcloudVoice(voice.id);
+                                try {
+                                  const { previewGCloudTTS } = await import('../services/googleCloudTTSService');
+                                  const b64 = await previewGCloudTTS('안녕하세요. 테스트 목소리입니다.', voice.id);
+                                  if (b64) new Audio(`data:audio/mp3;base64,${b64}`).play();
+                                } catch {}
+                                setPlayingGcloudVoice(null);
+                              }}
+                                className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs ${playingGcloudVoice === voice.id ? 'bg-blue-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-blue-600 hover:text-white'}`}>
+                                {playingGcloudVoice === voice.id ? '■' : '▶'}
+                              </button>
+                              <button type="button" onClick={() => { setGcloudVoice(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE, voice.id); }} className="flex-1 text-left">
+                                <div className="text-sm text-white font-bold">{voice.label}</div>
+                                <div className="text-xs text-slate-500">{voice.desc}</div>
+                              </button>
+                              {voice.gender === 'male'
+                                ? <span className="text-[10px] text-blue-400 font-bold">남</span>
+                                : <span className="text-[10px] text-pink-400 font-bold">여</span>}
+                            </div>
+                          ))}
+                        </div>
+                        {/* 말하기 속도 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
+                          <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
+                          <div className="flex gap-2">
+                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                              <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
+                                className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
+                                {label}
+                              </button>
+                            ))}
                           </div>
                         </div>
-
-                        <p className="shrink-0 text-[10px] text-slate-500 bg-slate-800/50 rounded-xl p-2">
-                          Neural2: 월 100만자 무료 · 이후 $16/100만자<br/>
-                          Wavenet: 월 100만자 무료 · 이후 $4/100만자
-                        </p>
                       </div>
                     )}
 
@@ -1424,6 +1482,18 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           ))}
                         </div>
                         </div>{/* end voice list scroll wrapper */}
+                        {/* 말하기 속도 */}
+                        <div className="shrink-0 p-3 rounded-xl border border-teal-500/40 shadow-[0_0_10px_rgba(20,184,166,0.15)]">
+                          <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
+                          <div className="flex gap-2">
+                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                              <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
+                                className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-teal-500/30'}`}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         {/* 구글 TTS 톤 - 텍스트 지시로 감정 제어 */}
                         <div className="shrink-0 p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">톤 <span className="text-slate-600 normal-case font-normal">(분위기와 동시 선택 가능)</span></p>
