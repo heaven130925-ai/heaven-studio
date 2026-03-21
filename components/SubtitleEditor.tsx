@@ -144,6 +144,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // Google TTS용 구두점 가중치 기반 자막 타이밍
   const [googleTtsGroups, setGoogleTtsGroups] = useState<{ text: string; startTime: number; endTime: number }[] | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const decodedCacheRef = useRef<Map<number, { buffer: AudioBuffer; contentDuration: number }>>(new Map());
   const playIdRef = useRef(0);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const startTimeRef = useRef<number>(0);   // ctx.currentTime 기준 시작점 (offset 포함)
@@ -163,6 +164,22 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
   const [useMeaningChunks, setUseMeaningChunks] = useState(true);
+
+  // ── audioData가 바뀌면 백그라운드에서 미리 디코딩 → 캐시 ──
+  useEffect(() => {
+    const audioData = scenes[selectedIdx]?.audioData;
+    if (!audioData) return;
+    const idx = selectedIdx;
+    decodedCacheRef.current.delete(idx);
+    let ctx = audioCtxRef.current;
+    if (!ctx || ctx.state === 'closed') {
+      const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
+      try { ctx = new AC(); audioCtxRef.current = ctx; } catch { return; }
+    }
+    decodeAudioBuffer(audioData, ctx).then(result => {
+      decodedCacheRef.current.set(idx, result);
+    }).catch(() => {});
+  }, [selectedIdx, scene?.audioData]); // eslint-disable-line
 
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
@@ -408,7 +425,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       if (ctx.state === 'suspended') await ctx.resume();
       setIsPlaying(true);
 
-      const { buffer, contentDuration } = await decodeAudioBuffer(audioData, ctx);
+      // 캐시된 버퍼 우선 사용 → 즉시 재생
+      const cached = decodedCacheRef.current.get(selectedIdx);
+      const { buffer, contentDuration } = cached ?? await decodeAudioBuffer(audioData, ctx);
       if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
       isManualPauseRef.current = false;
 
