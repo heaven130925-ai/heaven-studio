@@ -220,7 +220,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
     // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.25s 딜레이로 보정)
-    const DELAY = 0.25;
+    const DELAY = 0.35;
     const tAdj = Math.max(0, t - DELAY);
     if (googleTtsGroups && googleTtsGroups.length > 0) {
       if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
