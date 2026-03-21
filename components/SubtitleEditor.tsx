@@ -150,6 +150,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const pausedAtRef = useRef<number>(0);    // 일시정지 위치 (초)
   const progressBarRef = useRef<HTMLDivElement>(null);
   const progressDragRef = useRef(false);
+  const autoPlayNextRef = useRef(false); // 씬 종료 후 다음 씬 자동 재생 플래그
+  const sceneListRef = useRef<HTMLDivElement>(null); // 씬 목록 스크롤용
+  const togglePlayRef = useRef<() => void>(() => {}); // 자동 재생용 최신 핸들러 ref
 
   // 줌/패닝 — 기본 98.5% (양쪽 클리핑 방지)
   const [zoom, setZoom] = useState(1.0);
@@ -267,6 +270,22 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   // ── 씬 변경 시 Google TTS 그룹 초기화 ──
   useEffect(() => { setGoogleTtsGroups(null); }, [selectedIdx]);
+
+  // ── 씬 자동 재생: 이전 씬 종료 후 다음 씬으로 넘어왔을 때 ──
+  useEffect(() => {
+    if (!autoPlayNextRef.current) return;
+    autoPlayNextRef.current = false;
+    // 프리로드 effect가 먼저 실행된 뒤 재생 (50ms 대기)
+    const t = setTimeout(() => togglePlayRef.current(), 50);
+    return () => clearTimeout(t);
+  }, [selectedIdx]); // eslint-disable-line
+
+  // ── 씬 선택 시 목록 스크롤 ──
+  useEffect(() => {
+    if (!sceneListRef.current) return;
+    const item = sceneListRef.current.children[selectedIdx] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedIdx]);
 
   // ── audioData가 없어지면 재생 중인 오디오 즉시 정지 ──
   useEffect(() => {
@@ -452,6 +471,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       pausedAtRef.current = 0;
       playingElRef.current = null;
       cancelAnimationFrame(raf.current);
+      // 다음 씬 자동 재생
+      setSelectedIdx(prev => {
+        if (prev < scenes.length - 1) {
+          autoPlayNextRef.current = true;
+          return prev + 1;
+        }
+        return prev;
+      });
     };
 
     el.play().catch((e: any) => {
@@ -461,6 +488,9 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       cancelAnimationFrame(raf.current);
     });
   }, [isPlaying, selectedIdx, scenes, onGenerateAudio, wordGroups, scene, narration, subConfig.maxCharsPerChunk]);
+
+  // handlePlayPause가 재생성될 때마다 ref 동기화 (자동 재생 effect에서 사용)
+  useEffect(() => { togglePlayRef.current = togglePlay; });
 
   // ── 프로그레스바 seek ──
   const seekToFraction = useCallback((fraction: number) => {
@@ -887,7 +917,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       </div>
 
       {/* ─── 오른쪽: 씬 목록 ─── */}
-      <div className="flex-1 overflow-y-auto py-2 px-2">
+      <div ref={sceneListRef} className="flex-1 overflow-y-auto py-2 px-2">
         {scenes.map((s, i) => (
           <div key={i} className={`flex items-start gap-3 px-3 py-3 rounded-xl mb-0.5 transition-all ${
             i === selectedIdx
