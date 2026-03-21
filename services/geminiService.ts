@@ -1360,28 +1360,39 @@ export const generateAudioForScene = async (text: string): Promise<string | null
 
   // Google Cloud TTS 경로 (Neural2/Wavenet — MP3 반환, 한도 없음)
   if (provider === 'gcloud') {
-    const { generateGCloudTTS } = await import('./googleCloudTTSService');
-    const chunks = splitTtsText(text, 4500);
-    if (chunks.length === 1) return generateGCloudTTS(chunks[0]);
-    // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)
-    const parts: string[] = [];
-    for (const chunk of chunks) {
-      const b64 = await generateGCloudTTS(chunk);
-      if (b64) parts.push(b64);
+    const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '';
+    if (!apiKey) {
+      console.warn('[TTS] gcloud API 키 없음 → Gemini TTS 폴백');
+      // 아래 Gemini TTS 경로로 fall-through
+    } else {
+      try {
+        const { generateGCloudTTS } = await import('./googleCloudTTSService');
+        const chunks = splitTtsText(text, 4500);
+        if (chunks.length === 1) return generateGCloudTTS(chunks[0]);
+        // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)
+        const parts: string[] = [];
+        for (const chunk of chunks) {
+          const b64 = await generateGCloudTTS(chunk);
+          if (b64) parts.push(b64);
+        }
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+        // base64 디코드 → 바이너리 합치기 → 다시 base64
+        const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+        const total = buffers.reduce((sum, b) => sum + b.length, 0);
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const buf of buffers) { merged.set(buf, offset); offset += buf.length; }
+        let binary = '';
+        for (let i = 0; i < merged.length; i += 65536) {
+          binary += String.fromCharCode(...merged.subarray(i, i + 65536));
+        }
+        return btoa(binary);
+      } catch (e) {
+        console.warn('[TTS] gcloud 실패 → Gemini TTS 폴백:', e);
+        // 아래 Gemini TTS 경로로 fall-through
+      }
     }
-    if (parts.length === 0) return null;
-    if (parts.length === 1) return parts[0];
-    // base64 디코드 → 바이너리 합치기 → 다시 base64
-    const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
-    const total = buffers.reduce((sum, b) => sum + b.length, 0);
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const buf of buffers) { merged.set(buf, offset); offset += buf.length; }
-    let binary = '';
-    for (let i = 0; i < merged.length; i += 65536) {
-      binary += String.fromCharCode(...merged.subarray(i, i + 65536));
-    }
-    return btoa(binary);
   }
 
   // Gemini TTS 경로 (기존)
