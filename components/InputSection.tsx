@@ -603,10 +603,21 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                         }`}>{label}</button>
                                     ))}
                                   </div>
-                                  <input type="text" value={youtubeApiKey}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeApiKey(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY, e.target.value); }}
-                                    placeholder="YouTube Data API 키"
-                                    className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
+                                  {youtubeApiKey && localStorage.getItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY) === youtubeApiKey ? (
+                                    <div className="flex gap-2 items-center">
+                                      <span className="flex-1 bg-slate-800 border border-emerald-600/50 rounded-lg px-3 py-1.5 text-emerald-400 text-xs">
+                                        ✓ 저장됨 ({youtubeApiKey.slice(0, 6)}••••)
+                                      </span>
+                                      <button type="button" onClick={() => { setYoutubeApiKey(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY); }}
+                                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg border border-white/10 transition-colors">변경</button>
+                                    </div>
+                                  ) : (
+                                    <input type="text" value={youtubeApiKey}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeApiKey(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY, e.target.value); }}
+                                      placeholder="YouTube Data API 키"
+                                      autoComplete="off"
+                                      className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
+                                  )}
                                   <input type="text" value={youtubeChannels}
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeChannels(e.target.value); localStorage.setItem('heaven_yt_channels', e.target.value); }}
                                     placeholder="채널 ID 쉼표 구분 (비우면 키워드 검색)"
