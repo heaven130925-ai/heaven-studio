@@ -137,22 +137,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
   const progressFillRef = useRef<HTMLDivElement>(null);
 
-  // 오디오 — WebAudio API
+  // 오디오 — HTMLAudioElement
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [currentSubTime, setCurrentSubTime] = useState(0);
   // Google TTS용 구두점 가중치 기반 자막 타이밍
   const [googleTtsGroups, setGoogleTtsGroups] = useState<{ text: string; startTime: number; endTime: number }[] | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const decodedCacheRef = useRef<Map<number, { buffer: AudioBuffer; contentDuration: number }>>(new Map());
-  const playIdRef = useRef(0);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const startTimeRef = useRef<number>(0);   // ctx.currentTime 기준 시작점 (offset 포함)
-  const durationRef = useRef<number>(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const raf = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);    // 일시정지 위치 (초)
-  const isManualPauseRef = useRef<boolean>(false);
-  const progressTimerRef = useRef<number>(0);
-  const endTimeoutRef = useRef<number>(0);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const progressDragRef = useRef(false);
 
@@ -165,20 +158,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   const [useMeaningChunks, setUseMeaningChunks] = useState(true);
 
-  // ── audioData가 바뀌면 백그라운드에서 즉시 디코딩 → 캐시 ──
+  // ── audioData가 바뀌면 즉시 HTMLAudioElement preload ──
   useEffect(() => {
-    const audioData = scenes[selectedIdx]?.audioData;
-    if (!audioData) return;
-    const idx = selectedIdx;
-    decodedCacheRef.current.delete(idx);
-    // AudioContext 없으면 생성 (suspended 상태여도 decodeAudioData는 동작함)
-    if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-      const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
-      try { audioCtxRef.current = new AC(); } catch { return; }
-    }
-    decodeAudioBuffer(audioData, audioCtxRef.current).then(result => {
-      decodedCacheRef.current.set(idx, result);
-    }).catch(() => {});
+    const ad = scenes[selectedIdx]?.audioData;
+    if (!ad) { audioRef.current = null; return; }
+    const el = new Audio();
+    el.src = audioDataUrl(ad);
+    el.preload = 'auto';
+    el.load();
+    audioRef.current = el;
   }, [selectedIdx, scenes[selectedIdx]?.audioData]); // eslint-disable-line
 
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
@@ -241,7 +229,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
     }
     // Fallback: 나레이션을 maxChars 단위로 쪼개서 시간 균등 분배
-    const dur = durationRef.current;
+    const dur = audioRef.current?.duration ?? 0;
     if (!dur || !narration) return narration;
     const maxChars = subConfig.maxCharsPerChunk ?? 15;
     const textChunks: string[] = [];
@@ -281,9 +269,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // ── audioData가 없어지면 재생 중인 오디오 즉시 정지 ──
   useEffect(() => {
     if (!scene?.audioData) {
-      if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-      cancelAnimationFrame(progressTimerRef.current);
-      window.clearTimeout(endTimeoutRef.current);
+      if (audioRef.current) { audioRef.current.pause(); }
+      cancelAnimationFrame(raf.current);
       setIsPlaying(false);
       setCurrentSubTime(0);
       setAudioProgress(0);
@@ -339,51 +326,59 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     return result;
   }
 
-  // ── AudioBuffer 디코더 (MP3 + PCM16 자동 감지) — 끝 패딩 추가 ──
-  async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
-    const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
-    const resp = await fetch(`data:application/octet-stream;base64,${b64}`);
-    const arrayBuf = await resp.arrayBuffer();
-    const hdr = new Uint8Array(arrayBuf, 0, 4);
-    // MP3(0xFF Ex), ID3, OGG, RIFF(WAV), AAC 헤더 감지 → decodeAudioData 사용
-    const isMp3OrContainer =
-      (hdr[0] === 0xFF && (hdr[1] & 0xE0) === 0xE0) ||
-      (hdr[0] === 0x49 && hdr[1] === 0x44 && hdr[2] === 0x33) ||
-      (hdr[0] === 0x4F && hdr[1] === 0x67) ||
-      (hdr[0] === 0x52 && hdr[1] === 0x49);
-    let decoded: AudioBuffer;
-    if (isMp3OrContainer) {
-      decoded = await ctx.decodeAudioData(arrayBuf.slice(0));
-    } else {
-      // Gemini TTS: PCM16 24kHz raw — decodeAudioData 시도 없이 바로 변환
-      const pcm = new Int16Array(arrayBuf);
-      const buf = ctx.createBuffer(1, pcm.length, 24000);
-      const ch = buf.getChannelData(0);
-      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
-      decoded = buf;
+  // ── PCM16 raw → WAV data URL 변환 ──
+  function pcm16ToWavDataUrl(b64: string): string {
+    const binaryStr = atob(b64);
+    const pcmByteLen = binaryStr.length;
+    const wavByteLen = 44 + pcmByteLen;
+    const buf = new ArrayBuffer(wavByteLen);
+    const view = new DataView(buf);
+    [82,73,70,70].forEach((b,i) => view.setUint8(i, b));
+    view.setUint32(4, wavByteLen - 8, true);
+    [87,65,86,69].forEach((b,i) => view.setUint8(8+i, b));
+    [102,109,116,32].forEach((b,i) => view.setUint8(12+i, b));
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, 24000, true);
+    view.setUint32(28, 48000, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    [100,97,116,97].forEach((b,i) => view.setUint8(36+i, b));
+    view.setUint32(40, pcmByteLen, true);
+    for (let i = 0; i < pcmByteLen; i++) view.setUint8(44+i, binaryStr.charCodeAt(i));
+    const bytes = new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 65536) {
+      s += String.fromCharCode(...bytes.subarray(i, i + 65536));
     }
-    // MP3 인코더 지연으로 끝이 잘리는 현상 방지 — 무음 패딩 추가
-    const PAD = 1.5;
-    const sr = decoded.sampleRate;
-    const padSamples = Math.ceil(sr * PAD);
-    const padded = ctx.createBuffer(decoded.numberOfChannels, decoded.length + padSamples, sr);
-    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-      padded.getChannelData(ch).set(decoded.getChannelData(ch), 0);
-    }
-    return { buffer: padded, contentDuration: decoded.duration };
+    return 'data:audio/wav;base64,' + btoa(s);
+  }
+
+  // ── magic byte로 컨테이너 감지 → data URL 생성 ──
+  function audioDataUrl(b64: string): string {
+    const head = atob(b64.slice(0, 8));
+    const isMp3 = head.charCodeAt(0) === 0xFF && (head.charCodeAt(1) & 0xE0) === 0xE0;
+    const isId3 = head.slice(0,3) === 'ID3';
+    const isOgg = head.slice(0,4) === 'OggS';
+    const isRiff = head.slice(0,4) === 'RIFF';
+    if (isMp3 || isId3) return 'data:audio/mpeg;base64,' + b64;
+    if (isOgg) return 'data:audio/ogg;base64,' + b64;
+    if (isRiff) return 'data:audio/wav;base64,' + b64;
+    return pcm16ToWavDataUrl(b64);
   }
 
   // ── stopAudio: 완전 중지 + 위치 초기화 ──
   const stopAudio = useCallback(() => {
-    playIdRef.current++;
-    pausedAtRef.current = 0;
-    isManualPauseRef.current = false;
-    window.clearTimeout(endTimeoutRef.current);
-    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    cancelAnimationFrame(progressTimerRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    cancelAnimationFrame(raf.current);
     setIsPlaying(false);
     setAudioProgress(0);
     setCurrentSubTime(0);
+    pausedAtRef.current = 0;
   }, []);
 
   // 씬 변경 → 완전 중지
@@ -391,129 +386,80 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   // 언마운트 정리
   useEffect(() => {
-    return () => {
-      stopAudio();
-      if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
-    };
+    return () => { stopAudio(); };
   }, [stopAudio]);
 
   // ── togglePlay: 재생/일시정지 (정지 위치에서 이어서 재생) ──
   const togglePlay = useCallback(async () => {
+    let el = audioRef.current;
+
     if (isPlaying) {
-      // 일시정지 — 현재 위치 저장
-      isManualPauseRef.current = true;
-      if (audioCtxRef.current) {
-        pausedAtRef.current = Math.min(
-          audioCtxRef.current.currentTime - startTimeRef.current,
-          durationRef.current
-        );
-      }
-      if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-      cancelAnimationFrame(progressTimerRef.current);
+      pausedAtRef.current = el?.currentTime ?? pausedAtRef.current;
+      el?.pause();
       setIsPlaying(false);
+      cancelAnimationFrame(raf.current);
       return;
     }
 
-    let audioData = scene?.audioData ?? null;
+    // 음성 없으면 생성 후 다시 시도
+    let audioData = scenes[selectedIdx]?.audioData ?? null;
     if (!audioData) {
       if (!onGenerateAudio) return;
       setIsGeneratingAudio(true);
       try { audioData = await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
       if (!audioData) return;
+      el = new Audio(audioDataUrl(audioData));
+      el.preload = 'auto';
+      audioRef.current = el;
     }
-    const thisPlayId = ++playIdRef.current;
+
+    if (!el) return;
+
+    // Google TTS (wordGroups/meaningChunks 없을 때) → 구두점 가중치 타이밍 생성
+    if ((!wordGroups || wordGroups.length === 0) && (!scene?.subtitleData?.meaningChunks?.length)) {
+      const dur = el.duration > 0 ? el.duration : (scene?.audioDuration ?? 0);
+      if (dur > 0) setGoogleTtsGroups(createProportionalSubtitles(narration, dur, subConfig.maxCharsPerChunk ?? 15));
+    }
+
+    el.currentTime = pausedAtRef.current;
     try {
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
-        audioCtxRef.current = new AC();
-      }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') await ctx.resume();
-      setIsPlaying(true);
-
-      // 캐시된 버퍼 우선 사용 → 즉시 재생
-      const cached = decodedCacheRef.current.get(selectedIdx);
-      const { buffer, contentDuration } = cached ?? await decodeAudioBuffer(audioData, ctx);
-      if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
-      isManualPauseRef.current = false;
-
-      // ElevenLabs words 기준으로만 클리핑 (정확한 타임스탬프 보유)
-      // Google TTS(meaningChunks만 있을 때)는 클리핑 금지 — 오디오 잘림 방지
-      const words = scene?.subtitleData?.words;
-      const lastWordEnd = words && words.length > 0 ? words[words.length - 1].end : null;
-      const effectiveDuration = lastWordEnd
-        ? Math.min(contentDuration, lastWordEnd + 0.5)
-        : contentDuration;
-
-      durationRef.current = effectiveDuration;
-
-      // Google TTS (wordGroups/meaningChunks 없을 때) → 구두점 가중치 타이밍 생성
-      if ((!wordGroups || wordGroups.length === 0) && (!scene?.subtitleData?.meaningChunks?.length)) {
-        setGoogleTtsGroups(createProportionalSubtitles(narration, effectiveDuration, subConfig.maxCharsPerChunk ?? 15));
-      }
-
-      const offset = Math.min(pausedAtRef.current, Math.max(0, effectiveDuration - 0.05));
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.onended = () => {
-        const wasManual = isManualPauseRef.current;
-        isManualPauseRef.current = false;
-        cancelAnimationFrame(progressTimerRef.current);
-        sourceRef.current = null;
-        if (!wasManual) {
-          // 자연 종료 → 마지막 자막 유지 후 1.2초 뒤 리셋
-          setCurrentSubTime(durationRef.current);
-          setAudioProgress(100);
-          pausedAtRef.current = 0;
-          endTimeoutRef.current = window.setTimeout(() => {
-            setAudioProgress(0);
-            setCurrentSubTime(0);
-          }, 1200);
-        }
-        setIsPlaying(false);
-      };
-      // +0.5s 버퍼: PCM 마지막 음절 잘림 방지 (패딩 1.5s 범위 내)
-      const playDuration = effectiveDuration - offset + 0.5;
-      source.start(0, offset, playDuration > 0 ? playDuration : undefined);
-      sourceRef.current = source;
-      // 오디오 하드웨어 출력 지연 보정 (outputLatency: 실제 스피커 출력까지의 지연)
-      const hwLatency = (ctx as any).outputLatency ?? (ctx as any).baseLatency ?? 0;
-      startTimeRef.current = ctx.currentTime - offset + hwLatency;
-
-      const rafLoop = () => {
-        const actx = audioCtxRef.current;
-        if (!actx || !sourceRef.current) return;
-        if (actx.state === 'suspended') actx.resume();
-        const elapsed = actx.currentTime - startTimeRef.current;
-        const clamped = Math.min(Math.max(elapsed, 0), durationRef.current);
-        // 직접 DOM 업데이트 → React 리렌더 없이 부드러운 진행바
-        if (progressFillRef.current) {
-          progressFillRef.current.style.width = `${(clamped / durationRef.current) * 100}%`;
-        }
-        setCurrentSubTime(clamped);
-        progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
-      };
-      progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
+      await el.play();
     } catch (e: any) {
       console.error('Audio error:', e);
       setIsPlaying(false);
-      alert(`오디오 재생 오류: ${e?.message || e}`);
+      return;
     }
-  }, [isPlaying, scene]);
+    setIsPlaying(true);
+
+    // 자막 타이밍 + 진행바 업데이트
+    const tick = () => {
+      if (!el || el.paused) return;
+      const t = el.currentTime;
+      const dur = el.duration || 1;
+      setCurrentSubTime(t);
+      setAudioProgress((t / dur) * 100);
+      if (progressFillRef.current) progressFillRef.current.style.width = `${(t / dur) * 100}%`;
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+
+    // 종료 이벤트
+    el.onended = () => {
+      setIsPlaying(false);
+      setCurrentSubTime(0);
+      setAudioProgress(0);
+      pausedAtRef.current = 0;
+      cancelAnimationFrame(raf.current);
+    };
+  }, [isPlaying, selectedIdx, scenes, onGenerateAudio, wordGroups, scene, narration, subConfig.maxCharsPerChunk]);
 
   // ── 프로그레스바 seek ──
   const seekToFraction = useCallback((fraction: number) => {
-    if (!durationRef.current) return;
-    const seekTime = Math.max(0, Math.min(1, fraction)) * durationRef.current;
-    isManualPauseRef.current = true;
-    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    cancelAnimationFrame(progressTimerRef.current);
-    window.clearTimeout(endTimeoutRef.current);
-    setIsPlaying(false);
-    pausedAtRef.current = seekTime;
-    setCurrentSubTime(seekTime);
+    const el = audioRef.current;
+    if (!el || !el.duration) return;
+    const t = fraction * el.duration;
+    el.currentTime = t;
+    pausedAtRef.current = t;
     setAudioProgress(fraction * 100);
   }, []);
 
@@ -708,7 +654,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             ref={progressBarRef}
             className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
             onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
-              if (!hasAudio || !durationRef.current) return;
+              if (!hasAudio || !audioRef.current?.duration) return;
               progressDragRef.current = true;
               const rect = e.currentTarget.getBoundingClientRect();
               seekToFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
@@ -720,7 +666,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           <span className="text-[10px] text-slate-400 shrink-0 w-20 text-right font-mono">
             {hasAudio
               ? isPlaying || pausedAtRef.current > 0
-                ? `${currentSubTime > 0 ? currentSubTime.toFixed(1) : pausedAtRef.current.toFixed(1)}s / ${durationRef.current > 0 ? durationRef.current.toFixed(1) : (scene?.audioDuration ?? 0).toFixed(1)}s`
+                ? `${currentSubTime > 0 ? currentSubTime.toFixed(1) : pausedAtRef.current.toFixed(1)}s / ${(audioRef.current?.duration ?? scene?.audioDuration ?? 0).toFixed(1)}s`
                 : scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●'
               : '—'}
           </span>
