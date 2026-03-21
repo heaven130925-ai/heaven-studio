@@ -497,22 +497,20 @@ const App: React.FC = () => {
 
         // ── 캐릭터 설정 단계 삽입 (audioOnly/autoRun/imageOnly 제외) ──
         if (!audioOnly && !autoRun && !imageOnly) {
-          setProgressMessage('등장인물 분석 중...');
-          try {
-            const scriptText = scriptScenes.map(s => s.narration).join('\n');
-            const chars = await extractCharactersFromScript(scriptText);
-            setCharactersList(chars);
-          } catch (e: any) {
-            console.warn('[App] 캐릭터 추출 실패:', e.message);
-            setCharactersList([]);
-          }
           pendingInitialAssetsRef.current = initialAssets;
           pendingRefImgsRef.current = refImgs;
           pendingTargetTopicRef.current = targetTopic;
+          // 화면 즉시 표시 후 캐릭터 추출은 백그라운드
+          setCharactersList([]);
           setShowCharacterSetup(true);
           setStep(GenerationStep.CHARACTER_SETUP);
-          setProgressMessage('캐릭터 레퍼런스 이미지를 설정하세요');
+          setProgressMessage('캐릭터 이미지를 설정하세요');
           isProcessingRef.current = false;
+          // 백그라운드에서 캐릭터 자동 추출
+          const scriptText = scriptScenes.map(s => s.narration).join('\n');
+          extractCharactersFromScript(scriptText)
+            .then(chars => setCharactersList(chars))
+            .catch(() => {});
           return;
         }
       }
