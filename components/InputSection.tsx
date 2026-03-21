@@ -620,7 +620,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                   )}
                                   <input type="text" value={youtubeChannels}
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeChannels(e.target.value); localStorage.setItem('heaven_yt_channels', e.target.value); }}
-                                    placeholder="채널 ID 쉼표 구분 (비우면 키워드 검색)"
+                                    placeholder="@채널핸들 쉼표 구분 (예: @mysterykr, @채널명) — 비우면 키워드 검색"
                                     className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
                                 </div>
                               )}

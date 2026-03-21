@@ -276,7 +276,27 @@ export const findYouTubeTopics = async (
     publishedAfter = d.toISOString();
   }
 
-  // 1단계: 영상 검색
+  // 1단계: @핸들 또는 URL → 채널 ID 변환
+  const resolveChannelId = async (input: string): Promise<string | null> => {
+    const raw = input.trim();
+    // 이미 채널 ID (UC로 시작하는 경우)
+    if (raw.startsWith('UC') && raw.length > 20) return raw;
+    // URL에서 핸들 추출: youtube.com/@handle 또는 @handle
+    const handleMatch = raw.match(/(?:youtube\.com\/)?@([\w\-]+)/);
+    if (handleMatch) {
+      const qs = new URLSearchParams({ part: 'id', forHandle: `@${handleMatch[1]}`, key: apiKey });
+      const res = await fetch(`${BASE}/channels?${qs}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.items?.[0]?.id || null;
+    }
+    // URL에서 /channel/UCxxx 추출
+    const idMatch = raw.match(/\/channel\/(UC[\w\-]+)/);
+    if (idMatch) return idMatch[1];
+    return null;
+  };
+
+  // 2단계: 영상 검색
   const allVideoIds: string[] = [];
   const videoChannelMap: Record<string, string> = {};
   const videoTitles: Record<string, string> = {};
@@ -289,8 +309,11 @@ export const findYouTubeTopics = async (
   };
 
   if (channelIds.length > 0) {
-    for (const channelId of channelIds.slice(0, 4)) {
-      const items = await searchItems({ part: 'snippet', channelId: channelId.trim(), type: 'video', maxResults: '30', order: 'date' });
+    // @핸들/URL → 실제 채널ID로 변환
+    const resolvedIds = (await Promise.all(channelIds.slice(0, 4).map(resolveChannelId))).filter(Boolean) as string[];
+    if (resolvedIds.length === 0) throw new Error('채널을 찾지 못했습니다. @핸들을 확인해주세요.');
+    for (const channelId of resolvedIds) {
+      const items = await searchItems({ part: 'snippet', channelId, type: 'video', maxResults: '30', order: 'date' });
       for (const item of items) {
         const vid = item.id?.videoId; if (!vid) continue;
         allVideoIds.push(vid);
