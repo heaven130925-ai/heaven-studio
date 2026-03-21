@@ -253,6 +253,58 @@ const retryGeminiRequest = async <T>(
   throw lastError;
 };
 
+// YouTube Data API로 인기 채널에서 주제 추출
+export const findYouTubeTopics = async (category: string, channelIds: string[]): Promise<Array<{rank: number; topic: string; reason: string}>> => {
+  const apiKey = localStorage.getItem('heaven_youtube_key') || '';
+  if (!apiKey) throw new Error('YouTube API 키가 없습니다. 설정에서 입력해주세요.');
+
+  // 채널별 인기 영상 수집
+  const allTitles: string[] = [];
+  const channels = channelIds.length > 0 ? channelIds : [];
+
+  if (channels.length === 0) {
+    // 채널 없으면 키워드 검색
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(category)}&type=video&order=viewCount&maxResults=20&regionCode=KR&relevanceLanguage=ko&key=${apiKey}`;
+    const res = await fetch(searchUrl);
+    if (!res.ok) throw new Error(`YouTube API 오류: ${res.status}`);
+    const data = await res.json();
+    for (const item of (data.items || [])) {
+      allTitles.push(item.snippet?.title || '');
+    }
+  } else {
+    for (const channelId of channels.slice(0, 3)) {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId.trim()}&type=video&order=viewCount&maxResults=15&key=${apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const item of (data.items || [])) {
+        allTitles.push(item.snippet?.title || '');
+      }
+    }
+  }
+
+  if (allTitles.length === 0) throw new Error('YouTube에서 영상을 찾지 못했습니다.');
+
+  // Gemini로 제목 분석 → 주제 추출
+  const ai = getAI();
+  const prompt = `다음은 유튜브 인기 영상 제목 목록입니다:
+${allTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+위 제목들에서 "${category}" 카테고리와 관련된 영상 주제를 분석해서,
+비슷한 스타일로 새 영상에서 다룰 수 있는 주제 10개를 추천해주세요.
+제목 그대로 복사하지 말고, 영감을 받아 새로운 주제를 만들어주세요.
+
+JSON 배열로만 답하세요:
+[{"rank":1,"topic":"주제 제목","reason":"이유"},...]`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { responseMimeType: 'application/json' },
+  });
+  return JSON.parse(cleanJsonResponse(response.text));
+};
+
 export const findTrendingTopics = async (category: string, usedTopics: string[]) => {
   return retryGeminiRequest("Trend Search", async () => {
     const ai = getAI();

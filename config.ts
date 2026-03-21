@@ -288,6 +288,9 @@ export const CONFIG = {
     VISUAL_STYLE_ID: 'heaven_visual_style_id',   // VisualStyleId
     LONGFORM_DURATION: 'heaven_longform_duration',   // seconds per scene (longform)
     SHORTFORM_DURATION: 'heaven_shortform_duration', // seconds per scene (shortform)
+    CUSTOM_STYLE_PROMPT: 'heaven_custom_style_prompt', // 커스텀 스타일 프롬프트
+    YOUTUBE_API_KEY: 'heaven_youtube_key',           // YouTube Data API 키
+    CATEGORY_GUIDE_PREFIX: 'heaven_cat_guide_',      // + categoryId
   },
 
   // 애니메이션 설정

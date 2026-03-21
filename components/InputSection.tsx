@@ -4,7 +4,7 @@ import ThumbnailEditor from './ThumbnailEditor';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
-import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics } from '../services/geminiService';
+import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics } from '../services/geminiService';
 
 
 function pcmBase64ToWavUrl(base64Pcm: string): string {
@@ -120,10 +120,18 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
   // 2단계 완전 자동화
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [suggestedTopics, setSuggestedTopics] = useState<Array<{rank: number; topic: string; reason: string}>>([]);
+  const [selectedTopics, setSelectedTopics] = useState<Set<number>>(new Set());
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
+  const [topicSource, setTopicSource] = useState<'google' | 'youtube'>('google');
+  const [youtubeChannels, setYoutubeChannels] = useState(localStorage.getItem('heaven_yt_channels') || '');
+  const [youtubeApiKey, setYoutubeApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY) || '');
   const [autoRunMode, setAutoRunMode] = useState(false);
   const [writingGuide, setWritingGuide] = useState(localStorage.getItem('heaven_writing_guide') || '');
   const [showWritingGuide, setShowWritingGuide] = useState(false);
+  const [isSequentialRunning, setIsSequentialRunning] = useState(false);
+  const sequentialQueueRef = useRef<string[]>([]);
+  const sequentialIndexRef = useRef(0);
+  const prevStepRef = useRef(step);
 
   // 프로젝트
   const [projects, setProjects] = useState<ProjectSettings[]>([]);
@@ -151,6 +159,52 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
 
 
   useEffect(() => { return () => { audioRef.current?.pause(); audioRef.current = null; }; }, []);
+
+  // 카테고리 변경 시 해당 카테고리의 글쓰기 지침 자동 로드
+  const CATEGORY_DEFAULT_GUIDES: Record<string, string> = {
+    '한국 야담/기담/미스터리': '공포스럽고 몰입감 있는 문체, 반말 사용, 마지막에 소름돋는 반전 포함, 각 씬은 짧고 임팩트 있게',
+    '경제/재테크/투자': '친근한 말투, 숫자와 수치 반드시 포함, 실생활 예시로 설명, 핵심은 3가지로 간결하게 정리',
+    '한국사/세계사': '흥미로운 이야기체 서술, 역사적 사실 기반, 현재와의 연관성 언급, 인물 중심으로',
+    '과학/우주/자연': '경이로움을 자극하는 문체, 어려운 개념은 쉽게 비유해서 설명, 숫자로 규모감 표현',
+    '뉴스/시사/사회': '중립적이고 객관적 시각, 핵심 팩트 중심, 간결하게, 왜 중요한지 한 줄 설명',
+    '건강/의학': '신뢰감 있는 말투, 의학적 사실 기반, 실천 가능한 조언 포함, 전문용어는 쉽게 풀어서',
+    '심리/정신건강': '공감하는 따뜻한 말투, 일상 속 사례로 설명, 독자가 자기 자신을 돌아볼 수 있게',
+    '종교/영성/철학': '깊이 있고 사려깊은 문체, 다양한 관점 존중, 삶의 의미와 연결',
+    '연예/문화': '가볍고 흥미로운 말투, 재미있는 에피소드 중심, 독자가 알면 놀랄 비하인드 스토리',
+    '스포츠': '역동적이고 활기찬 문체, 경기 장면을 생생하게 묘사, 선수의 인간적인 면 부각',
+  };
+
+  useEffect(() => {
+    if (!selectedCategory) return;
+    const saved = localStorage.getItem(`${CONFIG.STORAGE_KEYS.CATEGORY_GUIDE_PREFIX}${selectedCategory}`);
+    setWritingGuide(saved !== null ? saved : (CATEGORY_DEFAULT_GUIDES[selectedCategory] || ''));
+    setShowWritingGuide(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
+
+  // 순차 생성: step이 COMPLETED로 바뀔 때 다음 주제 자동 실행
+  useEffect(() => {
+    const prev = prevStepRef.current;
+    prevStepRef.current = step;
+    if (!isSequentialRunning) return;
+    if (prev !== GenerationStep.COMPLETED && step === GenerationStep.COMPLETED) {
+      const idx = sequentialIndexRef.current;
+      const queue = sequentialQueueRef.current;
+      if (idx < queue.length) {
+        sequentialIndexRef.current = idx + 1;
+        setTimeout(() => {
+          const nextTopic = queue[idx];
+          setTopic(nextTopic);
+          onGenerate(nextTopic, { characterImages: characterRefImages, styleImages: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount, false, false, true);
+        }, 2500);
+      } else {
+        setIsSequentialRunning(false);
+        sequentialQueueRef.current = [];
+        sequentialIndexRef.current = 0;
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   const loadVoices = useCallback(async (apiKey?: string) => {
     const key = apiKey || elApiKey;
@@ -484,29 +538,34 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         { id: '한국사/세계사', label: '역사', sub: 'HISTORY' },
                         { id: '과학/우주/자연', label: '과학/우주', sub: 'SCIENCE' },
                         { id: '뉴스/시사/사회', label: '뉴스/시사', sub: 'NEWS' },
-                        { id: '건강/의학/심리', label: '건강/심리', sub: 'HEALTH' },
                         { id: '종교/영성/철학', label: '종교/철학', sub: 'RELIGION' },
-                        { id: '연예/스포츠/문화', label: '연예/스포츠', sub: 'CULTURE' },
+                        { id: '건강/의학', label: '건강/의학', sub: 'HEALTH' },
+                        { id: '심리/정신건강', label: '심리', sub: 'PSYCHOLOGY' },
+                        { id: '연예/문화', label: '연예', sub: 'ENTERTAIN' },
+                        { id: '스포츠', label: '스포츠', sub: 'SPORTS' },
                       ];
+                      const allSelected = suggestedTopics.length > 0 && selectedTopics.size === suggestedTopics.length;
                       return (
-                        <div>
-                          <div className="grid grid-cols-4 gap-2 mb-2">
+                        <div className="flex flex-col gap-2">
+                          {/* 카테고리 버튼 5×2 */}
+                          <div className="grid grid-cols-5 gap-2">
                             {CATEGORIES.map(cat => (
                               <button key={cat.id} type="button"
                                 onClick={() => {
                                   setSelectedCategory(cat.id);
                                   setSuggestedTopics([]);
+                                  setSelectedTopics(new Set());
                                 }}
                                 disabled={isProcessing || isLoadingTopics}
-                                className={`relative p-2.5 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
+                                className={`relative p-2 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
                                   selectedCategory === cat.id
                                     ? 'border-red-400/80 bg-red-900/30 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
                                     : 'border-white/[0.1] bg-slate-800/70 hover:border-white/30 hover:bg-slate-700/70'
                                 }`}>
-                                <p className="text-sm font-black text-white leading-tight">{cat.label}</p>
-                                <p className="text-[9px] text-slate-500 mt-0.5 font-bold tracking-wider">{cat.sub}</p>
+                                <p className="text-xs font-black text-white leading-tight">{cat.label}</p>
+                                <p className="text-[8px] text-slate-500 mt-0.5 font-bold tracking-wider">{cat.sub}</p>
                                 {selectedCategory === cat.id && (
-                                  <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
+                                  <div className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
                                     <CheckIcon />
                                   </div>
                                 )}
@@ -514,41 +573,119 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             ))}
                           </div>
 
-                          {/* 주제 추천 버튼 */}
+                          {/* 주제 소스 선택 + 추천 버튼 */}
                           {selectedCategory && (
-                            <button type="button"
-                              onClick={async () => {
-                                setSuggestedTopics([]);
-                                setIsLoadingTopics(true);
-                                try {
-                                  const result = await findTrendingTopics(selectedCategory, []);
-                                  if (Array.isArray(result)) setSuggestedTopics(result);
-                                } catch (e) { console.error('주제 추천 실패:', e); }
-                                finally { setIsLoadingTopics(false); }
-                              }}
-                              disabled={isProcessing || isLoadingTopics}
-                              className="w-full py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 font-bold text-sm transition-all disabled:opacity-50">
-                              {isLoadingTopics ? '주제 추천 중...' : suggestedTopics.length > 0 ? '🔄 다시 추천받기' : '주제 추천받기'}
-                            </button>
+                            <div className="flex flex-col gap-1.5">
+                              {/* 소스 토글 */}
+                              <div className="flex gap-1.5 bg-black/40 p-1 rounded-xl border border-white/[0.07]">
+                                <button type="button" onClick={() => setTopicSource('google')}
+                                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${topicSource === 'google' ? 'bg-blue-600/30 border border-blue-500/50 text-blue-200' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                                  Google 트렌드
+                                </button>
+                                <button type="button" onClick={() => setTopicSource('youtube')}
+                                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${topicSource === 'youtube' ? 'bg-red-600/30 border border-red-500/50 text-red-200' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                                  YouTube 채널
+                                </button>
+                              </div>
+
+                              {/* YouTube 채널 입력 */}
+                              {topicSource === 'youtube' && (
+                                <div className="flex flex-col gap-1">
+                                  <input type="text" value={youtubeApiKey}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeApiKey(e.target.value); localStorage.setItem(CONFIG.STORAGE_KEYS.YOUTUBE_API_KEY, e.target.value); }}
+                                    placeholder="YouTube Data API 키"
+                                    className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
+                                  <input type="text" value={youtubeChannels}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeChannels(e.target.value); localStorage.setItem('heaven_yt_channels', e.target.value); }}
+                                    placeholder="채널 ID 쉼표 구분 (비우면 키워드 검색)"
+                                    className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
+                                </div>
+                              )}
+
+                              {/* 주제 추천 버튼 */}
+                              <button type="button"
+                                onClick={async () => {
+                                  setSuggestedTopics([]);
+                                  setSelectedTopics(new Set());
+                                  setIsLoadingTopics(true);
+                                  try {
+                                    let result;
+                                    if (topicSource === 'youtube') {
+                                      const channelIds = youtubeChannels.split(',').map(s => s.trim()).filter(Boolean);
+                                      result = await findYouTubeTopics(selectedCategory, channelIds);
+                                    } else {
+                                      result = await findTrendingTopics(selectedCategory, []);
+                                    }
+                                    if (Array.isArray(result)) setSuggestedTopics(result);
+                                  } catch (e: any) { alert(`주제 추천 실패: ${e?.message || e}`); }
+                                  finally { setIsLoadingTopics(false); }
+                                }}
+                                disabled={isProcessing || isLoadingTopics}
+                                className="w-full py-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 font-bold text-sm transition-all disabled:opacity-50">
+                                {isLoadingTopics ? '주제 추천 중...' : suggestedTopics.length > 0 ? '다시 추천받기' : '주제 추천받기'}
+                              </button>
+                            </div>
                           )}
 
-                          {/* 주제 목록 */}
+                          {/* 주제 목록 (체크박스 다중 선택) */}
                           {isLoadingTopics && (
                             <div className="text-center py-3 text-amber-300/80 text-sm animate-pulse">주제 추천 중...</div>
                           )}
                           {!isLoadingTopics && suggestedTopics.length > 0 && (
-                            <div className="bg-black/40 border border-amber-500/20 rounded-xl p-2 space-y-1">
-                              <p className="text-[10px] text-amber-400/60 font-bold px-1 mb-1.5">클릭하면 주제가 선택됩니다</p>
-                              {suggestedTopics.map((t: {rank: number; topic: string; reason: string}) => (
-                                <button key={t.rank} type="button"
-                                  onClick={() => setTopic(t.topic)}
-                                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all border ${
-                                    topic === t.topic
-                                      ? 'bg-amber-500/20 border-amber-400/50 text-amber-100'
-                                      : 'bg-white/[0.03] border-transparent hover:bg-white/[0.07] hover:border-white/10 text-white/80'
-                                  }`}>
-                                  <span className="text-amber-400/60 text-xs mr-1.5">{t.rank}.</span>{t.topic}
+                            <div className="bg-black/40 border border-amber-500/20 rounded-xl p-2 flex flex-col gap-1">
+                              {/* 전체선택 + 순차 생성 버튼 */}
+                              <div className="flex items-center justify-between px-1 mb-1">
+                                <button type="button"
+                                  onClick={() => setSelectedTopics(allSelected ? new Set() : new Set(suggestedTopics.map(t => t.rank)))}
+                                  className="text-[10px] text-amber-400/70 hover:text-amber-300 font-bold transition-colors">
+                                  {allSelected ? '전체 해제' : '전체 선택'}
                                 </button>
+                                {selectedTopics.size > 0 && !isSequentialRunning && (
+                                  <button type="button"
+                                    onClick={() => {
+                                      const queue = suggestedTopics
+                                        .filter(t => selectedTopics.has(t.rank))
+                                        .map(t => t.topic);
+                                      if (queue.length === 0) return;
+                                      sequentialQueueRef.current = queue.slice(1);
+                                      sequentialIndexRef.current = 0;
+                                      setIsSequentialRunning(true);
+                                      const first = queue[0];
+                                      setTopic(first);
+                                      onGenerate(first, { characterImages: characterRefImages, styleImages: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount, false, false, true);
+                                    }}
+                                    className="px-3 py-1 rounded-lg bg-green-500/20 border border-green-500/40 text-green-300 text-[10px] font-bold hover:bg-green-500/30 transition-all">
+                                    {selectedTopics.size}개 순차 생성
+                                  </button>
+                                )}
+                                {isSequentialRunning && (
+                                  <span className="text-[10px] text-green-400 animate-pulse font-bold">
+                                    순차 생성 중... ({sequentialQueueRef.current.length - sequentialIndexRef.current + 1}개 남음)
+                                  </span>
+                                )}
+                              </div>
+                              {suggestedTopics.map((t: {rank: number; topic: string; reason: string}) => (
+                                <div key={t.rank}
+                                  className={`flex items-start gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all border ${
+                                    selectedTopics.has(t.rank)
+                                      ? 'bg-amber-500/15 border-amber-400/40 text-amber-100'
+                                      : 'bg-white/[0.03] border-transparent hover:bg-white/[0.06] hover:border-white/10 text-white/80'
+                                  }`}
+                                  onClick={() => {
+                                    setSelectedTopics(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(t.rank)) next.delete(t.rank); else next.add(t.rank);
+                                      return next;
+                                    });
+                                    setTopic(t.topic);
+                                  }}>
+                                  <div className={`mt-0.5 w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
+                                    selectedTopics.has(t.rank) ? 'bg-amber-500 border-amber-400' : 'border-white/30'
+                                  }`}>
+                                    {selectedTopics.has(t.rank) && <CheckIcon />}
+                                  </div>
+                                  <span className="text-sm flex-1">{t.topic}</span>
+                                </div>
                               ))}
                             </div>
                           )}
@@ -574,7 +711,11 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                     {showWritingGuide && (
                       <textarea
                         value={writingGuide}
-                        onChange={(e) => { setWritingGuide(e.target.value); localStorage.setItem('heaven_writing_guide', e.target.value); }}
+                        onChange={(e) => {
+                          setWritingGuide(e.target.value);
+                          localStorage.setItem('heaven_writing_guide', e.target.value);
+                          if (selectedCategory) localStorage.setItem(`${CONFIG.STORAGE_KEYS.CATEGORY_GUIDE_PREFIX}${selectedCategory}`, e.target.value);
+                        }}
                         placeholder={"AI 글쓰기 지침 (예: 반말 사용, 호기심을 자극하는 문체, 각 씬은 2문장 이내)"}
                         className="w-full bg-black/50 border border-violet-500/30 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-violet-400"
                         rows={3}
