@@ -391,7 +391,13 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       return;
     }
 
-    if (!scene?.audioData) return;
+    if (!scene?.audioData) {
+      if (!onGenerateAudio) return;
+      setIsGeneratingAudio(true);
+      try { await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
+      // 생성 후 scene은 부모에서 업데이트됨 — 다음 클릭에 재생됨
+      return;
+    }
     const thisPlayId = ++playIdRef.current;
     try {
       if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -657,34 +663,22 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-900 border-b border-white/[0.07] shrink-0">
           <button
             onClick={togglePlay}
-            disabled={!hasAudio}
+            disabled={isGeneratingAudio}
             className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
-              hasAudio
-                ? isPlaying
+              isGeneratingAudio
+                ? 'bg-slate-800 text-slate-400 cursor-wait'
+                : isPlaying
                   ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]'
                   : 'bg-blue-600/25 border border-blue-500/60 hover:bg-blue-600/45 text-blue-200'
-                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
-            {isPlaying
-              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
-              : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
+            {isGeneratingAudio
+              ? <div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-300 rounded-full animate-spin" />
+              : isPlaying
+                ? <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
+                : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
             }
           </button>
-          {!hasAudio && onGenerateAudio && (
-            <button
-              onClick={async () => {
-                setIsGeneratingAudio(true);
-                try { await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
-              }}
-              disabled={isGeneratingAudio}
-              className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600/35 disabled:opacity-40 transition-all shrink-0 flex items-center gap-1"
-            >
-              {isGeneratingAudio
-                ? <><div className="w-3 h-3 border-2 border-blue-300/40 border-t-blue-300 rounded-full animate-spin" />생성 중</>
-                : '음성 생성'}
-            </button>
-          )}
           <div
             ref={progressBarRef}
             className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
