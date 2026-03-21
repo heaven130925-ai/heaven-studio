@@ -586,6 +586,119 @@ const generateScriptSingle = async (
 };
 
 /**
+ * 전체 대본을 읽고 각 씬의 이미지 프롬프트를 재작성
+ * - 스크립트 생성 직후, 이미지 생성 전에 호출
+ * - AI가 전체 맥락(등장인물 나이/특성, 장소, 시간대 등)을 파악한 후 프롬프트 작성
+ */
+export const enrichImagePrompts = async (
+  scenes: ScriptScene[],
+  hasCharacterRef: boolean = false
+): Promise<ScriptScene[]> => {
+  if (scenes.length === 0) return scenes;
+
+  return retryGeminiRequest("Image Prompt Enrichment", async () => {
+    const ai = getAI();
+
+    // 전체 대본을 번호 리스트로 정리
+    const scriptSummary = scenes
+      .map(s => `[${s.sceneNumber}] ${s.narration}`)
+      .join('\n');
+
+    const charRefRule = hasCharacterRef
+      ? `- 사람이 등장하는 씬: 반드시 "THE CHARACTER"만 사용, 외모(나이/성별/머리색 등) 절대 묘사 금지`
+      : `- 나레이션에서 언급된 인물의 나이/특성을 반드시 반영 (할아버지→elderly man, 아이→child, 젊은 여성→young woman 등)`;
+
+    const prompt = `당신은 영상 스토리보드 전문가입니다.
+아래 전체 대본을 완독한 후, 각 씬의 이미지 프롬프트를 작성하라.
+
+## ⚠️ 핵심 규칙 (반드시 준수)
+1. **전체 대본 맥락 파악 필수**: 먼저 모든 씬의 나레이션을 읽고 전체 흐름을 이해하라
+2. **나레이션과 이미지 100% 일치**: 나레이션에 "산속"이면 반드시 mountain forest, "마당"이면 courtyard
+3. **인물 묘사 정확히**: 나레이션에서 언급된 인물의 특성을 반드시 반영
+${charRefRule}
+4. **장소 일치**: 나레이션에 나온 장소를 그대로 묘사 (집→house interior, 시장→marketplace 등)
+5. **같은 인물이 여러 씬에 등장**: 씬 간 일관성 유지 (한 씬에서 할아버지면 다음 씬도 동일 인물)
+
+## 이미지 프롬프트 작성 요소 (각 씬마다 포함)
+- WHO: 누가 (사람이면 나이/특성 포함, 인격체 없으면 NO_CHAR)
+- WHAT: 무엇을 하고 있는가 (구체적 행동)
+- WHERE: 정확한 장소 (나레이션 장소와 일치)
+- MOOD: 분위기/조명
+
+## 전체 대본
+${scriptSummary}
+
+## 출력 형식
+각 씬 번호에 대한 image_prompt_english를 JSON 배열로 출력:
+[{"sceneNumber": 1, "image_prompt_english": "...영문 프롬프트..."},...]
+
+출력은 JSON 배열만, 설명 텍스트 없음.`;
+
+    const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+    let responseText: string;
+
+    if (anthropicKey) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: Math.min(65536, scenes.length * 200),
+            system: 'Output ONLY a valid JSON array. No markdown, no explanation.',
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          responseText = data.content?.[0]?.text || '[]';
+          console.log('[Prompts] Claude로 이미지 프롬프트 재작성 완료');
+        } else {
+          throw new Error(`Claude ${resp.status}`);
+        }
+      } catch (e) {
+        console.warn('[Prompts] Claude 실패 → Gemini 폴백', e);
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(65536, scenes.length * 200) },
+        });
+        responseText = response.text || '[]';
+      }
+    } else {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(65536, scenes.length * 200) },
+      });
+      responseText = response.text || '[]';
+      console.log('[Prompts] Gemini로 이미지 프롬프트 재작성 완료');
+    }
+
+    const parsed = JSON.parse(cleanJsonResponse(responseText));
+    const promptMap = new Map<number, string>();
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item.sceneNumber && item.image_prompt_english) {
+          promptMap.set(item.sceneNumber, item.image_prompt_english);
+        }
+      }
+    }
+
+    // 원본 씬에 새 프롬프트 적용 (없으면 기존 유지)
+    return scenes.map(s => ({
+      ...s,
+      visualPrompt: promptMap.get(s.sceneNumber) || s.visualPrompt,
+    }));
+  });
+};
+
+/**
  * 기존 generateScript 함수 (하위 호환성 유지)
  */
 export const generateScript = async (

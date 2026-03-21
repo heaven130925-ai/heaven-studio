@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt, editImageWithGemini } from './services/geminiService';
+import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt, editImageWithGemini, enrichImagePrompts } from './services/geminiService';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
@@ -313,6 +313,19 @@ const App: React.FC = () => {
           );
         } else {
           scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
+        }
+        if (isAbortedRef.current) return;
+
+        // ── 이미지 프롬프트 재작성 (전체 대본 맥락 기반) ──
+        // 씬이 3개 이상일 때만 실행 (맥락 파악이 의미 있는 분량)
+        if (scriptScenes.length >= 3) {
+          setProgressMessage(`대본 분석 중... 이미지 프롬프트 최적화 (${scriptScenes.length}개 씬)`);
+          try {
+            scriptScenes = await enrichImagePrompts(scriptScenes, hasCharacterRef);
+            console.log(`[App] 이미지 프롬프트 재작성 완료 (${scriptScenes.length}개 씬)`);
+          } catch (e: any) {
+            console.warn('[App] 이미지 프롬프트 재작성 실패 (기존 프롬프트 유지):', e.message);
+          }
         }
         if (isAbortedRef.current) return;
 
