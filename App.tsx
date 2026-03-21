@@ -394,7 +394,9 @@ const App: React.FC = () => {
 
     // 자동 주제 모드 또는 오디오만 생성은 스토리보드 열지 않음
     const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
-    if (!isAutoTopicMode && !audioOnly) setShowStoryboard(true);
+    // 캐릭터 설정이 뜨는 일반 모드는 스토리보드를 나중에 열기 (캐릭터 완료 후)
+    const willShowCharacterSetup = !audioOnly && !autoRun && !imageOnly;
+    if (!isAutoTopicMode && !audioOnly && !willShowCharacterSetup) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -518,6 +520,7 @@ const App: React.FC = () => {
           // 저장된 프로필 먼저 표시
           const savedProfs = loadSavedCharacterProfiles();
           setCharactersList(savedProfs);
+          setShowStoryboard(false);
           setShowCharacterSetup(true);
           setStep(GenerationStep.CHARACTER_SETUP);
           setProgressMessage('캐릭터 이미지를 설정하세요');
