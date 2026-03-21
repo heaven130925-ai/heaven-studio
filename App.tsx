@@ -350,24 +350,41 @@ const App: React.FC = () => {
       const runAudio = async () => {
           const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
 
-          if (ttsProvider === 'google' || ttsProvider === 'gcloud') {
-            // ── Google TTS / Google Cloud TTS: 씬별 개별 생성 ──
-            const providerLabel = ttsProvider === 'gcloud' ? 'Cloud TTS' : 'Google TTS';
+          if (ttsProvider === 'google' || ttsProvider === 'gcloud' || ttsProvider === 'azure') {
+            // ── Google TTS / Google Cloud TTS / Azure TTS: 씬별 개별 생성 ──
+            const providerLabel = ttsProvider === 'gcloud' ? 'Cloud TTS' : ttsProvider === 'azure' ? 'Azure TTS' : 'Gemini TTS';
+            // Gemini TTS는 쿼터 소진 방지를 위해 씬 간 딜레이 증가
+            const sceneDelay = ttsProvider === 'google' ? 2000 : 300;
+            const MAX_SCENE_RETRIES = ttsProvider === 'google' ? 3 : 1;
+
             for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) return;
               setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 음성 생성 중... (${providerLabel})`);
-              try {
-                const audioData = await generateAudioForScene(initialAssets[i].narration);
-                if (!isAbortedRef.current) {
-                  updateAssetAt(i, { audioData: audioData ?? null });
-                  console.log(`[TTS] 씬 ${i + 1} ${providerLabel} 완료`);
+
+              let success = false;
+              for (let attempt = 0; attempt < MAX_SCENE_RETRIES && !success; attempt++) {
+                if (isAbortedRef.current) return;
+                try {
+                  if (attempt > 0) {
+                    console.log(`[TTS] 씬 ${i + 1} 재시도 ${attempt}/${MAX_SCENE_RETRIES - 1}...`);
+                    await wait(5000 * attempt); // 재시도마다 5초씩 추가 대기
+                  }
+                  const audioData = await generateAudioForScene(initialAssets[i].narration);
+                  if (!isAbortedRef.current) {
+                    updateAssetAt(i, { audioData: audioData ?? null });
+                    console.log(`[TTS] 씬 ${i + 1} ${providerLabel} 완료`);
+                    success = true;
+                  }
+                } catch (e: any) {
+                  console.error(`[TTS] 씬 ${i + 1} ${providerLabel} 실패 (시도 ${attempt + 1}):`, e.message);
+                  if (attempt === MAX_SCENE_RETRIES - 1) {
+                    setProgressMessage(`⚠️ 씬 ${i + 1} ${providerLabel} 실패: ${e?.message || e}`);
+                  }
                 }
-              } catch (e: any) {
-                console.error(`[TTS] 씬 ${i + 1} ${providerLabel} 실패:`, e.message);
-                setProgressMessage(`⚠️ 씬 ${i + 1} ${providerLabel} 실패: ${e?.message || e}`);
               }
+
               if (i < initialAssets.length - 1 && !isAbortedRef.current) {
-                await wait(300);
+                await wait(sceneDelay);
               }
             }
             return;
