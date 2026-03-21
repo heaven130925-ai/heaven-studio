@@ -140,6 +140,7 @@ export enum GenerationStep {
   IDLE = 'IDLE',
   SCRIPTING = 'SCRIPTING',
   SCRIPT_READY = 'SCRIPT_READY',  // 대본 완성 → 사용자 확인 후 이미지 생성 대기
+  CHARACTER_SETUP = 'CHARACTER_SETUP', // 캐릭터 설정 → 레퍼런스 이미지 생성 후 스토리보드 생성
   ASSETS = 'ASSETS',
   COMPLETED = 'COMPLETED',
   ERROR = 'ERROR'
