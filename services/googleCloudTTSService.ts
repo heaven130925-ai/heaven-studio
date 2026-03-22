@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { getVoiceSetting } from '../utils/voiceStorage';
 
 export interface GCloudVoice {
   id: string;
@@ -52,10 +53,10 @@ export const generateGCloudTTS = async (text: string): Promise<string | null> =>
   const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '';
   if (!apiKey) return null;
 
-  const voiceName = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A';
-  const voiceSpeed = parseFloat(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
-  const toneId = localStorage.getItem('heaven_gcloud_tone_id') || '';
-  const moodId = localStorage.getItem('heaven_gcloud_mood_id') || '';
+  const voiceName = getVoiceSetting(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A';
+  const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
+  const toneId = getVoiceSetting('heaven_gcloud_tone_id') || '';
+  const moodId = getVoiceSetting('heaven_gcloud_mood_id') || '';
   const prosodyAttrs = buildProsodyAttrs(toneId, moodId);
 
   const rateAttr = `rate="${Math.round(voiceSpeed * 100)}%"`;

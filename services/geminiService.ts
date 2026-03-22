@@ -1600,7 +1600,7 @@ export const generateAllScenesAudio = async (
  * - 400자 초과 시 청크 분할 후 이어붙이기
  */
 export const generateAudioForScene = async (text: string): Promise<string | null> => {
-  const provider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'google';
+  const provider = getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'google';
 
   // Azure TTS 경로 (Neural — MP3 반환, 월 50만자 무료)
   if (provider === 'azure') {

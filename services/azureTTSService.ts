@@ -1,4 +1,5 @@
 import { CONFIG } from '../config';
+import { getVoiceSetting } from '../utils/voiceStorage';
 
 export interface AzureVoice {
   id: string;
@@ -24,11 +25,11 @@ export const AZURE_KO_VOICES: AzureVoice[] = [
  */
 export const generateAzureTTS = async (text: string): Promise<string | null> => {
   const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '';
-  const region  = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION)  || '';
+  const region  = getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION)  || '';
   if (!apiKey || !region) return null;
 
-  const voice = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE) || 'ko-KR-SunHiNeural';
-  const speed = parseFloat(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
+  const voice = getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE) || 'ko-KR-SunHiNeural';
+  const speed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const speedPct = `${Math.round(speed * 100)}%`;
 
   const ssml = `<speak version='1.0' xml:lang='ko-KR'>
@@ -69,7 +70,7 @@ export const generateAzureTTS = async (text: string): Promise<string | null> => 
  */
 export const previewAzureTTS = async (text: string, voiceName: string): Promise<string | null> => {
   const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '';
-  const region  = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION)  || '';
+  const region  = getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION)  || '';
   if (!apiKey || !region) return null;
 
   const ssml = `<speak version='1.0' xml:lang='ko-KR'>
