@@ -730,45 +730,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   };
   const handleMouseUp = () => { dragRef.current = null; setIsDragging(false); };
 
-  // ── 메인 캔버스 줌 애니메이션 루프 ──
-  const zoomRafRef = useRef<number>(0);
-  const zoomStartRef = useRef<number | null>(null);
-
   const activeZoom = scene?.zoomEffect ?? subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
 
-  useEffect(() => {
+  // ── 캔버스 재렌더 ──
+  // 줌 있을 때: currentSubTime / audioDuration으로 progress 계산 → 오디오와 완벽 동기
+  // 줌 없을 때: 정적 렌더
+  const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    cancelAnimationFrame(zoomRafRef.current);
-    zoomStartRef.current = null;
-
-    if (activeZoom.type === 'none' || !imgCacheRef.current) return;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const img = imgCacheRef.current;
 
-    const DURATION = 3000;
-    const tick = (ts: number) => {
-      if (!zoomStartRef.current) zoomStartRef.current = ts;
-      const progress = ((ts - zoomStartRef.current) % DURATION) / DURATION;
-      const img = imgCacheRef.current;
-      if (!img) return;
+    if (activeZoom.type !== 'none' && img) {
+      const dur = audioRef.current?.duration || scene?.audioDuration || 0;
+      const progress = dur > 0 ? Math.min(currentSubTime / dur, 1) : 0;
       drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, activeZoom);
       drawSubtitleText(ctx, displaySubtitleText, subConfig, canvas.width, canvas.height);
-      zoomRafRef.current = requestAnimationFrame(tick);
-    };
-    zoomRafRef.current = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(zoomRafRef.current); zoomStartRef.current = null; };
-  }, [activeZoom.type, activeZoom.intensity, activeZoom.origin, displaySubtitleText, subConfig]); // eslint-disable-line
-
-  // ── 캔버스 정적 재렌더 (줌 없을 때만) ──
-  const redraw = useCallback(() => {
-    if (activeZoom.type !== 'none') return; // 줌 애니메이션 루프가 담당
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
-      .finally(() => renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig));
-  }, [displaySubtitleText, subConfig, activeZoom.type]);
+    } else {
+      document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
+        .finally(() => renderSubtitleOnCanvas(canvas, img, displaySubtitleText, subConfig));
+    }
+  }, [currentSubTime, displaySubtitleText, subConfig, activeZoom, scene?.audioDuration]); // eslint-disable-line
 
   useEffect(() => { redraw(); }, [redraw]);
 
