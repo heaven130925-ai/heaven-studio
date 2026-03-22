@@ -224,9 +224,7 @@ export const GEMINI_TTS_VOICES = [
   { id: 'Puck',           name: 'Puck',           gender: 'male'   as const, description: '활기차고 경쾌한 남성' },
   { id: 'Oberon',         name: 'Oberon',         gender: 'male'   as const, description: '권위있고 명확한 남성' },
   { id: 'Iapetus',        name: 'Iapetus',        gender: 'male'   as const, description: '차분하고 신뢰감 있는 남성' },
-  { id: 'Gacrux',         name: 'Gacrux',         gender: 'male'   as const, description: '따뜻하고 풍부한 남성' },
   { id: 'Umbriel',        name: 'Umbriel',        gender: 'male'   as const, description: '깊고 성숙한 남성' },
-  { id: 'Achernar',       name: 'Achernar',       gender: 'male'   as const, description: '밝고 에너지 넘치는 남성' },
   { id: 'Achird',         name: 'Achird',         gender: 'male'   as const, description: '편안하고 친근한 남성' },
   { id: 'Algenib',        name: 'Algenib',        gender: 'male'   as const, description: '명쾌하고 또렷한 남성' },
   { id: 'Algieba',        name: 'Algieba',        gender: 'male'   as const, description: '부드럽고 세련된 남성' },
@@ -249,6 +247,8 @@ export const GEMINI_TTS_VOICES = [
   { id: 'Sulafat',        name: 'Sulafat',        gender: 'female' as const, description: '따뜻하고 감성적인 여성' },
   { id: 'Vindemiatrix',   name: 'Vindemiatrix',   gender: 'female' as const, description: '세련되고 전문적인 여성' },
   { id: 'Ariel',          name: 'Ariel',          gender: 'female' as const, description: '생기있고 활발한 여성' },
+  { id: 'Gacrux',         name: 'Gacrux',         gender: 'female' as const, description: '따뜻하고 풍부한 여성' },
+  { id: 'Achernar',       name: 'Achernar',       gender: 'female' as const, description: '밝고 에너지 넘치는 여성' },
 ] as const;
 
 export type GeminiTtsVoiceId = typeof GEMINI_TTS_VOICES[number]['id'];
