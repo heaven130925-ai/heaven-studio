@@ -685,12 +685,12 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     };
   }, [seekToFraction]);
 
-  // ── 스페이스바 단축키 ──
+  // ── 스페이스바 단축키 (INPUT/TEXTAREA 제외 모든 상황에서 동작) ──
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'BUTTON') {
-        e.preventDefault();
+      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        e.preventDefault(); // 버튼 포커스 시 버튼 활성화 막고 재생/정지 처리
         togglePlay();
       }
     };
