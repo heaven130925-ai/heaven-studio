@@ -80,6 +80,12 @@ const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onS
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={onSkip}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-sm font-bold transition-all border border-slate-600/50"
+          >
+            ← 메인으로
+          </button>
           {chars.length > 0 && (
             <button
               onClick={generateAll}
@@ -89,9 +95,9 @@ const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onS
               {isGeneratingAll ? (
                 <span className="flex items-center gap-2">
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  전체 생성 중...
+                  일괄생성 중...
                 </span>
-              ) : `전체 생성 (${chars.length}명)`}
+              ) : `이미지 일괄생성 (${chars.length}명)`}
             </button>
           )}
           <button
@@ -99,14 +105,8 @@ const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onS
             className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-black transition-all border border-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
           >
             {generatedCount > 0
-              ? `스토리보드 생성 시작 (${generatedCount}명 레퍼런스 적용)`
-              : '건너뛰고 스토리보드 생성'}
-          </button>
-          <button
-            onClick={onSkip}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-sm font-bold transition-all border border-slate-600/50"
-          >
-            건너뛰기
+              ? `스토리보드 생성 시작 (${generatedCount}명 적용)`
+              : '스토리보드 생성 시작'}
           </button>
         </div>
       </div>
@@ -194,14 +194,31 @@ const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onS
                       className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-400 focus:outline-none focus:border-indigo-500 resize-none font-mono"
                     />
                   </div>
-                  {/* 생성 버튼 */}
-                  <button
-                    onClick={() => generateOne(idx)}
-                    disabled={generatingIdx !== null || isGeneratingAll}
-                    className="w-full py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/40 disabled:opacity-40 text-indigo-300 text-sm font-bold border border-indigo-500/40 transition-all"
-                  >
-                    {generatingIdx === idx ? '생성 중...' : char.imageData ? '이미지 재생성' : '이미지 생성'}
-                  </button>
+                  {/* 생성/재생성 버튼 */}
+                  {generatingIdx === idx ? (
+                    <div className="w-full py-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center gap-2 text-indigo-300 text-sm font-bold">
+                      <span className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                      생성 중...
+                    </div>
+                  ) : char.imageData ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => generateOne(idx)}
+                        disabled={generatingIdx !== null || isGeneratingAll}
+                        className="flex-1 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/40 disabled:opacity-40 text-indigo-300 text-sm font-bold border border-indigo-500/40 transition-all"
+                      >
+                        이미지 재생성
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => generateOne(idx)}
+                      disabled={generatingIdx !== null || isGeneratingAll}
+                      className="w-full py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm font-bold border border-indigo-500/60 transition-all shadow-[0_0_10px_rgba(99,102,241,0.3)]"
+                    >
+                      이미지 생성
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

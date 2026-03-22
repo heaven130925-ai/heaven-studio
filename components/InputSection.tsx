@@ -23,6 +23,7 @@ function pcmBase64ToWavUrl(base64Pcm: string): string {
 interface InputSectionProps {
   onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean, audioOnly?: boolean, autoRun?: boolean) => void;
   onCharacterAnalyze?: (topic: string, referenceImages: ReferenceImages, sourceText: string, sceneCount: number) => void;
+  isAnalyzingCharacters?: boolean;
   step: GenerationStep;
   activeTab: 'auto' | 'manual';
   onTabChange: (tab: 'auto' | 'manual') => void;
@@ -36,7 +37,7 @@ interface InputSectionProps {
   onOpenGallery?: () => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, isAnalyzingCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -906,10 +907,19 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                 {activeTab === 'manual' && onCharacterAnalyze && (
                   <button type="button"
                     onClick={() => onCharacterAnalyze("Manual Script Input", buildRefImages(), manualScript, sceneCount)}
-                    disabled={isProcessing || !canSubmitManual}
+                    disabled={isProcessing || isAnalyzingCharacters || !canSubmitManual}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-emerald-500/50 hover:border-emerald-400/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] hover:shadow-[0_0_28px_rgba(16,185,129,0.4)] disabled:shadow-none">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    캐릭터 분석
+                    {isAnalyzingCharacters ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+                        캐릭터 분석 중...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        캐릭터 분석
+                      </>
+                    )}
                   </button>
                 )}
 

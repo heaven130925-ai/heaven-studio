@@ -121,6 +121,7 @@ const App: React.FC = () => {
   const characterProfilesRef = useRef<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [charactersList, setCharactersList] = useState<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [showCharacterSetup, setShowCharacterSetup] = useState(false);
+  const [isAnalyzingCharacters, setIsAnalyzingCharacters] = useState(false);
   const pendingInitialAssetsRef = useRef<GeneratedAsset[]>([]);
   const pendingRefImgsRef = useRef<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const pendingTargetTopicRef = useRef<string>('');
@@ -340,12 +341,11 @@ const App: React.FC = () => {
   const handleCharacterAnalyze = useCallback((
     topic: string, refImages: ReferenceImages, sourceText: string, sceneCount: number
   ) => {
-    // CharacterSetup 완료 시 실행할 콜백 저장
     pendingCharAnalysisCallRef.current = () => handleGenerate(topic, refImages, sourceText, sceneCount);
     const savedProfs = loadSavedCharacterProfiles();
     setCharactersList(savedProfs);
-    setShowCharacterSetup(true);
-    // 백그라운드에서 대본 캐릭터 추출 → 기존에 없는 캐릭터만 추가
+    setIsAnalyzingCharacters(true);
+    // 캐릭터 추출 완료 후 CharacterSetup 표시
     extractCharactersFromScript(sourceText)
       .then(newChars => {
         setCharactersList((prev: CharacterInfo[]) => {
@@ -354,7 +354,11 @@ const App: React.FC = () => {
           return added.length > 0 ? [...prev, ...added] : prev;
         });
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        setIsAnalyzingCharacters(false);
+        setShowCharacterSetup(true);
+      });
   }, []); // eslint-disable-line
 
   // 미완성 씬 이어서 생성 (이미지 없는 씬만)
@@ -1233,6 +1237,7 @@ const App: React.FC = () => {
         <InputSection
           onGenerate={handleGenerate}
           onCharacterAnalyze={handleCharacterAnalyze}
+          isAnalyzingCharacters={isAnalyzingCharacters}
           step={step}
           activeTab={inputActiveTab}
           onTabChange={setInputActiveTab}
