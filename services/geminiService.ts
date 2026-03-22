@@ -556,17 +556,20 @@ const generateScriptSingle = async (
   chunkInfo?: { current: number; total: number },
   maxScenes?: number
 ): Promise<ScriptScene[]> => {
-  // ─── maxScenes + 대본 있을 때: JS 고정 나레이션 + AI 이미지 프롬프트 분리 ───
-  // AI가 씬 수를 절대 건드릴 수 없는 구조
-  if (maxScenes && sourceContext) {
+  // ─── 대본(수동입력)이 있을 때: JS 고정 나레이션 + AI 이미지 프롬프트만 생성 ───
+  // maxScenes 유무와 무관하게 AI가 나레이션을 절대 수정/삭제/병합 못하도록 분리
+  if (sourceContext) {
     const chunkLabel = chunkInfo ? `[청크 ${chunkInfo.current}/${chunkInfo.total}] ` : '';
     const sentences = splitIntoSentences(sourceContext);
-    console.log(`${chunkLabel}[FixedScene] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes}개`);
+    console.log(`${chunkLabel}[FixedScene] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes ?? '자동'}개`);
 
     if (sentences.length > 0) {
-      const actualBlocks = Math.min(maxScenes, sentences.length);
-      const blocks = groupSentencesIntoBlocks(sentences, actualBlocks);
-      console.log(`${chunkLabel}[FixedScene] JS 분할 완료: ${blocks.length}개 나레이션 고정`);
+      // maxScenes 지정 시 해당 수로 그룹핑, 미지정 시 문장 수 그대로 사용
+      const targetBlocks = maxScenes
+        ? Math.min(maxScenes, sentences.length)
+        : sentences.length;
+      const blocks = groupSentencesIntoBlocks(sentences, targetBlocks);
+      console.log(`${chunkLabel}[FixedScene] JS 분할 완료: ${blocks.length}개 나레이션 고정 (AI 수정 불가)`);
       return retryGeminiRequest("FixedScene Visual", () =>
         generateVisualPromptsForBlocks(blocks, hasReferenceImage)
       );
@@ -1360,11 +1363,10 @@ ${styleDesc.instruction}`
  */
 export const editImageWithGemini = async (imageBase64: string, command: string): Promise<string | null> => {
   const ai = getAI();
-  const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
   try {
-    // 선택된 이미지 모델 사용 (나노바나나2 포함), 없으면 gemini-2.0-flash-exp 폴백
-    const selectedModel = localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) || '';
-    const editModel = selectedModel.startsWith('gemini') ? selectedModel : 'gemini-2.0-flash-exp';
+    // 이미지 편집은 image input + image output을 모두 지원하는 모델 고정
+    // 생성 전용 모델(imagen, gemini-*-image 등)은 편집 명령을 무시하므로 사용 금지
+    const editModel = 'gemini-2.0-flash-exp';
     const response = await ai.models.generateContent({
       model: editModel,
       contents: {
@@ -1372,11 +1374,13 @@ export const editImageWithGemini = async (imageBase64: string, command: string):
           { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
           {
             text: [
-              `Edit this image. Apply ONLY the following instruction. Keep EVERYTHING ELSE exactly the same — same composition, characters, background, colors, style, lighting.`,
+              `You are an image editor. Edit this exact image by applying ONLY the instruction below.`,
+              `Keep EVERYTHING ELSE identical — same composition, characters, poses, background, colors, art style, lighting.`,
+              `Do NOT redraw or regenerate. Do NOT change anything not mentioned in the instruction.`,
               ``,
               `INSTRUCTION: ${command}`,
               ``,
-              `Output: single continuous edited image. No panels, no split screens, no borders, no before/after.`,
+              `Output: one single edited image. No panels, no split screens, no borders, no before/after comparison.`,
             ].join('\n')
           }
         ]
