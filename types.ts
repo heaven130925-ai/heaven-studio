@@ -82,6 +82,22 @@ export interface SubtitleData {
 }
 
 // 자막 설정 옵션
+// ─── 줌 / 패닝 효과 ────────────────────────────────────────────────────────
+export type ZoomType = 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+export type ZoomOrigin = 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface ZoomEffect {
+  type: ZoomType;
+  intensity: number;   // 0~20 (%)
+  origin: ZoomOrigin;
+}
+
+export const DEFAULT_ZOOM_EFFECT: ZoomEffect = {
+  type: 'zoom-in',
+  intensity: 10,
+  origin: 'center',
+};
+
 export interface SubtitleConfig {
   wordsPerLine: number;      // 한 줄당 단어 수 (기본: 5)
   maxLines: number;          // 최대 줄 수 (기본: 2)
@@ -97,6 +113,7 @@ export interface SubtitleConfig {
   yPercent?: number;  // 수직 위치 0(상단)~100(하단), position보다 우선
   maxCharsPerChunk?: number;  // 자막 청크당 최대 글자 수 (기본 15, 숏폼은 10 권장)
   textAlign?: 'left' | 'center' | 'right';  // 텍스트 정렬
+  globalZoom?: ZoomEffect;  // 전체 씬 줌 기본값
 }
 
 // 자막 폰트 목록
@@ -134,6 +151,7 @@ export interface GeneratedAsset extends ScriptScene {
   videoData: string | null;      // 애니메이션 영상 URL (앞 N개 씬만)
   videoDuration: number | null;  // 영상 길이 (초) - 보통 4~5초 고정
   status: 'pending' | 'generating' | 'completed' | 'error';
+  zoomEffect?: ZoomEffect | null;  // null = 전역 설정 사용
 }
 
 export enum GenerationStep {

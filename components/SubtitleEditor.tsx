@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS } from '../types';
+import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS, ZoomEffect, ZoomType, ZoomOrigin, DEFAULT_ZOOM_EFFECT } from '../types';
 import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
 import { exportAssetsToZip } from '../services/exportService';
@@ -22,6 +22,7 @@ interface Props {
   onSelectThumbnail?: (imageBase64: string) => void;
   onGenerateAudio?: (index: number) => Promise<string | null>;
   onDeleteScene?: (index: number) => void;
+  onSceneZoomChange?: (index: number, zoom: ZoomEffect | null) => void;
 }
 
 // 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
@@ -128,7 +129,61 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene }) => {
+const ZOOM_TYPE_LABELS: Record<ZoomType, string> = {
+  'none': '없음', 'zoom-in': '줌인', 'zoom-out': '줌아웃', 'pan-left': '←패닝', 'pan-right': '패닝→',
+};
+const ORIGIN_LABELS: Record<ZoomOrigin, string> = {
+  'center': '중앙', 'top-left': '↖', 'top-right': '↗', 'bottom-left': '↙', 'bottom-right': '↘',
+};
+
+const GlobalZoomPanel: React.FC<{ subConfig: SubtitleConfig; onSubConfigChange: (cfg: SubtitleConfig) => void }> = ({ subConfig, onSubConfigChange }) => {
+  const gz = subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+  const setGz = (partial: Partial<ZoomEffect>) =>
+    onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
+  return (
+    <div className="px-3 pb-1.5">
+      <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black block mb-1">이미지 무빙 효과 (전역)</label>
+      <div className="flex gap-1 mb-1">
+        {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
+          <button key={t} onClick={() => setGz({ type: t })}
+            className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-colors border ${
+              gz.type === t
+                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
+            }`}>
+            {ZOOM_TYPE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      {gz.type !== 'none' && (
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
+            <input type="range" min={1} max={20} step={1}
+              value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
+              className="w-full accent-purple-500 h-1" />
+          </div>
+          {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
+            <div className="flex gap-0.5 shrink-0">
+              {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
+                <button key={o} onClick={() => setGz({ origin: o })} title={o}
+                  className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
+                    gz.origin === o
+                      ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
+                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+                  }`}>
+                  {ORIGIN_LABELS[o]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
@@ -607,6 +662,8 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               </button>
             ))}
           </div>
+          {/* 이미지 무빙 효과 (전역 설정) */}
+          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} />
           {/* 내보내기 버튼 행 */}
           {onExportVideo && (
             <div className="flex gap-1.5 px-3 pb-2">
@@ -723,6 +780,71 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             />
           </div>
         )}
+
+        {/* 씬별 줌 오버라이드 설정 */}
+        {onSceneZoomChange && (() => {
+          const hasOverride = scene?.zoomEffect !== undefined && scene?.zoomEffect !== null;
+          const sceneZoom = scene?.zoomEffect ?? subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+          const setSceneZoom = (partial: Partial<ZoomEffect>) =>
+            onSceneZoomChange(selectedIdx, { ...sceneZoom, ...partial });
+          return (
+            <div className="px-4 pt-1 pb-2">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] text-amber-300 uppercase tracking-wider font-black">씬 {selectedIdx + 1} 개별 무빙</label>
+                <button
+                  onClick={() => onSceneZoomChange(selectedIdx, hasOverride ? null : { ...sceneZoom })}
+                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
+                    hasOverride
+                      ? 'bg-amber-600/30 text-amber-200 border-amber-500/50'
+                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
+                  }`}>
+                  {hasOverride ? '개별 설정 ON' : '전역 따름'}
+                </button>
+              </div>
+              {hasOverride && (
+                <>
+                  <div className="flex gap-1 mb-1">
+                    {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
+                      <button key={t} onClick={() => setSceneZoom({ type: t })}
+                        className={`flex-1 py-0.5 rounded text-[10px] font-bold transition-colors border ${
+                          sceneZoom.type === t
+                            ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
+                            : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-amber-500/40'
+                        }`}>
+                        {ZOOM_TYPE_LABELS[t]}
+                      </button>
+                    ))}
+                  </div>
+                  {sceneZoom.type !== 'none' && (
+                    <div className="flex gap-2 items-center">
+                      <div className="flex-1">
+                        <label className="text-[9px] text-slate-400 font-bold">강도 {sceneZoom.intensity}%</label>
+                        <input type="range" min={1} max={20} step={1}
+                          value={sceneZoom.intensity} onChange={e => setSceneZoom({ intensity: +e.target.value })}
+                          className="w-full accent-amber-500 h-1" />
+                      </div>
+                      {(sceneZoom.type === 'zoom-in' || sceneZoom.type === 'zoom-out') && (
+                        <div className="flex gap-0.5 shrink-0">
+                          {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
+                            <button key={o} onClick={() => setSceneZoom({ origin: o })}
+                              title={o}
+                              className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
+                                sceneZoom.origin === o
+                                  ? 'bg-amber-600/40 text-amber-200 border-amber-500/60'
+                                  : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
+                              }`}>
+                              {ORIGIN_LABELS[o]}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* 이미지 편집 명령 */}
         {onImageEditCommand && (
@@ -943,6 +1065,11 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                   className="p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
                   title="썸네일로 선택"
                 >⭐</button>
+              )}
+              {onSceneZoomChange && s.zoomEffect != null && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-600/30 text-amber-300 border border-amber-500/40 text-center leading-tight" title="씬별 무빙 적용 중">
+                  {ZOOM_TYPE_LABELS[s.zoomEffect.type]}
+                </span>
               )}
               {onDeleteScene && (
                 <button

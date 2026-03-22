@@ -923,6 +923,15 @@ const App: React.FC = () => {
     }
   }, []); // eslint-disable-line
 
+  // 씬별 줌 오버라이드 핸들러
+  const handleSceneZoomChange = useCallback((idx: number, zoom: import('./types').ZoomEffect | null) => {
+    const updated = [...assetsRef.current];
+    if (!updated[idx]) return;
+    updated[idx] = { ...updated[idx], zoomEffect: zoom };
+    assetsRef.current = updated;
+    setGeneratedData([...updated]);
+  }, []);
+
   // 씬 삭제 핸들러
   const handleDeleteScene = useCallback((idx: number) => {
     const updated = assetsRef.current.filter((_, i) => i !== idx)
@@ -1402,6 +1411,7 @@ const App: React.FC = () => {
                 onSelectThumbnail={handleSelectThumbnail}
                 onGenerateAudio={handleGenerateSceneAudio}
                 onDeleteScene={handleDeleteScene}
+                onSceneZoomChange={handleSceneZoomChange}
                 onNarrationChange={(idx, val) => {
                   const updated = [...assetsRef.current];
                   // 자막 전체 비울 때만 오디오 삭제

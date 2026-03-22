@@ -1,5 +1,5 @@
 
-import { GeneratedAsset, SubtitleData, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG } from '../types';
+import { GeneratedAsset, SubtitleData, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG, ZoomEffect, DEFAULT_ZOOM_EFFECT, ZoomOrigin } from '../types';
 
 /**
  * 고정밀 오디오 디코딩: ElevenLabs(MP3)와 Gemini(PCM) 통합 처리
@@ -34,13 +34,65 @@ interface SubtitleChunk {
 
 interface PreparedScene {
   img: HTMLImageElement;
-  video: HTMLVideoElement | null;  // 애니메이션 영상 (있으면 이미지 대신 사용)
-  isAnimated: boolean;             // 애니메이션 씬 여부
+  video: HTMLVideoElement | null;
+  isAnimated: boolean;
   audioBuffer: AudioBuffer | null;
-  subtitleChunks: SubtitleChunk[];  // 미리 계산된 자막 청크들
+  subtitleChunks: SubtitleChunk[];
   startTime: number;
   endTime: number;
   duration: number;
+  zoom: ZoomEffect;  // 씬별 줌 효과
+}
+
+/**
+ * 줌/패닝 효과를 적용하여 이미지를 캔버스에 그리기
+ */
+function drawImageWithZoom(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  W: number, H: number,
+  progress: number,  // 0~1 (씬 진행률)
+  zoom: ZoomEffect
+): void {
+  if (img.width === 0 || img.height === 0) return;
+
+  const ratio = Math.min(W / img.width, H / img.height);
+  const baseW = img.width * ratio;
+  const baseH = img.height * ratio;
+  const factor = zoom.intensity / 100;
+
+  let scale = 1;
+  let tx = 0, ty = 0;
+
+  if (zoom.type === 'zoom-in') {
+    scale = 1 + factor * progress;
+  } else if (zoom.type === 'zoom-out') {
+    scale = (1 + factor) - factor * progress;
+  } else if (zoom.type === 'pan-left') {
+    scale = 1 + factor * 0.5;
+    tx = (W * factor * 0.5) * (1 - progress) * -1;
+  } else if (zoom.type === 'pan-right') {
+    scale = 1 + factor * 0.5;
+    tx = (W * factor * 0.5) * progress * -1 + W * factor * 0.5;
+  }
+  // 'none': scale=1, tx=0, ty=0
+
+  const nw = baseW * scale;
+  const nh = baseH * scale;
+
+  // origin 기반 앵커 오프셋
+  const originMap: Record<ZoomOrigin, [number, number]> = {
+    'center':       [0.5, 0.5],
+    'top-left':     [0,   0  ],
+    'top-right':    [1,   0  ],
+    'bottom-left':  [0,   1  ],
+    'bottom-right': [1,   1  ],
+  };
+  const [ox, oy] = originMap[zoom.origin] ?? [0.5, 0.5];
+  const x = (W - nw) * ox + tx;
+  const y = (H - nh) * oy + ty;
+
+  ctx.drawImage(img, x, y, nw, nh);
 }
 
 /**
@@ -380,15 +432,8 @@ async function generateVideoFFmpeg(
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, W, H);
 
-      // 이미지 + 줌인 효과
-      const img = scene.img;
-      if (img.width > 0 && img.height > 0) {
-        const ratio = Math.min(W / img.width, H / img.height);
-        const scale = 1.0 + 0.1 * sceneProgress;
-        const nw = img.width * ratio * scale;
-        const nh = img.height * ratio * scale;
-        ctx.drawImage(img, (W - nw) / 2, (H - nh) / 2, nw, nh);
-      }
+      // 이미지 + 줌/패닝 효과
+      drawImageWithZoom(ctx, scene.img, W, H, sceneProgress, scene.zoom);
 
       // 자막 렌더링
       if (enableSubtitles) {
@@ -444,7 +489,9 @@ async function generateVideoFFmpeg(
   await ffmpeg.exec(ffArgs);
   onProgress('영상 파일 생성 중: 95%');
 
-  const data = await ffmpeg.readFile('output.mp4');
+  const raw = await ffmpeg.readFile('output.mp4');
+  // SharedArrayBuffer 호환성 문제 해결: 새 ArrayBuffer로 복사
+  const data = new Uint8Array(raw instanceof Uint8Array ? raw.buffer.slice(0) : (raw as any));
   await ffmpeg.terminate();
 
   return {
@@ -593,6 +640,9 @@ export const generateVideo = async (
     const startTime = timelinePointer;
     const endTime = startTime + duration;
 
+    // 씬별 줌 효과 (없으면 전역 설정, 전역도 없으면 기본값)
+    const zoom: ZoomEffect = asset.zoomEffect ?? config.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+
     preparedScenes.push({
       img,
       video,
@@ -601,7 +651,8 @@ export const generateVideo = async (
       subtitleChunks,
       startTime,
       endTime,
-      duration
+      duration,
+      zoom,
     });
     timelinePointer = endTime;
   }
@@ -763,10 +814,7 @@ export const generateVideo = async (
           const video = currentScene.video;
           if (video.videoWidth > 0 && video.videoHeight > 0) {
             const ratio = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-
-            // 부드러운 줌인 효과 (정적 이미지보다 약하게)
             const scale = 1.0 + 0.05 * sceneProgress;
-
             const nw = video.videoWidth * ratio * scale;
             const nh = video.videoHeight * ratio * scale;
             ctx.drawImage(video, (canvas.width - nw) / 2, (canvas.height - nh) / 2, nw, nh);
@@ -774,19 +822,9 @@ export const generateVideo = async (
           }
         }
 
-        // 정적 이미지 렌더링 (비디오 실패 시 또는 기본)
+        // 정적 이미지 렌더링 — 씬별 줌/패닝 효과 적용
         if (!rendered) {
-          const img = currentScene.img;
-          if (img.width > 0 && img.height > 0) {
-            const ratio = Math.min(canvas.width / img.width, canvas.height / img.height);
-
-            // 줌인 효과: 씬 진행률에 따라 1.0 → 1.1 (10% 확대)
-            const scale = 1.0 + 0.1 * sceneProgress;
-
-            const nw = img.width * ratio * scale;
-            const nh = img.height * ratio * scale;
-            ctx.drawImage(img, (canvas.width - nw) / 2, (canvas.height - nh) / 2, nw, nh);
-          }
+          drawImageWithZoom(ctx, currentScene.img, canvas.width, canvas.height, sceneProgress, currentScene.zoom);
         }
 
         // 자막 렌더링 (청크 기반)
