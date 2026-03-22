@@ -25,37 +25,14 @@ interface Props {
   onSceneZoomChange?: (index: number, zoom: ZoomEffect | null) => void;
 }
 
-// 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
-function renderSubtitleOnCanvas(
-  canvas: HTMLCanvasElement,
-  cachedImg: HTMLImageElement | null,
+// 자막 텍스트만 그리기 (배경 이미지 없이 — 줌 애니메이션과 합성용)
+function drawSubtitleText(
+  ctx: CanvasRenderingContext2D,
   text: string,
-  config: SubtitleConfig
+  config: SubtitleConfig,
+  W: number,
+  H: number
 ) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  if (cachedImg) {
-    const imgAspect = cachedImg.width / cachedImg.height;
-    const canvasAspect = W / H;
-    let drawW = W, drawH = H, drawX = 0, drawY = 0;
-    if (imgAspect > canvasAspect) {
-      drawH = W / imgAspect; drawY = (H - drawH) / 2;
-    } else {
-      drawW = H * imgAspect; drawX = (W - drawW) / 2;
-    }
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
-  } else {
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, W, H);
-  }
-
   if (!text.trim()) return;
 
   const fontSize = config.fontSize;
@@ -129,6 +106,31 @@ function renderSubtitleOnCanvas(
   });
 }
 
+// 정적 이미지 + 자막 렌더링 (줌 없을 때)
+function renderSubtitleOnCanvas(
+  canvas: HTMLCanvasElement,
+  cachedImg: HTMLImageElement | null,
+  text: string,
+  config: SubtitleConfig
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (cachedImg) {
+    const imgAspect = cachedImg.width / cachedImg.height;
+    const canvasAspect = W / H;
+    let drawW = W, drawH = H, drawX = 0, drawY = 0;
+    if (imgAspect > canvasAspect) { drawH = W / imgAspect; drawY = (H - drawH) / 2; }
+    else { drawW = H * imgAspect; drawX = (W - drawW) / 2; }
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
+  } else {
+    ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, W, H);
+  }
+  drawSubtitleText(ctx, text, config, W, H);
+}
+
 const ZOOM_TYPE_LABELS: Record<ZoomType, string> = {
   'none': '없음', 'zoom-in': '줌인', 'zoom-out': '줌아웃', 'pan-left': '←패닝', 'pan-right': '패닝→',
 };
@@ -185,111 +187,52 @@ function drawZoomPreview(
 const GlobalZoomPanel: React.FC<{
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
-  previewImage?: string | null;
-}> = ({ subConfig, onSubConfigChange, previewImage }) => {
+}> = ({ subConfig, onSubConfigChange }) => {
   const gz = subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
   const setGz = (partial: Partial<ZoomEffect>) =>
     onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
 
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
-  const previewRafRef = useRef<number>(0);
-  const previewImgRef = useRef<HTMLImageElement | null>(null);
-
-  // 이미지 로드
-  useEffect(() => {
-    if (!previewImage) { previewImgRef.current = null; return; }
-    const img = new Image();
-    img.onload = () => { previewImgRef.current = img; };
-    img.src = `data:image/jpeg;base64,${previewImage}`;
-  }, [previewImage]);
-
-  // 줌 애니메이션 루프
-  useEffect(() => {
-    const canvas = previewCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    cancelAnimationFrame(previewRafRef.current);
-
-    if (gz.type === 'none' || !previewImgRef.current) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (previewImgRef.current) {
-        const img = previewImgRef.current;
-        const W = canvas.width, H = canvas.height;
-        const imgAspect = img.width / img.height;
-        const canvasAspect = W / H;
-        let drawW = W, drawH = H;
-        if (imgAspect > canvasAspect) { drawH = H; drawW = H * imgAspect; }
-        else { drawW = W; drawH = W / imgAspect; }
-        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-        ctx.drawImage(img, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
-      }
-      return;
-    }
-
-    const DURATION = 2500;
-    let startTime: number | null = null;
-    const tick = (ts: number) => {
-      if (!startTime) startTime = ts;
-      const progress = ((ts - startTime) % DURATION) / DURATION;
-      const img = previewImgRef.current;
-      if (img && canvas) drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, gz);
-      previewRafRef.current = requestAnimationFrame(tick);
-    };
-    previewRafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(previewRafRef.current);
-  }, [gz.type, gz.intensity, gz.origin]); // eslint-disable-line
-
   return (
     <div className="px-3 pb-1.5">
-      <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black block mb-1">이미지 무빙 효과 (전역)</label>
-      <div className="flex gap-2">
-        {/* 왼쪽: 컨트롤 */}
-        <div className="flex-1 min-w-0">
-          <div className="flex gap-1 mb-1">
-            {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
-              <button key={t} onClick={() => setGz({ type: t })}
-                className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors border ${
-                  gz.type === t
-                    ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
-                    : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
-                }`}>
-                {ZOOM_TYPE_LABELS[t]}
-              </button>
-            ))}
+      <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black block mb-1">
+        이미지 무빙 효과 (전역) {gz.type !== 'none' && <span className="text-purple-400 normal-case font-normal">— 위 화면에서 실시간 확인</span>}
+      </label>
+      <div className="flex gap-1 mb-1">
+        {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
+          <button key={t} onClick={() => setGz({ type: t })}
+            className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors border ${
+              gz.type === t
+                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
+            }`}>
+            {ZOOM_TYPE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      {gz.type !== 'none' && (
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
+            <input type="range" min={1} max={20} step={1}
+              value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
+              className="w-full accent-purple-500 h-1" />
           </div>
-          {gz.type !== 'none' && (
-            <>
-              <div className="mb-1">
-                <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
-                <input type="range" min={1} max={20} step={1}
-                  value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
-                  className="w-full accent-purple-500 h-1" />
-              </div>
-              {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
-                <div className="flex gap-0.5">
-                  {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
-                    <button key={o} onClick={() => setGz({ origin: o })} title={o}
-                      className={`flex-1 h-6 rounded text-[9px] font-bold transition-colors border ${
-                        gz.origin === o
-                          ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
-                          : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
-                      }`}>
-                      {ORIGIN_LABELS[o]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+          {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
+            <div className="flex gap-0.5 shrink-0">
+              {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
+                <button key={o} onClick={() => setGz({ origin: o })} title={o}
+                  className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
+                    gz.origin === o
+                      ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
+                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+                  }`}>
+                  {ORIGIN_LABELS[o]}
+                </button>
+              ))}
+            </div>
           )}
         </div>
-        {/* 오른쪽: 미리보기 캔버스 */}
-        <div className="shrink-0 flex flex-col items-center gap-0.5">
-          <canvas ref={previewCanvasRef} width={160} height={90}
-            className="rounded border border-purple-500/30 bg-black" style={{ width: 160, height: 90 }} />
-          <span className="text-[8px] text-slate-600">미리보기</span>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
@@ -728,13 +671,45 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   };
   const handleMouseUp = () => { dragRef.current = null; setIsDragging(false); };
 
-  // ── 캔버스 재렌더 (자막 텍스트 변경 시 포함) ──
+  // ── 메인 캔버스 줌 애니메이션 루프 ──
+  const zoomRafRef = useRef<number>(0);
+  const zoomStartRef = useRef<number | null>(null);
+
+  const activeZoom = scene?.zoomEffect ?? subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    cancelAnimationFrame(zoomRafRef.current);
+    zoomStartRef.current = null;
+
+    if (activeZoom.type === 'none' || !imgCacheRef.current) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const DURATION = 3000;
+    const tick = (ts: number) => {
+      if (!zoomStartRef.current) zoomStartRef.current = ts;
+      const progress = ((ts - zoomStartRef.current) % DURATION) / DURATION;
+      const img = imgCacheRef.current;
+      if (!img) return;
+      drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, activeZoom);
+      drawSubtitleText(ctx, displaySubtitleText, subConfig, canvas.width, canvas.height);
+      zoomRafRef.current = requestAnimationFrame(tick);
+    };
+    zoomRafRef.current = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(zoomRafRef.current); zoomStartRef.current = null; };
+  }, [activeZoom.type, activeZoom.intensity, activeZoom.origin, displaySubtitleText, subConfig]); // eslint-disable-line
+
+  // ── 캔버스 정적 재렌더 (줌 없을 때만) ──
   const redraw = useCallback(() => {
+    if (activeZoom.type !== 'none') return; // 줌 애니메이션 루프가 담당
     const canvas = canvasRef.current;
     if (!canvas) return;
     document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
       .finally(() => renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig));
-  }, [displaySubtitleText, subConfig]);
+  }, [displaySubtitleText, subConfig, activeZoom.type]);
 
   useEffect(() => { redraw(); }, [redraw]);
 
@@ -774,7 +749,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             ))}
           </div>
           {/* 이미지 무빙 효과 (전역 설정) */}
-          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} previewImage={scene?.imageData} />
+          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} />
           {/* 내보내기 버튼 행 */}
           {onExportVideo && (
             <div className="flex gap-1.5 px-3 pb-2">
