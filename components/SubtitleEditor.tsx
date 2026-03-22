@@ -15,7 +15,6 @@ interface Props {
   scenes: GeneratedAsset[];
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
-  onNarrationChange?: (index: number, narration: string) => void;
   onImageEditCommand?: (index: number, command: string) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
@@ -296,7 +295,7 @@ const ZoomPanel: React.FC<{
   );
 };
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
@@ -901,19 +900,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               : '—'}
           </span>
         </div>
-
-        {/* 자막 텍스트 편집 */}
-        {onNarrationChange && (
-          <div className="px-4 pt-3 pb-1">
-            <label className="text-sm text-slate-300 font-bold block mb-1">씬 {selectedIdx + 1} 자막 텍스트</label>
-            <textarea
-              value={narration}
-              onChange={e => onNarrationChange(selectedIdx, e.target.value)}
-              rows={5}
-              className="w-full mt-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-2 text-base text-white resize-none focus:outline-none focus:border-blue-500"
-            />
-          </div>
-        )}
 
         {/* 이미지 편집 명령 */}
         {onImageEditCommand && (

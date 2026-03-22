@@ -1412,17 +1412,6 @@ const App: React.FC = () => {
                 onGenerateAudio={handleGenerateSceneAudio}
                 onDeleteScene={handleDeleteScene}
                 onSceneZoomChange={handleSceneZoomChange}
-                onNarrationChange={(idx, val) => {
-                  const updated = [...assetsRef.current];
-                  // 자막 전체 비울 때만 오디오 삭제
-                  if (!val.trim()) {
-                    updated[idx] = { ...updated[idx], narration: val, audioData: null, subtitleData: null, audioDuration: null };
-                  } else {
-                    updated[idx] = { ...updated[idx], narration: val };
-                  }
-                  assetsRef.current = updated;
-                  setGeneratedData([...updated]);
-                }}
                 onImageEditCommand={async (idx, command) => {
                   const current = assetsRef.current[idx];
                   if (!current) return;
