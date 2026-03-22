@@ -793,6 +793,16 @@ export const generateScriptChunked = async (
 ): Promise<ScriptScene[]> => {
   const inputLength = sourceContext.length;
 
+  // ── maxScenes 지정 시 청크 분할 금지 ────────────────────────────────────
+  // 청크 분할은 비례 분배 → 반올림 오차 + AI 미준수로 씬 수 손실 발생.
+  // JS 사전분할(groupSentencesIntoBlocks)이 정확히 N개 블록을 보장하므로
+  // 전체 대본을 단일 호출로 처리한다.
+  if (maxScenes) {
+    console.log(`[Chunked Script] maxScenes=${maxScenes} 지정 → 청크 분할 없이 JS 사전분할 단일 처리`);
+    onProgress?.(`대본 분석 중... (${maxScenes}개 씬 목표)`);
+    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
+  }
+
   // 청크 분할 기준 이하면 일반 처리
   if (inputLength <= chunkSize) {
     console.log(`[Chunked Script] 입력(${inputLength}자)이 청크 크기(${chunkSize}자) 이하. 일반 처리.`);

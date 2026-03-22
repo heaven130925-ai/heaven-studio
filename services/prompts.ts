@@ -246,12 +246,12 @@ ${hasCharacterRef ? `
   const content = sourceContext;
 
   const sceneCountRule = preSegmented
-    ? `⚠️ 사전 분할 모드 (STRICT):
-- 입력 텍스트는 [SCENE_BLOCK_N] 블록으로 이미 균등 분할되어 있음
-- 반드시 각 블록 = 정확히 1개 씬 (블록 수 == 출력 씬 수)
-- 블록 안 모든 문장을 narration에 포함할 것
-- 블록 순서 절대 유지, 건너뛰기 금지
-- 블록 경계([SCENE_BLOCK_N] 태그)는 narration에 포함하지 말 것`
+    ? `⚠️ 사전 분할 모드 (STRICT) — 반드시 정확히 ${maxScenes}개 씬 출력:
+- 입력 텍스트는 [SCENE_BLOCK_1] ~ [SCENE_BLOCK_${maxScenes}] 블록으로 이미 균등 분할되어 있음
+- 블록 수 = 출력 씬 수 = ${maxScenes} (이 숫자를 절대 어기지 말 것)
+- 반드시 각 블록 = 정확히 1개 씬, 건너뛰기·병합 절대 금지
+- 블록 안 모든 문장을 narration에 그대로 포함할 것
+- 블록 경계 태그([SCENE_BLOCK_N])는 narration에 포함하지 말 것`
     : maxScenes
     ? `⚠️ 씬 수 제한: 정확히 ${maxScenes}개 씬 생성
 - 전체 대본을 ${maxScenes}개 구간으로 균등 분할 후 각 구간 = 1씬
