@@ -5,6 +5,7 @@ import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMA
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics } from '../services/geminiService';
+import { getVoiceSetting, setVoiceSetting, removeVoiceSetting } from '../utils/voiceStorage';
 
 
 function pcmBase64ToWavUrl(base64Pcm: string): string {
@@ -87,24 +88,24 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [genderFilter, setGenderFilter] = useState<VoiceGender | null>(null);
 
   // 음성 공통
-  const [voiceSpeed, setVoiceSpeed] = useState<string>(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
-  const [voiceStability, setVoiceStability] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50'));
-  const [voiceTone, setVoiceTone] = useState<string>(localStorage.getItem('heaven_voice_tone') || '');
-  const [voiceMoodPreset, setVoiceMoodPreset] = useState<string>(localStorage.getItem('heaven_voice_mood') || '');
-  const [googleTtsTone, setGoogleTtsTone] = useState<string>(localStorage.getItem('heaven_google_tts_tone_id') || '');
-  const [googleTtsMood, setGoogleTtsMood] = useState<string>(localStorage.getItem('heaven_google_tts_mood_id') || '');
-  const [gcloudTone, setGcloudTone] = useState<string>(localStorage.getItem('heaven_gcloud_tone_id') || '');
-  const [gcloudMood, setGcloudMood] = useState<string>(localStorage.getItem('heaven_gcloud_mood_id') || '');
-  const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
+  const [voiceSpeed, setVoiceSpeed] = useState<string>(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
+  const [voiceStability, setVoiceStability] = useState<number>(parseInt(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50'));
+  const [voiceTone, setVoiceTone] = useState<string>(getVoiceSetting('heaven_voice_tone') || '');
+  const [voiceMoodPreset, setVoiceMoodPreset] = useState<string>(getVoiceSetting('heaven_voice_mood') || '');
+  const [googleTtsTone, setGoogleTtsTone] = useState<string>(getVoiceSetting('heaven_google_tts_tone_id') || '');
+  const [googleTtsMood, setGoogleTtsMood] = useState<string>(getVoiceSetting('heaven_google_tts_mood_id') || '');
+  const [gcloudTone, setGcloudTone] = useState<string>(getVoiceSetting('heaven_gcloud_tone_id') || '');
+  const [gcloudMood, setGcloudMood] = useState<string>(getVoiceSetting('heaven_gcloud_mood_id') || '');
+  const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
   const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud' | 'azure'>(
-    (localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure') || 'elevenlabs'
+    (getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure') || 'elevenlabs'
   );
   const [gcloudApiKey, setGcloudApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '');
-  const [gcloudVoice, setGcloudVoice] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A');
+  const [gcloudVoice, setGcloudVoice] = useState(getVoiceSetting(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A');
   const [playingGcloudVoice, setPlayingGcloudVoice] = useState<string | null>(null);
   const [azureApiKey, setAzureApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '');
-  const [azureRegion, setAzureRegion] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) || '');
-  const [azureVoice, setAzureVoice] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE) || 'ko-KR-SunHiNeural');
+  const [azureRegion, setAzureRegion] = useState(getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) || '');
+  const [azureVoice, setAzureVoice] = useState(getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE) || 'ko-KR-SunHiNeural');
   const [playingAzureVoice, setPlayingAzureVoice] = useState<string | null>(null);
 
   // Google TTS
@@ -154,12 +155,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const savedVoiceId = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || '';
+    const savedVoiceId = getVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || '';
     setElVoiceId(savedVoiceId);
     setElModelId(getElevenLabsModelId());
     setImageModelId(localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL) as ImageModelId || CONFIG.DEFAULT_IMAGE_MODEL);
     setImageTextMode(localStorage.getItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE) || 'none');
-    setGeminiTtsVoice(localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) as GeminiTtsVoiceId || CONFIG.DEFAULT_GEMINI_TTS_VOICE);
+    setGeminiTtsVoice(getVoiceSetting(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) as GeminiTtsVoiceId || CONFIG.DEFAULT_GEMINI_TTS_VOICE);
     const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.PROJECTS);
     if (saved) { try { setProjects(JSON.parse(saved)); } catch {} }
     if (elApiKey) loadVoices(elApiKey);
@@ -243,7 +244,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
 
   const selectVoice = useCallback((voice: ElevenLabsVoice) => {
     setElVoiceId(voice.voice_id);
-    localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.voice_id);
+    setVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.voice_id);
   }, []);
 
   const PREVIEW_TEXT = "안녕하세요. 테스트 목소리입니다.";
@@ -284,10 +285,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
     }
   };
 
-const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, elVoiceId); setElevenLabsModelId(elModelId); };
-  const selectVoiceSpeed = (v: string) => { setVoiceSpeed(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_SPEED, v); };
-  const changeVoiceStability = (v: number) => { setVoiceStability(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(v)); };
-  const changeVoiceStyle = (v: number) => { setVoiceStyle(v); localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(v)); };
+const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, elVoiceId); setElevenLabsModelId(elModelId); };
+  const selectVoiceSpeed = (v: string) => { setVoiceSpeed(v); setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED, v); };
+  const changeVoiceStability = (v: number) => { setVoiceStability(v); setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(v)); };
+  const changeVoiceStyle = (v: number) => { setVoiceStyle(v); setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(v)); };
   const selectImageModel = useCallback((id: ImageModelId) => { setImageModelId(id); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, id); }, []);
   const selectImageTextMode = useCallback((m: string) => { setImageTextMode(m); localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_TEXT_MODE, m); }, []);
   const selectAspectRatio = (r: '16:9' | '9:16') => { setAspectRatio(r); localStorage.setItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO, r); onAspectRatioChange?.(r); };
@@ -305,7 +306,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
   };
   const loadProject = (p: ProjectSettings) => {
     setImageModelId(p.imageModel as ImageModelId); setElVoiceId(p.elevenLabsVoiceId); setElModelId(p.elevenLabsModel as ElevenLabsModelId);
-    localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, p.imageModel); localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, p.elevenLabsVoiceId);
+    localStorage.setItem(CONFIG.STORAGE_KEYS.IMAGE_MODEL, p.imageModel); setVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, p.elevenLabsVoiceId);
     setElevenLabsModelId(p.elevenLabsModel as ElevenLabsModelId); alert(`"${p.name}" 불러오기 완료`);
   };
   const deleteProject = (id: string) => { if (!confirm('삭제?')) return; const u = projects.filter(p => p.id !== id); setProjects(u); localStorage.setItem(CONFIG.STORAGE_KEYS.PROJECTS, JSON.stringify(u)); };
@@ -1100,22 +1101,22 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   <div className="flex-1 flex flex-col min-h-0 gap-2">
                     {/* TTS 제공자 탭 */}
                     <div className="flex gap-2 shrink-0">
-                      <button type="button" onClick={() => { setVoiceSubTab('google'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
+                      <button type="button" onClick={() => { setVoiceSubTab('google'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Gemini TTS
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"/>
                       </button>
-                      <button type="button" onClick={() => { setVoiceSubTab('azure'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'azure'); }}
+                      <button type="button" onClick={() => { setVoiceSubTab('azure'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'azure'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'azure' ? 'bg-sky-600/20 text-sky-200 border-sky-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Azure TTS
                         <span className={`w-1.5 h-1.5 rounded-full ${azureApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
-                      <button type="button" onClick={() => { setVoiceSubTab('gcloud'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'gcloud'); }}
+                      <button type="button" onClick={() => { setVoiceSubTab('gcloud'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'gcloud'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'gcloud' ? 'bg-blue-600/20 text-blue-200 border-blue-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Cloud TTS
                         <span className={`w-1.5 h-1.5 rounded-full ${gcloudApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
-                      <button type="button" onClick={() => { setVoiceSubTab('elevenlabs'); localStorage.setItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'elevenlabs'); }}
+                      <button type="button" onClick={() => { setVoiceSubTab('elevenlabs'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'elevenlabs'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'elevenlabs' ? 'bg-purple-600/20 text-purple-200 border-purple-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         ElevenLabs
                         <span className={`w-1.5 h-1.5 rounded-full ${elApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
@@ -1139,7 +1140,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                             </div>
                             {/* 성우 목록 — 전체 표시 */}
                             <div className="flex-1 min-h-[100px] overflow-y-auto bg-black/40 border border-blue-500/50 rounded-xl shadow-[0_0_12px_rgba(59,130,246,0.2)]">
-                              <button type="button" onClick={() => { setElVoiceId(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
+                              <button type="button" onClick={() => { setElVoiceId(''); removeVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID); }}
                                 className={`w-full px-4 py-2.5 text-left text-sm font-bold text-slate-300 hover:bg-white/[0.05] border-b border-white/[0.07] ${!elVoiceId ? 'bg-purple-600/20 text-white' : ''}`}>
                                 기본값 (Adam)
                               </button>
@@ -1149,7 +1150,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     className={`w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ${playingVoiceId === voice.id ? 'bg-purple-500 text-white animate-pulse' : 'bg-white/[0.08] text-slate-400 hover:bg-purple-600 hover:text-white'}`}>
                                     {playingVoiceId === voice.id ? <PauseIcon /> : <PlayIcon />}
                                   </button>
-                                  <button type="button" onClick={() => { setElVoiceId(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.id); }} className="flex-1 text-left">
+                                  <button type="button" onClick={() => { setElVoiceId(voice.id); setVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID, voice.id); }} className="flex-1 text-left">
                                     <div className="text-sm text-white font-bold">{voice.name}</div>
                                     <div className="text-xs text-slate-500">{voice.description}</div>
                                   </button>
@@ -1195,10 +1196,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     setVoiceTone(newTone);
                                     if (newTone) {
                                       setVoiceStability(m.stability);
-                                      localStorage.setItem('heaven_voice_tone', m.id);
-                                      localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
+                                      setVoiceSetting('heaven_voice_tone', m.id);
+                                      setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stability));
                                     } else {
-                                      localStorage.removeItem('heaven_voice_tone');
+                                      removeVoiceSetting('heaven_voice_tone');
                                     }
                                   }}
                                     className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceTone === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
@@ -1227,16 +1228,16 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                     setVoiceMoodPreset(newMood);
                                     if (newMood) {
                                       setVoiceStyle(m.style);
-                                      localStorage.setItem('heaven_voice_mood', m.id);
-                                      localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
+                                      setVoiceSetting('heaven_voice_mood', m.id);
+                                      setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STYLE, String(m.style));
                                       if (m.stabilityOverride !== undefined) {
                                         setVoiceStability(m.stabilityOverride);
                                         setVoiceTone('');
-                                        localStorage.setItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stabilityOverride));
-                                        localStorage.removeItem('heaven_voice_tone');
+                                        setVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STABILITY, String(m.stabilityOverride));
+                                        removeVoiceSetting('heaven_voice_tone');
                                       }
                                     } else {
-                                      localStorage.removeItem('heaven_voice_mood');
+                                      removeVoiceSetting('heaven_voice_mood');
                                     }
                                   }}
                                     className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${voiceMoodPreset === m.id ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
@@ -1247,8 +1248,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               {(voiceTone || voiceMoodPreset) && (
                                 <button type="button" onClick={() => {
                                   setVoiceTone(''); setVoiceMoodPreset('');
-                                  localStorage.removeItem('heaven_voice_tone');
-                                  localStorage.removeItem('heaven_voice_mood');
+                                  removeVoiceSetting('heaven_voice_tone');
+                                  removeVoiceSetting('heaven_voice_mood');
                                 }}
                                   className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                               )}
@@ -1281,10 +1282,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         {/* 지역 */}
                         <div className="shrink-0 space-y-1.5">
                           <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">지역 (Region)</label>
-                          {azureRegion && localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) === azureRegion ? (
+                          {azureRegion && getVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION) === azureRegion ? (
                             <div className="flex gap-2 items-center">
                               <span className="flex-1 bg-slate-800 border border-emerald-600/50 rounded-xl px-3 py-2 text-emerald-400 text-sm">✓ {azureRegion}</span>
-                              <button type="button" onClick={() => { setAzureRegion(''); localStorage.removeItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION); }}
+                              <button type="button" onClick={() => { setAzureRegion(''); removeVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION); }}
                                 className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-bold">변경</button>
                             </div>
                           ) : (
@@ -1292,7 +1293,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <input type="text" value={azureRegion} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAzureRegion(e.target.value)}
                                 placeholder="koreacentral / japaneast"
                                 className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500"/>
-                              <button type="button" onClick={() => { localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION, azureRegion); }}
+                              <button type="button" onClick={() => { setVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_REGION, azureRegion); }}
                                 className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-sm font-bold">저장</button>
                             </div>
                           )}
@@ -1325,7 +1326,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs ${playingAzureVoice === voice.id ? 'bg-sky-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-sky-600 hover:text-white'}`}>
                                 {playingAzureVoice === voice.id ? '■' : '▶'}
                               </button>
-                              <button type="button" onClick={() => { setAzureVoice(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE, voice.id); }} className="flex-1 text-left">
+                              <button type="button" onClick={() => { setAzureVoice(voice.id); setVoiceSetting(CONFIG.STORAGE_KEYS.AZURE_TTS_VOICE, voice.id); }} className="flex-1 text-left">
                                 <div className="text-sm text-white font-bold">{voice.label}</div>
                                 <div className="text-xs text-slate-500">{voice.desc}</div>
                               </button>
@@ -1360,8 +1361,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newTone = googleTtsTone === m.id ? '' : m.id;
                                 setGoogleTtsTone(newTone);
-                                localStorage.setItem('heaven_google_tts_tone_id', newTone);
-                                localStorage.setItem('heaven_google_tts_tone', newTone ? m.instruction : '');
+                                setVoiceSetting('heaven_google_tts_tone_id', newTone);
+                                setVoiceSetting('heaven_google_tts_tone', newTone ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsTone === m.id ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                 {m.label}
@@ -1386,8 +1387,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newMood = googleTtsMood === m.id ? '' : m.id;
                                 setGoogleTtsMood(newMood);
-                                localStorage.setItem('heaven_google_tts_mood_id', newMood);
-                                localStorage.setItem('heaven_google_tts_mood', newMood ? m.instruction : '');
+                                setVoiceSetting('heaven_google_tts_mood_id', newMood);
+                                setVoiceSetting('heaven_google_tts_mood', newMood ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsMood === m.id ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-white/10'}`}>
                                 {m.label || m.id}
@@ -1397,10 +1398,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           {(googleTtsTone || googleTtsMood) && (
                             <button type="button" onClick={() => {
                               setGoogleTtsTone(''); setGoogleTtsMood('');
-                              localStorage.setItem('heaven_google_tts_tone_id', '');
-                              localStorage.setItem('heaven_google_tts_tone', '');
-                              localStorage.setItem('heaven_google_tts_mood_id', '');
-                              localStorage.setItem('heaven_google_tts_mood', '');
+                              setVoiceSetting('heaven_google_tts_tone_id', '');
+                              setVoiceSetting('heaven_google_tts_tone', '');
+                              setVoiceSetting('heaven_google_tts_mood_id', '');
+                              setVoiceSetting('heaven_google_tts_mood', '');
                             }} className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                           )}
                         </div>
@@ -1471,7 +1472,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                                 className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs ${playingGcloudVoice === voice.id ? 'bg-blue-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-blue-600 hover:text-white'}`}>
                                 {playingGcloudVoice === voice.id ? '■' : '▶'}
                               </button>
-                              <button type="button" onClick={() => { setGcloudVoice(voice.id); localStorage.setItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE, voice.id); }} className="flex-1 text-left">
+                              <button type="button" onClick={() => { setGcloudVoice(voice.id); setVoiceSetting(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE, voice.id); }} className="flex-1 text-left">
                                 <div className="text-sm text-white font-bold">{voice.label}</div>
                                 <div className="text-xs text-slate-500">{voice.desc}</div>
                               </button>
@@ -1506,8 +1507,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newTone = gcloudTone === m.id ? '' : m.id;
                                 setGcloudTone(newTone);
-                                localStorage.setItem('heaven_gcloud_tone_id', newTone);
-                                localStorage.setItem('heaven_gcloud_tone', newTone ? m.instruction : '');
+                                setVoiceSetting('heaven_gcloud_tone_id', newTone);
+                                setVoiceSetting('heaven_gcloud_tone', newTone ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${gcloudTone === m.id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label}
@@ -1532,8 +1533,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newMood = gcloudMood === m.id ? '' : m.id;
                                 setGcloudMood(newMood);
-                                localStorage.setItem('heaven_gcloud_mood_id', newMood);
-                                localStorage.setItem('heaven_gcloud_mood', newMood ? m.instruction : '');
+                                setVoiceSetting('heaven_gcloud_mood_id', newMood);
+                                setVoiceSetting('heaven_gcloud_mood', newMood ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${gcloudMood === m.id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label || m.id}
@@ -1543,10 +1544,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           {(gcloudTone || gcloudMood) && (
                             <button type="button" onClick={() => {
                               setGcloudTone(''); setGcloudMood('');
-                              localStorage.removeItem('heaven_gcloud_tone_id');
-                              localStorage.removeItem('heaven_gcloud_mood_id');
-                              localStorage.removeItem('heaven_gcloud_tone');
-                              localStorage.removeItem('heaven_gcloud_mood');
+                              removeVoiceSetting('heaven_gcloud_tone_id');
+                              removeVoiceSetting('heaven_gcloud_mood_id');
+                              removeVoiceSetting('heaven_gcloud_tone');
+                              removeVoiceSetting('heaven_gcloud_mood');
                             }}
                               className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                           )}
@@ -1569,7 +1570,7 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                         <div className="grid grid-cols-2 gap-1.5 p-3">
                           {GEMINI_TTS_VOICES.filter(v => !geminiTtsGenderFilter || v.gender === geminiTtsGenderFilter).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 p-2.5 rounded-xl border cursor-pointer transition-all ${geminiTtsVoice === voice.id ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_8px_rgba(20,184,166,0.3)]' : 'border-slate-700/50 hover:border-teal-500/40'}`}
-                              onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); localStorage.setItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
+                              onClick={() => { setGeminiTtsVoice(voice.id as GeminiTtsVoiceId); setVoiceSetting(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE, voice.id); }}>
                               <button type="button" onClick={(e) => { e.stopPropagation(); playGeminiTtsPreview(voice.id); }}
                                 className={`w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center ${playingGeminiVoiceId === voice.id ? 'bg-teal-500 text-white animate-pulse' : 'bg-slate-700 text-slate-400 hover:bg-teal-600 hover:text-white'}`}>
                                 {playingGeminiVoiceId === voice.id ? <PauseIcon /> : <PlayIcon />}
@@ -1607,8 +1608,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newTone = googleTtsTone === m.id ? '' : m.id;
                                 setGoogleTtsTone(newTone);
-                                localStorage.setItem('heaven_google_tts_tone_id', newTone);
-                                localStorage.setItem('heaven_google_tts_tone', newTone ? m.instruction : '');
+                                setVoiceSetting('heaven_google_tts_tone_id', newTone);
+                                setVoiceSetting('heaven_google_tts_tone', newTone ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsTone === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label}
@@ -1633,8 +1634,8 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                               <button key={m.id} type="button" onClick={() => {
                                 const newMood = googleTtsMood === m.id ? '' : m.id;
                                 setGoogleTtsMood(newMood);
-                                localStorage.setItem('heaven_google_tts_mood_id', newMood);
-                                localStorage.setItem('heaven_google_tts_mood', newMood ? m.instruction : '');
+                                setVoiceSetting('heaven_google_tts_mood_id', newMood);
+                                setVoiceSetting('heaven_google_tts_mood', newMood ? m.instruction : '');
                               }}
                                 className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${googleTtsMood === m.id ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {m.label || m.id}
@@ -1644,10 +1645,10 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                           {(googleTtsTone || googleTtsMood) && (
                             <button type="button" onClick={() => {
                               setGoogleTtsTone(''); setGoogleTtsMood('');
-                              localStorage.setItem('heaven_google_tts_tone_id', '');
-                              localStorage.setItem('heaven_google_tts_tone', '');
-                              localStorage.setItem('heaven_google_tts_mood_id', '');
-                              localStorage.setItem('heaven_google_tts_mood', '');
+                              setVoiceSetting('heaven_google_tts_tone_id', '');
+                              setVoiceSetting('heaven_google_tts_tone', '');
+                              setVoiceSetting('heaven_google_tts_mood_id', '');
+                              setVoiceSetting('heaven_google_tts_mood', '');
                             }}
                               className="mt-1 text-xs text-slate-500 hover:text-slate-300">전체 초기화</button>
                           )}

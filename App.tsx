@@ -19,6 +19,7 @@ import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
 import { downloadMergedAudio } from './utils/csvHelper';
+import { getVoiceSetting } from './utils/voiceStorage';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
@@ -253,7 +254,7 @@ const App: React.FC = () => {
         return { ...refImgs, character: matched };
       };
 
-      const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
+      const ttsProvider = getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
       const sceneDelay = ttsProvider === 'google' ? 2000 : 300;
       const MAX_SCENE_RETRIES = ttsProvider === 'google' ? 3 : 1;
 
@@ -552,7 +553,7 @@ const App: React.FC = () => {
       setStep(GenerationStep.ASSETS);
 
       const runAudio = async () => {
-          const ttsProvider = localStorage.getItem(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
+          const ttsProvider = getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs';
 
           if (ttsProvider === 'google' || ttsProvider === 'gcloud' || ttsProvider === 'azure') {
             // ── Google TTS / Google Cloud TTS / Azure TTS: 씬별 개별 생성 ──
