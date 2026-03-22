@@ -459,6 +459,95 @@ function groupSentencesIntoBlocks(sentences: string[], blockCount: number): stri
   return blocks;
 }
 
+/**
+ * JS가 나레이션을 완전히 고정하고 AI는 이미지 프롬프트+분석만 생성
+ * → AI가 씬 수를 절대 변경할 수 없음 (가장 확실한 고정 씬 보장)
+ */
+const generateVisualPromptsForBlocks = async (
+  narrations: string[],
+  hasReferenceImage: boolean
+): Promise<ScriptScene[]> => {
+  const ai = getAI();
+  const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+
+  const charRefRule = hasReferenceImage
+    ? `- 사람이 등장하면 반드시 "THE CHARACTER"로만 표현. 외모(나이/성별/머리색 등) 묘사 절대 금지`
+    : `- 나레이션에 언급된 인물 특성을 반드시 반영 (할아버지→elderly man, 아이→child 등)`;
+
+  const prompt = `아래 ${narrations.length}개 나레이션 각각에 대해 image_prompt_english와 analysis를 생성하라.
+
+## 규칙
+- 나레이션 수정/병합/건너뛰기 절대 금지
+- 반드시 정확히 ${narrations.length}개 항목 출력 (누락 시 실패)
+- image_prompt_english: WHO/WHAT/WHERE/MOOD 포함, 최소 20단어 이상 영문
+- sentiment: POSITIVE / NEGATIVE / NEUTRAL 중 하나
+- composition_type: MICRO / STANDARD / MACRO / NO_CHAR 중 하나
+${charRefRule}
+
+## 나레이션 목록
+${narrations.map((n, i) => `[${i + 1}] ${n}`).join('\n')}
+
+## 출력 형식 (JSON 배열만, 설명 없음)
+[{"sceneNumber":1,"narration":"나레이션 그대로 복사","visual_keywords":"","analysis":{"sentiment":"NEUTRAL","composition_type":"STANDARD"},"image_prompt_english":"..."},...]`;
+
+  let responseText = '[]';
+
+  if (anthropicKey) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: Math.min(65536, narrations.length * 600),
+          system: 'You are a visual storyboard director. Output ONLY valid JSON array, no markdown.',
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        responseText = d.content?.[0]?.text || '[]';
+        console.log(`[FixedScene] Claude 성공: ${narrations.length}개 나레이션`);
+      } else {
+        console.warn(`[FixedScene] Claude 실패 → Gemini fallback`);
+      }
+    } catch { console.warn(`[FixedScene] Claude 오류 → Gemini fallback`); }
+  }
+
+  if (responseText === '[]') {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        thinkingConfig: { thinkingBudget: 8192 },
+        responseMimeType: 'application/json',
+        maxOutputTokens: Math.min(65536, narrations.length * 600),
+      },
+    });
+    responseText = response.text || '[]';
+  }
+
+  const result = JSON.parse(cleanJsonResponse(responseText));
+  const items: any[] = Array.isArray(result) ? result : (result.scenes || []);
+
+  // AI 결과와 JS 나레이션을 1:1 매핑 — AI가 반환한 순서 기준으로 매핑
+  // AI가 누락하거나 순서가 틀려도 JS 나레이션을 기준으로 정확히 N개 보장
+  return narrations.map((narration, idx) => {
+    const aiItem = items[idx] || {};
+    return {
+      sceneNumber: idx + 1,
+      narration,                              // ← JS 고정값 사용 (AI 값 무시)
+      visualPrompt: aiItem.image_prompt_english || '',
+      analysis: aiItem.analysis || {},
+    };
+  });
+};
+
 const generateScriptSingle = async (
   topic: string,
   hasReferenceImage: boolean,
@@ -466,35 +555,31 @@ const generateScriptSingle = async (
   chunkInfo?: { current: number; total: number },
   maxScenes?: number
 ): Promise<ScriptScene[]> => {
+  // ─── maxScenes + 대본 있을 때: JS 고정 나레이션 + AI 이미지 프롬프트 분리 ───
+  // AI가 씬 수를 절대 건드릴 수 없는 구조
+  if (maxScenes && sourceContext) {
+    const chunkLabel = chunkInfo ? `[청크 ${chunkInfo.current}/${chunkInfo.total}] ` : '';
+    const sentences = splitIntoSentences(sourceContext);
+    console.log(`${chunkLabel}[FixedScene] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes}개`);
+
+    if (sentences.length > 0) {
+      const actualBlocks = Math.min(maxScenes, sentences.length);
+      const blocks = groupSentencesIntoBlocks(sentences, actualBlocks);
+      console.log(`${chunkLabel}[FixedScene] JS 분할 완료: ${blocks.length}개 나레이션 고정`);
+      return retryGeminiRequest("FixedScene Visual", () =>
+        generateVisualPromptsForBlocks(blocks, hasReferenceImage)
+      );
+    }
+  }
+
   return retryGeminiRequest("Script Generation", async () => {
     const baseInstruction = topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
                             hasReferenceImage ? SYSTEM_INSTRUCTIONS.REFERENCE_MATCH :
                             SYSTEM_INSTRUCTIONS.CHIEF_ART_DIRECTOR;
 
     const chunkLabel = chunkInfo ? `[청크 ${chunkInfo.current}/${chunkInfo.total}] ` : '';
-
-    // ─── JS 사전 분할: maxScenes가 있고 대본이 있을 때 JS에서 균등 분배 ───
     let contentForPrompt = sourceContext || null;
-    let preSegmented = false;
     let targetSceneCount = maxScenes;
-
-    if (maxScenes && sourceContext) {
-      const sentences = splitIntoSentences(sourceContext);
-      console.log(`${chunkLabel}[Script] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes}개`);
-
-      if (sentences.length > 0) {
-        const actualBlocks = Math.min(maxScenes, sentences.length);
-        const blocks = groupSentencesIntoBlocks(sentences, actualBlocks);
-        // [SCENE_BLOCK_N] 마커로 포맷팅
-        contentForPrompt = blocks
-          .map((block, i) => `[SCENE_BLOCK_${i + 1}]\n${block}`)
-          .join('\n\n');
-        preSegmented = true;
-        targetSceneCount = blocks.length;
-        console.log(`${chunkLabel}[Script] JS 사전 분할 완료: ${blocks.length}개 블록`);
-        blocks.forEach((b, i) => console.log(`  블록 ${i + 1}: ${b.slice(0, 60)}...`));
-      }
-    }
 
     // 입력 길이 및 토큰 계산
     const inputText = contentForPrompt || topic;
@@ -506,7 +591,7 @@ const generateScriptSingle = async (
     console.log(`${chunkLabel}[Script] 입력: ${inputLength}자, 목표 씬: ${estimatedSceneCount}개, maxOutputTokens: ${maxOutputTokens}`);
 
     const writingGuide = localStorage.getItem('heaven_writing_guide') || '';
-    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented, undefined, writingGuide);
+    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, false, undefined, writingGuide);
     const anthropicKey = localStorage.getItem('heaven_anthropic_key');
     let responseText: string;
 
