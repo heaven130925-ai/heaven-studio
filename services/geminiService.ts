@@ -1737,55 +1737,37 @@ export interface CharacterInfo {
 export const extractCharactersFromScript = async (script: string): Promise<CharacterInfo[]> => {
   const ai = getAI();
 
-  const prompt = `아래 대본을 정밀 분석하여 등장인물(사람 캐릭터)을 모두 추출하세요.
+  const prompt = `아래 대본을 분석하여 등장인물(사람 캐릭터)을 모두 추출하세요.
 
 대본:
 ${script}
 
-## 분석 지침
-각 인물에 대해 대본에서 언급된 모든 단서를 수집하세요:
-- 나이/연령대 (예: 30대 중반, 노인, 십대 소녀 등)
-- 성별
-- 직업/신분 (예: 형사, 사업가, 학생)
-- 외모 특징 (키, 체형, 머리 색/스타일, 피부색, 눈 색)
-- 복장 스타일 (예: 정장, 캐주얼, 전통 복장)
-- 성격/감정적 특징
-- 대본에서 추론 가능한 모든 시각적 요소
+각 인물에 대해 대본에서 언급된 나이, 성별, 직업, 외모(머리색/스타일, 눈색, 피부색, 체형), 복장, 성격을 파악하세요. 단서가 없으면 이야기 맥락에서 합리적으로 추론하세요.
 
-## 출력 형식 (JSON 배열만, 설명 없이)
-[
-  {
-    "name": "캐릭터 이름 (한국어, 대본에 나온 그대로)",
-    "description": "나이, 성별, 외모, 성격, 직업 등 상세 묘사 (한국어 3~4문장, 시각적으로 재현 가능한 수준으로 구체적으로)",
-    "imagePrompt": "Photorealistic portrait, [gender], approximately [age] years old, [specific hair: color, length, style], [eye color and shape], [skin tone], [body build: slim/average/muscular/heavy], [specific facial features: jaw, nose, cheekbones], wearing [detailed clothing: color, style, fabric], [expression and pose], professional studio portrait, neutral background, sharp focus, high quality photography"
-  }
-]
+반드시 아래 JSON 배열 형식으로만 응답하세요. 마크다운 없이 JSON만:
+[{"name":"캐릭터이름","description":"한국어 상세묘사 3문장","imagePrompt":"Photorealistic portrait. Gender: female. Age: 30s. Hair: long black straight hair. Eyes: dark brown. Skin: fair. Build: slender. Wearing: white blouse and dark slacks. Expression: calm and composed. Professional studio portrait, soft lighting, neutral background, high quality."}]
 
-## 주의사항
-- 실제로 대본에 등장하거나 이름이 언급된 사람 캐릭터만 포함
-- 추상 개념, 장소, 조직, 동물은 제외
-- 대본에서 단서가 없는 외모 요소는 이야기 맥락에서 합리적으로 추론
-- imagePrompt는 반드시 영어로, 이미지 생성 AI가 정확히 재현할 수 있을 만큼 구체적으로
-- 등장인물이 없으면 빈 배열 [] 반환`;
+주의: imagePrompt는 영어로, 문장 형식(마침표로 구분)으로 작성. 대괄호나 특수기호 사용 금지.
+실제 등장인물이 없으면 빈 배열만 반환: []`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: { temperature: 0.3, responseMimeType: 'application/json' }
+    config: { temperature: 0.3 }
   });
 
   const raw = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-  console.log('[extractCharacters] raw 응답 길이:', raw.length, '앞부분:', raw.slice(0, 100));
+  console.log('[extractCharacters] raw 길이:', raw.length, '앞부분:', raw.slice(0, 120));
 
   try {
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
     if (Array.isArray(parsed)) {
-      console.log('[extractCharacters] 추출된 캐릭터:', parsed.length, '명', parsed.map((c: any) => c.name));
+      console.log('[extractCharacters] 추출 완료:', parsed.length, '명', parsed.map((c: any) => c.name));
       return parsed as CharacterInfo[];
     }
   } catch (e) {
-    console.error('[extractCharacters] JSON 파싱 실패:', e, '/ raw:', raw.slice(0, 300));
+    console.error('[extractCharacters] JSON 파싱 실패:', e, '\nraw:', raw.slice(0, 400));
   }
 
   return [];
