@@ -136,49 +136,160 @@ const ORIGIN_LABELS: Record<ZoomOrigin, string> = {
   'center': '중앙', 'top-left': '↖', 'top-right': '↗', 'bottom-left': '↙', 'bottom-right': '↘',
 };
 
-const GlobalZoomPanel: React.FC<{ subConfig: SubtitleConfig; onSubConfigChange: (cfg: SubtitleConfig) => void }> = ({ subConfig, onSubConfigChange }) => {
+// 줌/패닝 미리보기용 캔버스 드로잉
+function drawZoomPreview(
+  ctx: CanvasRenderingContext2D, img: HTMLImageElement,
+  W: number, H: number, progress: number, zoom: ZoomEffect
+) {
+  const factor = zoom.intensity / 100;
+  const originMap: Record<ZoomOrigin, [number, number]> = {
+    'center': [0.5, 0.5], 'top-left': [0, 0], 'top-right': [1, 0],
+    'bottom-left': [0, 1], 'bottom-right': [1, 1],
+  };
+  const [ox, oy] = originMap[zoom.origin];
+
+  // 이미지 cover fit
+  const imgAspect = img.width / img.height;
+  const canvasAspect = W / H;
+  let baseW = W, baseH = H;
+  if (imgAspect > canvasAspect) { baseH = H; baseW = H * imgAspect; }
+  else { baseW = W; baseH = W / imgAspect; }
+
+  let scale = 1;
+  let tx = 0, ty = 0;
+
+  if (zoom.type === 'zoom-in') {
+    scale = 1 + factor * progress;
+  } else if (zoom.type === 'zoom-out') {
+    scale = (1 + factor) - factor * progress;
+  } else if (zoom.type === 'pan-left') {
+    scale = 1 + factor;
+    tx = -factor * progress * W;
+  } else if (zoom.type === 'pan-right') {
+    scale = 1 + factor;
+    tx = factor * progress * W;
+  }
+
+  const drawW = baseW * scale;
+  const drawH = baseH * scale;
+  const anchorX = ox * W;
+  const anchorY = oy * H;
+  const drawX = anchorX - ox * drawW + tx;
+  const drawY = anchorY - oy * drawH + ty;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
+const GlobalZoomPanel: React.FC<{
+  subConfig: SubtitleConfig;
+  onSubConfigChange: (cfg: SubtitleConfig) => void;
+  previewImage?: string | null;
+}> = ({ subConfig, onSubConfigChange, previewImage }) => {
   const gz = subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
   const setGz = (partial: Partial<ZoomEffect>) =>
     onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
+
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRafRef = useRef<number>(0);
+  const previewImgRef = useRef<HTMLImageElement | null>(null);
+
+  // 이미지 로드
+  useEffect(() => {
+    if (!previewImage) { previewImgRef.current = null; return; }
+    const img = new Image();
+    img.onload = () => { previewImgRef.current = img; };
+    img.src = `data:image/jpeg;base64,${previewImage}`;
+  }, [previewImage]);
+
+  // 줌 애니메이션 루프
+  useEffect(() => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    cancelAnimationFrame(previewRafRef.current);
+
+    if (gz.type === 'none' || !previewImgRef.current) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (previewImgRef.current) {
+        const img = previewImgRef.current;
+        const W = canvas.width, H = canvas.height;
+        const imgAspect = img.width / img.height;
+        const canvasAspect = W / H;
+        let drawW = W, drawH = H;
+        if (imgAspect > canvasAspect) { drawH = H; drawW = H * imgAspect; }
+        else { drawW = W; drawH = W / imgAspect; }
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(img, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
+      }
+      return;
+    }
+
+    const DURATION = 2500;
+    let startTime: number | null = null;
+    const tick = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const progress = ((ts - startTime) % DURATION) / DURATION;
+      const img = previewImgRef.current;
+      if (img && canvas) drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, gz);
+      previewRafRef.current = requestAnimationFrame(tick);
+    };
+    previewRafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(previewRafRef.current);
+  }, [gz.type, gz.intensity, gz.origin]); // eslint-disable-line
+
   return (
     <div className="px-3 pb-1.5">
       <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black block mb-1">이미지 무빙 효과 (전역)</label>
-      <div className="flex gap-1 mb-1">
-        {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
-          <button key={t} onClick={() => setGz({ type: t })}
-            className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-colors border ${
-              gz.type === t
-                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
-                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
-            }`}>
-            {ZOOM_TYPE_LABELS[t]}
-          </button>
-        ))}
-      </div>
-      {gz.type !== 'none' && (
-        <div className="flex gap-2 items-center">
-          <div className="flex-1">
-            <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
-            <input type="range" min={1} max={20} step={1}
-              value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
-              className="w-full accent-purple-500 h-1" />
+      <div className="flex gap-2">
+        {/* 왼쪽: 컨트롤 */}
+        <div className="flex-1 min-w-0">
+          <div className="flex gap-1 mb-1">
+            {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
+              <button key={t} onClick={() => setGz({ type: t })}
+                className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors border ${
+                  gz.type === t
+                    ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
+                    : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
+                }`}>
+                {ZOOM_TYPE_LABELS[t]}
+              </button>
+            ))}
           </div>
-          {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
-            <div className="flex gap-0.5 shrink-0">
-              {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
-                <button key={o} onClick={() => setGz({ origin: o })} title={o}
-                  className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
-                    gz.origin === o
-                      ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
-                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
-                  }`}>
-                  {ORIGIN_LABELS[o]}
-                </button>
-              ))}
-            </div>
+          {gz.type !== 'none' && (
+            <>
+              <div className="mb-1">
+                <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
+                <input type="range" min={1} max={20} step={1}
+                  value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
+                  className="w-full accent-purple-500 h-1" />
+              </div>
+              {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
+                <div className="flex gap-0.5">
+                  {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
+                    <button key={o} onClick={() => setGz({ origin: o })} title={o}
+                      className={`flex-1 h-6 rounded text-[9px] font-bold transition-colors border ${
+                        gz.origin === o
+                          ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
+                          : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+                      }`}>
+                      {ORIGIN_LABELS[o]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
-      )}
+        {/* 오른쪽: 미리보기 캔버스 */}
+        <div className="shrink-0 flex flex-col items-center gap-0.5">
+          <canvas ref={previewCanvasRef} width={160} height={90}
+            className="rounded border border-purple-500/30 bg-black" style={{ width: 160, height: 90 }} />
+          <span className="text-[8px] text-slate-600">미리보기</span>
+        </div>
+      </div>
     </div>
   );
 };
@@ -663,7 +774,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             ))}
           </div>
           {/* 이미지 무빙 효과 (전역 설정) */}
-          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} />
+          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} previewImage={scene?.imageData} />
           {/* 내보내기 버튼 행 */}
           {onExportVideo && (
             <div className="flex gap-1.5 px-3 pb-2">
