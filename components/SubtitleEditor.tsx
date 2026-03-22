@@ -184,47 +184,106 @@ function drawZoomPreview(
   ctx.drawImage(img, drawX, drawY, drawW, drawH);
 }
 
-const GlobalZoomPanel: React.FC<{
+const ZoomPanel: React.FC<{
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
-}> = ({ subConfig, onSubConfigChange }) => {
+  selectedIdx: number;
+  sceneZoom: ZoomEffect | null | undefined;
+  onSceneZoomChange?: (zoom: ZoomEffect | null) => void;
+}> = ({ subConfig, onSubConfigChange, selectedIdx, sceneZoom, onSceneZoomChange }) => {
+  const [mode, setMode] = useState<'global' | 'scene'>('global');
+
   const gz = subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
-  const setGz = (partial: Partial<ZoomEffect>) =>
-    onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
+  const hasOverride = sceneZoom != null;
+  const currentZoom = mode === 'global' ? gz : (sceneZoom ?? gz);
+
+  const setZoom = (partial: Partial<ZoomEffect>) => {
+    if (mode === 'global') {
+      onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
+    } else {
+      onSceneZoomChange?.({ ...currentZoom, ...partial });
+    }
+  };
+
+  const switchToScene = () => {
+    setMode('scene');
+    if (!hasOverride) onSceneZoomChange?.({ ...gz });
+  };
+
+  const clearSceneOverride = () => {
+    onSceneZoomChange?.(null);
+    setMode('global');
+  };
 
   return (
     <div className="px-3 pb-1.5">
-      <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black block mb-1">
-        이미지 무빙 효과 (전역) {gz.type !== 'none' && <span className="text-purple-400 normal-case font-normal">— 위 화면에서 실시간 확인</span>}
-      </label>
+      {/* 헤더: 라벨 + 모드 토글 */}
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black">
+          이미지 무빙 효과
+        </label>
+        <div className="flex gap-1">
+          <button onClick={() => setMode('global')}
+            className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
+              mode === 'global'
+                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60'
+                : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+            }`}>
+            전역
+          </button>
+          <button onClick={switchToScene}
+            className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
+              mode === 'scene'
+                ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
+                : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
+            }`}>
+            씬 {selectedIdx + 1} 개별{hasOverride ? ' ●' : ''}
+          </button>
+          {mode === 'scene' && hasOverride && (
+            <button onClick={clearSceneOverride}
+              className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-slate-800 text-slate-500 border-slate-700 hover:text-red-400 hover:border-red-500/40 transition-colors">
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 타입 버튼 */}
       <div className="flex gap-1 mb-1">
         {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
-          <button key={t} onClick={() => setGz({ type: t })}
+          <button key={t} onClick={() => setZoom({ type: t })}
             className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors border ${
-              gz.type === t
-                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 shadow-[0_0_8px_rgba(168,85,247,0.4)]'
-                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-purple-500/40 hover:text-slate-200'
+              currentZoom.type === t
+                ? mode === 'scene'
+                  ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
+                  : 'bg-purple-600/30 text-purple-200 border-purple-500/60'
+                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:text-slate-200'
             }`}>
             {ZOOM_TYPE_LABELS[t]}
           </button>
         ))}
       </div>
-      {gz.type !== 'none' && (
+
+      {/* 강도 + 원점 */}
+      {currentZoom.type !== 'none' && (
         <div className="flex gap-2 items-center">
           <div className="flex-1">
-            <label className="text-[9px] text-slate-400 font-bold">강도 {gz.intensity}%</label>
+            <label className="text-[9px] text-slate-400 font-bold">강도 {currentZoom.intensity}%</label>
             <input type="range" min={1} max={20} step={1}
-              value={gz.intensity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGz({ intensity: +e.target.value })}
-              className="w-full accent-purple-500 h-1" />
+              value={currentZoom.intensity}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setZoom({ intensity: +e.target.value })}
+              className={`w-full h-1 ${mode === 'scene' ? 'accent-amber-500' : 'accent-purple-500'}`} />
           </div>
-          {(gz.type === 'zoom-in' || gz.type === 'zoom-out') && (
+          {(currentZoom.type === 'zoom-in' || currentZoom.type === 'zoom-out') && (
             <div className="flex gap-0.5 shrink-0">
               {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
-                <button key={o} onClick={() => setGz({ origin: o })} title={o}
+                <button key={o} onClick={() => setZoom({ origin: o })} title={o}
                   className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
-                    gz.origin === o
-                      ? 'bg-purple-600/40 text-purple-200 border-purple-500/60'
-                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+                    currentZoom.origin === o
+                      ? mode === 'scene'
+                        ? 'bg-amber-600/40 text-amber-200 border-amber-500/60'
+                        : 'bg-purple-600/40 text-purple-200 border-purple-500/60'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
                   }`}>
                   {ORIGIN_LABELS[o]}
                 </button>
@@ -748,8 +807,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               </button>
             ))}
           </div>
-          {/* 이미지 무빙 효과 (전역 설정) */}
-          <GlobalZoomPanel subConfig={subConfig} onSubConfigChange={onSubConfigChange} />
+          {/* 이미지 무빙 효과 (전역 + 씬별 개별) */}
+          <ZoomPanel
+            subConfig={subConfig}
+            onSubConfigChange={onSubConfigChange}
+            selectedIdx={selectedIdx}
+            sceneZoom={scene?.zoomEffect}
+            onSceneZoomChange={onSceneZoomChange ? (zoom) => onSceneZoomChange(selectedIdx, zoom) : undefined}
+          />
           {/* 내보내기 버튼 행 */}
           {onExportVideo && (
             <div className="flex gap-1.5 px-3 pb-2">
@@ -866,71 +931,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             />
           </div>
         )}
-
-        {/* 씬별 줌 오버라이드 설정 */}
-        {onSceneZoomChange && (() => {
-          const hasOverride = scene?.zoomEffect !== undefined && scene?.zoomEffect !== null;
-          const sceneZoom = scene?.zoomEffect ?? subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
-          const setSceneZoom = (partial: Partial<ZoomEffect>) =>
-            onSceneZoomChange(selectedIdx, { ...sceneZoom, ...partial });
-          return (
-            <div className="px-4 pt-1 pb-2">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-amber-300 uppercase tracking-wider font-black">씬 {selectedIdx + 1} 개별 무빙</label>
-                <button
-                  onClick={() => onSceneZoomChange(selectedIdx, hasOverride ? null : { ...sceneZoom })}
-                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
-                    hasOverride
-                      ? 'bg-amber-600/30 text-amber-200 border-amber-500/50'
-                      : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
-                  }`}>
-                  {hasOverride ? '개별 설정 ON' : '전역 따름'}
-                </button>
-              </div>
-              {hasOverride && (
-                <>
-                  <div className="flex gap-1 mb-1">
-                    {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
-                      <button key={t} onClick={() => setSceneZoom({ type: t })}
-                        className={`flex-1 py-0.5 rounded text-[10px] font-bold transition-colors border ${
-                          sceneZoom.type === t
-                            ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
-                            : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:border-amber-500/40'
-                        }`}>
-                        {ZOOM_TYPE_LABELS[t]}
-                      </button>
-                    ))}
-                  </div>
-                  {sceneZoom.type !== 'none' && (
-                    <div className="flex gap-2 items-center">
-                      <div className="flex-1">
-                        <label className="text-[9px] text-slate-400 font-bold">강도 {sceneZoom.intensity}%</label>
-                        <input type="range" min={1} max={20} step={1}
-                          value={sceneZoom.intensity} onChange={e => setSceneZoom({ intensity: +e.target.value })}
-                          className="w-full accent-amber-500 h-1" />
-                      </div>
-                      {(sceneZoom.type === 'zoom-in' || sceneZoom.type === 'zoom-out') && (
-                        <div className="flex gap-0.5 shrink-0">
-                          {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
-                            <button key={o} onClick={() => setSceneZoom({ origin: o })}
-                              title={o}
-                              className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
-                                sceneZoom.origin === o
-                                  ? 'bg-amber-600/40 text-amber-200 border-amber-500/60'
-                                  : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
-                              }`}>
-                              {ORIGIN_LABELS[o]}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })()}
 
         {/* 이미지 편집 명령 */}
         {onImageEditCommand && (
