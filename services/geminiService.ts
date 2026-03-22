@@ -1770,18 +1770,22 @@ ${script}
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: { parts: [{ text: prompt }] },
-    config: { temperature: 0.3 }
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: { temperature: 0.3, responseMimeType: 'application/json' }
   });
 
-  const raw = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  const raw = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  console.log('[extractCharacters] raw 응답 길이:', raw.length, '앞부분:', raw.slice(0, 100));
 
   try {
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed)) return parsed as CharacterInfo[];
-  } catch {
-    console.error('[extractCharacters] JSON 파싱 실패:', raw.slice(0, 200));
+    if (Array.isArray(parsed)) {
+      console.log('[extractCharacters] 추출된 캐릭터:', parsed.length, '명', parsed.map((c: any) => c.name));
+      return parsed as CharacterInfo[];
+    }
+  } catch (e) {
+    console.error('[extractCharacters] JSON 파싱 실패:', e, '/ raw:', raw.slice(0, 300));
   }
 
   return [];

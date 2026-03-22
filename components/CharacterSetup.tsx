@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CharacterInfo } from '../services/geminiService';
 import { generateCharacterImage } from '../services/geminiService';
 
@@ -11,6 +11,16 @@ interface CharacterSetupProps {
 
 const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onSkip }) => {
   const [chars, setChars] = useState<CharacterInfo[]>(characters);
+
+  // 부모에서 캐릭터 추출 완료 시 새 캐릭터만 추가 (기존 편집 내용 유지)
+  useEffect(() => {
+    if (characters.length === 0) return;
+    setChars(prev => {
+      const existingNames = new Set(prev.map(c => c.name));
+      const added = characters.filter(c => !existingNames.has(c.name));
+      return added.length > 0 ? [...prev, ...added] : prev;
+    });
+  }, [characters]);
   const [generatingIdx, setGeneratingIdx] = useState<number | null>(null);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [newChar, setNewChar] = useState({ name: '', description: '', imagePrompt: '' });
