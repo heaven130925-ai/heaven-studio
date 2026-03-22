@@ -4,6 +4,7 @@ import { ScriptScene, ReferenceImages } from "../types";
 import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, getFinalVisualPrompt } from "./prompts";
 import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from "../config";
 import { faceSwapCharacter } from "./falService";
+import { getVoiceSetting } from "../utils/voiceStorage";
 
 /**
  * Gemini API 클라이언트 초기화
@@ -1467,27 +1468,41 @@ function concatenatePcmBase64(chunks: string[]): string {
 }
 
 /**
+ * TTS 설정을 한 곳에서 읽어 일관성 보장
+ */
+function getTtsConfig() {
+  // 음성 설정은 sessionStorage에서 읽음 (창별 독립)
+  const voiceName  = getVoiceSetting(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
+  const voiceSpeed = getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
+  const tone       = getVoiceSetting('heaven_google_tts_tone') || '';
+  const mood       = getVoiceSetting('heaven_google_tts_mood') || '';
+
+  // 속도 지시를 systemInstruction으로 전달 → 청크 전체에 일관 적용
+  const speedInstruction =
+    voiceSpeed === '0.7' ? 'Speak slowly and clearly. Maintain consistent pace throughout.' :
+    voiceSpeed === '1.3' ? 'Speak quickly and energetically. Maintain consistent pace throughout.' :
+                           'Speak at a natural, steady pace. Maintain consistent pace throughout.';
+
+  const systemInstruction = [speedInstruction, tone, mood].filter(Boolean).join(' ');
+  return { voiceName, systemInstruction };
+}
+
+/**
  * TTS 단일 청크 생성 (내부용)
  */
 async function generateTtsChunk(text: string): Promise<string> {
-  const voiceName = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
-  const voiceSpeed = localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
-  const speedInstruction = voiceSpeed === '0.7' ? '(천천히 또렷하게 말해주세요) ' : voiceSpeed === '1.3' ? '(빠르게 활기차게 말해주세요) ' : '';
-  // Google TTS 톤/분위기 텍스트 지시 (사용자가 선택한 감정 스타일)
-  const toneInstruction = localStorage.getItem('heaven_google_tts_tone') || '';
-  const moodInstruction = localStorage.getItem('heaven_google_tts_mood') || '';
-  const textWithSpeed = speedInstruction + toneInstruction + moodInstruction + text;
+  const { voiceName, systemInstruction } = getTtsConfig();
   return retryGeminiRequest("TTS Generation", async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
-      contents: { parts: [{ text: textWithSpeed }] },
+      contents: { parts: [{ text }] },
       config: {
         responseModalities: [Modality.AUDIO],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+        systemInstruction,
       }
     });
-    // 빈 응답 시 재시도 트리거 (retryGeminiRequest가 exception을 retry 조건으로 사용)
     const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!data) throw new Error('TTS returned empty audio — retrying');
     return data;
@@ -1658,7 +1673,7 @@ export const generateAudioForScene = async (text: string): Promise<string | null
   }
 
   // Gemini TTS 경로 (기존)
-  const chunks = splitTtsText(text, 400);
+  const chunks = splitTtsText(text, 500);
 
   if (chunks.length === 1) {
     return generateTtsChunk(chunks[0]);
