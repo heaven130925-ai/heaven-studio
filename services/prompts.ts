@@ -185,7 +185,7 @@ export const getScriptGenerationPrompt = (
 
   // ─── 자동 주제 모드: 주제어로부터 대본 직접 생성 ───────────────────────
   if (!isManual) {
-    const sceneTarget = maxScenes ? `정확히 ${maxScenes}개` : `5~10개`;
+    const sceneTarget = maxScenes ? `정확히 ${maxScenes}개 (이 숫자를 절대 어기지 말 것)` : `5~10개`;
     const guideSection = writingGuide?.trim() ? `\n## 글쓰기 지침 (반드시 따를 것)\n${writingGuide.trim()}\n` : '';
     return `
 # Task: "${topic}" 주제로 한국어 영상 대본 생성

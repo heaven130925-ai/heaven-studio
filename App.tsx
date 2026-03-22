@@ -124,6 +124,8 @@ const App: React.FC = () => {
   const pendingInitialAssetsRef = useRef<GeneratedAsset[]>([]);
   const pendingRefImgsRef = useRef<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const pendingTargetTopicRef = useRef<string>('');
+  // 캐릭터 분석 버튼에서 온 경우: CharacterSetup 완료 후 실행할 생성 함수 저장
+  const pendingCharAnalysisCallRef = useRef<(() => void) | null>(null);
 
   const checkApiKeyStatus = useCallback(async () => {
     if ((window as any).aistudio) {
@@ -207,9 +209,21 @@ const App: React.FC = () => {
 
   // 캐릭터 설정 완료 → 에셋 생성 시작
   const handleCharactersDone = useCallback(async (updatedChars: CharacterInfo[]) => {
-    characterProfilesRef.current = updatedChars.filter(c => c.imageData);
-    saveCharacterProfiles(characterProfilesRef.current);
+    // 이미지가 있는 캐릭터만 저장
+    if (updatedChars.length > 0) {
+      characterProfilesRef.current = updatedChars.filter(c => c.imageData);
+      saveCharacterProfiles(characterProfilesRef.current);
+    }
     setShowCharacterSetup(false);
+
+    // ── 캐릭터 분석 버튼에서 온 경우: 저장된 생성 콜백 실행 ──
+    if (pendingCharAnalysisCallRef.current) {
+      const call = pendingCharAnalysisCallRef.current;
+      pendingCharAnalysisCallRef.current = null;
+      call();
+      return;
+    }
+
     setShowStoryboard(true);
 
     const initialAssets = pendingInitialAssetsRef.current;
@@ -322,6 +336,27 @@ const App: React.FC = () => {
     }
   }, []); // eslint-disable-line
 
+  // 캐릭터 분석 버튼 → CharacterSetup 표시 후 생성 대기
+  const handleCharacterAnalyze = useCallback((
+    topic: string, refImages: ReferenceImages, sourceText: string, sceneCount: number
+  ) => {
+    // CharacterSetup 완료 시 실행할 콜백 저장
+    pendingCharAnalysisCallRef.current = () => handleGenerate(topic, refImages, sourceText, sceneCount);
+    const savedProfs = loadSavedCharacterProfiles();
+    setCharactersList(savedProfs);
+    setShowCharacterSetup(true);
+    // 백그라운드에서 대본 캐릭터 추출 → 기존에 없는 캐릭터만 추가
+    extractCharactersFromScript(sourceText)
+      .then(newChars => {
+        setCharactersList((prev: CharacterInfo[]) => {
+          const existingNames = new Set(prev.map((c: CharacterInfo) => c.name));
+          const added = newChars.filter((c: CharacterInfo) => !existingNames.has(c.name));
+          return added.length > 0 ? [...prev, ...added] : prev;
+        });
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line
+
   // 미완성 씬 이어서 생성 (이미지 없는 씬만)
   const handleResume = useCallback(async () => {
     if (isProcessingRef.current) return;
@@ -394,9 +429,7 @@ const App: React.FC = () => {
 
     // 자동 주제 모드 또는 오디오만 생성은 스토리보드 열지 않음
     const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
-    // 캐릭터 설정이 뜨는 일반 모드는 스토리보드를 나중에 열기 (캐릭터 완료 후)
-    const willShowCharacterSetup = !audioOnly && !autoRun && !imageOnly;
-    if (!isAutoTopicMode && !audioOnly && !willShowCharacterSetup) setShowStoryboard(true);
+    if (!isAutoTopicMode && !audioOnly) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
 
@@ -510,34 +543,6 @@ const App: React.FC = () => {
         assetsRef.current = initialAssets;
         if (!audioOnly) setGeneratedData(initialAssets);
 
-        // ── 캐릭터 설정 단계 삽입 (audioOnly/autoRun/imageOnly 제외) ──
-        if (!audioOnly && !autoRun && !imageOnly) {
-          pendingInitialAssetsRef.current = initialAssets;
-          pendingRefImgsRef.current = refImgs;
-          pendingTargetTopicRef.current = targetTopic;
-          // 화면 즉시 표시 후 캐릭터 추출은 백그라운드
-          setCharactersList([]);
-          // 저장된 프로필 먼저 표시
-          const savedProfs = loadSavedCharacterProfiles();
-          setCharactersList(savedProfs);
-          setShowStoryboard(false);
-          setShowCharacterSetup(true);
-          setStep(GenerationStep.CHARACTER_SETUP);
-          setProgressMessage('캐릭터 이미지를 설정하세요');
-          isProcessingRef.current = false;
-          // 백그라운드에서 이번 대본 캐릭터 추출 → 기존 목록에 없는 캐릭터만 추가
-          const scriptText = scriptScenes.map(s => s.narration).join('\n');
-          extractCharactersFromScript(scriptText)
-            .then(newChars => {
-              setCharactersList((prev: CharacterInfo[]) => {
-                const existingNames = new Set(prev.map((c: CharacterInfo) => c.name));
-                const added = newChars.filter((c: CharacterInfo) => !existingNames.has(c.name));
-                return added.length > 0 ? [...prev, ...added] : prev;
-              });
-            })
-            .catch(() => {});
-          return;
-        }
       }
 
       setStep(GenerationStep.ASSETS);
@@ -1227,6 +1232,7 @@ const App: React.FC = () => {
         )}
         <InputSection
           onGenerate={handleGenerate}
+          onCharacterAnalyze={handleCharacterAnalyze}
           step={step}
           activeTab={inputActiveTab}
           onTabChange={setInputActiveTab}
@@ -1251,7 +1257,12 @@ const App: React.FC = () => {
           onDone={handleCharactersDone}
           onSkip={() => {
             setShowCharacterSetup(false);
-            handleCharactersDone([]);
+            // 캐릭터 분석 버튼 경로: 기존 프로필 유지하며 생성 시작
+            if (pendingCharAnalysisCallRef.current) {
+              const call = pendingCharAnalysisCallRef.current;
+              pendingCharAnalysisCallRef.current = null;
+              call();
+            }
           }}
         />
       )}

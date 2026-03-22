@@ -576,12 +576,20 @@ const generateScriptSingle = async (
     }
 
     const sorted = [...scenes].sort((a: any, b: any) => (a.sceneNumber || 0) - (b.sceneNumber || 0));
-    return sorted.map((scene: any, idx: number) => ({
+    let mapped = sorted.map((scene: any, idx: number) => ({
       sceneNumber: idx + 1,
       narration: cleanNarration(scene.narration || ""),
       visualPrompt: scene.image_prompt_english || "",
       analysis: scene.analysis || {}
     }));
+
+    // ── 씬 수 엄격 적용: 초과 시 자름 ──
+    if (maxScenes && mapped.length > maxScenes) {
+      console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 자름`);
+      mapped = mapped.slice(0, maxScenes);
+    }
+
+    return mapped;
   });
 };
 
@@ -1729,24 +1737,36 @@ export interface CharacterInfo {
 export const extractCharactersFromScript = async (script: string): Promise<CharacterInfo[]> => {
   const ai = getAI();
 
-  const prompt = `아래 대본/스토리보드를 분석하여 등장인물(캐릭터)을 모두 추출하세요.
+  const prompt = `아래 대본을 정밀 분석하여 등장인물(사람 캐릭터)을 모두 추출하세요.
 
 대본:
 ${script}
 
-다음 JSON 배열 형식으로만 응답하세요. 설명 없이 JSON만:
+## 분석 지침
+각 인물에 대해 대본에서 언급된 모든 단서를 수집하세요:
+- 나이/연령대 (예: 30대 중반, 노인, 십대 소녀 등)
+- 성별
+- 직업/신분 (예: 형사, 사업가, 학생)
+- 외모 특징 (키, 체형, 머리 색/스타일, 피부색, 눈 색)
+- 복장 스타일 (예: 정장, 캐주얼, 전통 복장)
+- 성격/감정적 특징
+- 대본에서 추론 가능한 모든 시각적 요소
+
+## 출력 형식 (JSON 배열만, 설명 없이)
 [
   {
-    "name": "캐릭터 이름 (한국어)",
-    "description": "외모, 나이, 특징, 성격 등 상세 묘사 (한국어 2~3문장)",
-    "imagePrompt": "Portrait of [character], [detailed appearance in English: age, hair, clothing, expression, style]. Clean white background, professional portrait photo, high quality."
+    "name": "캐릭터 이름 (한국어, 대본에 나온 그대로)",
+    "description": "나이, 성별, 외모, 성격, 직업 등 상세 묘사 (한국어 3~4문장, 시각적으로 재현 가능한 수준으로 구체적으로)",
+    "imagePrompt": "Photorealistic portrait, [gender], approximately [age] years old, [specific hair: color, length, style], [eye color and shape], [skin tone], [body build: slim/average/muscular/heavy], [specific facial features: jaw, nose, cheekbones], wearing [detailed clothing: color, style, fabric], [expression and pose], professional studio portrait, neutral background, sharp focus, high quality photography"
   }
 ]
 
-주의사항:
-- 실제로 대본에 등장하는 인물만 포함 (추상 개념, 장소, 조직 제외)
-- 등장인물이 없으면 빈 배열 [] 반환
-- imagePrompt는 반드시 영어로 작성`;
+## 주의사항
+- 실제로 대본에 등장하거나 이름이 언급된 사람 캐릭터만 포함
+- 추상 개념, 장소, 조직, 동물은 제외
+- 대본에서 단서가 없는 외모 요소는 이야기 맥락에서 합리적으로 추론
+- imagePrompt는 반드시 영어로, 이미지 생성 AI가 정확히 재현할 수 있을 만큼 구체적으로
+- 등장인물이 없으면 빈 배열 [] 반환`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',

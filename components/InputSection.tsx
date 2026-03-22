@@ -22,6 +22,7 @@ function pcmBase64ToWavUrl(base64Pcm: string): string {
 
 interface InputSectionProps {
   onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean, audioOnly?: boolean, autoRun?: boolean) => void;
+  onCharacterAnalyze?: (topic: string, referenceImages: ReferenceImages, sourceText: string, sceneCount: number) => void;
   step: GenerationStep;
   activeTab: 'auto' | 'manual';
   onTabChange: (tab: 'auto' | 'manual') => void;
@@ -35,7 +36,7 @@ interface InputSectionProps {
   onOpenGallery?: () => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -188,6 +189,24 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, step, activeTab
     setShowWritingGuide(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
+
+  // 수동 대본 길이에 따라 영상 포맷 시간 자동 계산
+  useEffect(() => {
+    if (activeTab !== 'manual') return;
+    const len = manualScript.trim().length;
+    if (len < 50) return;
+    // 한국어 나레이션 약 432자/분 = 7.2자/초
+    if (aspectRatio === '16:9') {
+      const mins = Math.max(1, Math.round(len / 432));
+      setLongformDuration(mins);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.LONGFORM_DURATION, String(mins));
+    } else {
+      const secs = Math.max(15, Math.min(60, Math.round(len / 7.2)));
+      setShortformDuration(secs);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.SHORTFORM_DURATION, String(secs));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualScript, aspectRatio, activeTab]);
 
   // 순차 생성: step이 COMPLETED로 바뀔 때 다음 주제 자동 실행
   useEffect(() => {
@@ -882,6 +901,17 @@ const saveElSettings = () => { if (elVoiceId) localStorage.setItem(CONFIG.STORAG
                   {/* 하단 네온 바 */}
                   <div className="absolute -bottom-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-rose-400 to-transparent opacity-60" />
                 </div>
+
+                {/* 캐릭터 분석 버튼 (수동 대본 탭에서만) */}
+                {activeTab === 'manual' && onCharacterAnalyze && (
+                  <button type="button"
+                    onClick={() => onCharacterAnalyze("Manual Script Input", buildRefImages(), manualScript, sceneCount)}
+                    disabled={isProcessing || !canSubmitManual}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-emerald-500/50 hover:border-emerald-400/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] hover:shadow-[0_0_28px_rgba(16,185,129,0.4)] disabled:shadow-none">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    캐릭터 분석
+                  </button>
+                )}
 
                 <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-blue-500/50 hover:border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.25)] hover:shadow-[0_0_28px_rgba(59,130,246,0.4)] disabled:shadow-none">
