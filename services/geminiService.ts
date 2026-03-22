@@ -1363,42 +1363,55 @@ ${styleDesc.instruction}`
  */
 export const editImageWithGemini = async (imageBase64: string, command: string): Promise<string | null> => {
   const ai = getAI();
-  try {
-    // 이미지 편집은 image input + image output을 모두 지원하는 모델 고정
-    // 생성 전용 모델(imagen, gemini-*-image 등)은 편집 명령을 무시하므로 사용 금지
-    const editModel = 'gemini-2.0-flash-exp';
-    const response = await ai.models.generateContent({
-      model: editModel,
-      contents: {
-        parts: [
-          { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
-          {
-            text: [
-              `You are an image editor. Edit this exact image by applying ONLY the instruction below.`,
-              `Keep EVERYTHING ELSE identical — same composition, characters, poses, background, colors, art style, lighting.`,
-              `Do NOT redraw or regenerate. Do NOT change anything not mentioned in the instruction.`,
-              ``,
-              `INSTRUCTION: ${command}`,
-              ``,
-              `Output: one single edited image. No panels, no split screens, no borders, no before/after comparison.`,
-            ].join('\n')
-          }
-        ]
-      },
-      config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
+  // 이미지 편집: image input + image output 지원 모델 순서대로 시도
+  // gemini-2.0-flash-exp는 2026년 삭제됨 → 대체 모델 사용
+  const editModels = [
+    'gemini-2.0-flash-exp-image-generation',
+    'gemini-3.1-flash-image-preview',
+    'gemini-2.5-flash-image',
+    'gemini-3-pro-image-preview',
+  ];
+  let lastError: any;
+
+  // base64에 data: prefix가 있으면 제거
+  const rawBase64 = imageBase64.startsWith('data:') ? imageBase64.split(',')[1] : imageBase64;
+
+  for (const editModel of editModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: editModel,
+        contents: {
+          parts: [
+            { inlineData: { data: rawBase64, mimeType: 'image/jpeg' } },
+            {
+              text: [
+                `You are an image editor. Edit this exact image by applying ONLY the instruction below.`,
+                `Keep EVERYTHING ELSE identical — same composition, characters, poses, background, colors, art style, lighting.`,
+                `Do NOT redraw or regenerate. Do NOT change anything not mentioned in the instruction.`,
+                ``,
+                `INSTRUCTION: ${command}`,
+                ``,
+                `Output: one single edited image. No panels, no split screens, no borders, no before/after comparison.`,
+              ].join('\n')
+            }
+          ]
+        },
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        }
+      });
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        if ((part as any).inlineData?.data) return (part as any).inlineData.data;
       }
-    });
-    const parts = response.candidates?.[0]?.content?.parts ?? [];
-    for (const part of parts) {
-      if ((part as any).inlineData?.data) return (part as any).inlineData.data;
+      console.warn(`[Image Edit] ${editModel} 응답에 이미지 없음:`, parts.map(p => Object.keys(p)));
+    } catch (e) {
+      console.warn(`[Image Edit] ${editModel} 실패, 다음 모델 시도:`, e);
+      lastError = e;
     }
-    console.warn('[Image Edit] 응답에 이미지 없음:', parts.map(p => Object.keys(p)));
-    return null;
-  } catch (e) {
-    console.error('[Image Edit] Gemini 이미지 편집 실패:', e);
-    return null;
   }
+  // 모든 모델 실패 시 에러 던지기 (호출부에서 사용자에게 표시)
+  throw lastError || new Error('이미지 편집 실패: 모든 모델에서 이미지를 반환하지 않았습니다');
 };
 
 /**
@@ -2106,7 +2119,7 @@ Visual direction: ${params.imagePrompt}
     const response = await ai.models.generateContent({
       model: thumbnailModel,
       contents,
-      config: (isNanoBanana && params.inputImage)
+      config: isNanoBanana
         ? { responseModalities: [Modality.TEXT, Modality.IMAGE] }
         : { responseModalities: [Modality.IMAGE], imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' } },
     });

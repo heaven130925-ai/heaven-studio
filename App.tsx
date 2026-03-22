@@ -12,7 +12,7 @@ import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
 import { generateVideoFromImage, generateTextToVideo, getFalApiKey } from './services/falService';
-import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage } from './services/projectService';
+import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage, saveDraft, loadDraft, clearDraft } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
@@ -66,6 +66,9 @@ const App: React.FC = () => {
   const [needsKey, setNeedsKey] = useState(false);
   const [animatingIndices, setAnimatingIndices] = useState<Set<number>>(new Set());
   const [thumbnailBaseImage, setThumbnailBaseImage] = useState<string | null>(null);
+  const [storyThumbnailImage, setStoryThumbnailImage] = useState<string | null>(null);
+  const [draftProject, setDraftProject] = useState<import('./types').SavedProject | null>(null);
+  const [thumbnailEditorKey, setThumbnailEditorKey] = useState(0);
   const [showApiModal, setShowApiModal] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
@@ -145,6 +148,9 @@ const App: React.FC = () => {
       await migrateFromLocalStorage(); // 기존 데이터 이전
       const projects = await getSavedProjects();
       setSavedProjects(projects);
+      // 임시저장(draft) 감지 → 복구 배너 표시
+      const draft = await loadDraft();
+      if (draft && draft.assets.length > 0) setDraftProject(draft);
     })();
     return () => { isAbortedRef.current = true; };
   }, [checkApiKeyStatus]);
@@ -176,6 +182,10 @@ const App: React.FC = () => {
 
   // 현재 프로젝트 자동저장 (이미지 편집 후 호출)
   const autoSaveProject = async () => {
+    // 항상 임시저장 (뻑 대비)
+    if (assetsRef.current.length > 0) {
+      saveDraft(currentTopic || '', assetsRef.current).catch(() => {});
+    }
     if (!currentProjectIdRef.current) return;
     try {
       await updateProjectAssets(currentProjectIdRef.current, assetsRef.current);
@@ -328,6 +338,8 @@ const App: React.FC = () => {
       try {
         const savedProject = await saveProject(targetTopic, assetsRef.current, undefined, costRef.current);
         currentProjectIdRef.current = savedProject.id;
+        clearDraft();
+        setDraftProject(null);
         refreshProjects();
         setProgressMessage(`"${savedProject.name}" 저장됨 | ${costMsg}`);
       } catch (e) { console.error('프로젝트 저장 실패:', e); }
@@ -825,6 +837,8 @@ const App: React.FC = () => {
       try {
         const savedProject = await saveProject(targetTopic, assetsRef.current, undefined, costRef.current);
         currentProjectIdRef.current = savedProject.id;
+        clearDraft();
+        setDraftProject(null);
         refreshProjects();
         setProgressMessage(`"${savedProject.name}" 저장됨 | ${costMsg}`);
       } catch (e) {
@@ -1013,10 +1027,12 @@ const App: React.FC = () => {
   }, [animatingIndices]);
 
   const handleSelectThumbnail = useCallback((imageBase64: string) => {
-    setThumbnailBaseImage(null); // 먼저 null로 리셋하여 useEffect 재트리거 보장
+    // SubtitleEditor / ResultTable에서 씬 이미지 선택 → 스토리보드 썸네일 탭에만 전달 (메인 썸네일과 연동 해제)
+    setStoryThumbnailImage(null);
     requestAnimationFrame(() => {
-      setThumbnailBaseImage(imageBase64);
+      setStoryThumbnailImage(imageBase64);
       setShowStoryboard(true);
+      setThumbnailEditorKey(k => k + 1);
       setStoryboardTab('thumbnail');
     });
   }, []);
@@ -1220,6 +1236,37 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* 임시저장 복구 배너 */}
+        {draftProject && generatedData.length === 0 && (
+          <div className="max-w-7xl mx-auto px-4 mb-4">
+            <div className="flex items-center justify-between px-5 py-3 rounded-xl bg-orange-600/20 border border-orange-500/40">
+              <div className="flex items-center gap-3">
+                <span className="text-orange-400 text-lg">⚠️</span>
+                <span className="text-sm font-bold text-orange-300">
+                  저장되지 않은 작업이 있습니다 — {draftProject.name} ({draftProject.assets.length}개 씬)
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    assetsRef.current = draftProject.assets;
+                    setGeneratedData([...draftProject.assets]);
+                    setCurrentTopic(draftProject.topic);
+                    setStep(GenerationStep.COMPLETED);
+                    setShowStoryboard(true);
+                    setDraftProject(null);
+                  }}
+                  className="px-3 py-1 rounded-lg bg-orange-500/30 hover:bg-orange-500/50 text-orange-200 text-xs font-bold border border-orange-500/40 transition-colors"
+                >복구하기</button>
+                <button
+                  onClick={() => { clearDraft(); setDraftProject(null); }}
+                  className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-xs font-bold border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors"
+                >무시</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 스토리보드로 돌아가기 배너 */}
         {generatedData.length > 0 && !showStoryboard && step === GenerationStep.COMPLETED && !isVideoGenerating && (
           <div className="max-w-7xl mx-auto px-4 mb-6">
@@ -1295,7 +1342,7 @@ const App: React.FC = () => {
                   className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'subtitle' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
                   자막 편집
                 </button>
-                <button onClick={() => setStoryboardTab('thumbnail')}
+                <button onClick={() => { setStoryboardTab('thumbnail'); setThumbnailEditorKey(k => k + 1); }}
                   className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-all ${storyboardTab === 'thumbnail' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'text-slate-400 hover:text-slate-200 border border-transparent'}`}>
                   썸네일
                 </button>
@@ -1339,9 +1386,10 @@ const App: React.FC = () => {
               </div>
             ) : storyboardTab === 'thumbnail' ? (
               <ThumbnailEditor
+                key={thumbnailEditorKey}
                 scenes={generatedData}
                 topic={currentTopic}
-                selectedImage={thumbnailBaseImage}
+                selectedImage={storyThumbnailImage}
                 onImageGenerated={undefined}
               />
             ) : storyboardTab === 'subtitle' ? (
@@ -1379,17 +1427,14 @@ const App: React.FC = () => {
                   setProgressMessage(`씬 ${idx + 1} 이미지 편집 중...`);
                   try {
                     const edited = await editImageWithGemini(current.imageData, command);
-                    if (edited) {
-                      updateAssetAt(idx, { imageData: edited, status: 'completed' });
-                      setProgressMessage(`씬 ${idx + 1} 이미지 편집 완료`);
-                      autoSaveProject();
-                    } else {
-                      updateAssetAt(idx, { status: 'error' });
-                      setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패`);
-                    }
+                    updateAssetAt(idx, { imageData: edited!, status: 'completed' });
+                    setProgressMessage(`씬 ${idx + 1} 이미지 편집 완료`);
+                    autoSaveProject();
                   } catch (e: any) {
                     updateAssetAt(idx, { status: 'error' });
-                    setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패: ${e.message}`);
+                    const msg = e?.message || String(e);
+                    setProgressMessage(`씬 ${idx + 1} 이미지 편집 실패: ${msg}`);
+                    console.error('[ImageEdit]', e);
                   }
                 }}
               />

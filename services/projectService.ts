@@ -181,6 +181,67 @@ export async function getSavedProjects(): Promise<SavedProject[]> {
   }
 }
 
+const DRAFT_ID = '__draft__';
+
+/**
+ * 현재 작업 즉시 임시저장 (뻑 대비 복구용)
+ * - 프로젝트 ID 없어도 항상 저장
+ */
+export async function saveDraft(topic: string, assets: GeneratedAsset[]): Promise<void> {
+  try {
+    const db = await openDB();
+    const draft: SavedProject = {
+      id: DRAFT_ID,
+      name: `[임시] ${topic.slice(0, 30)}`,
+      createdAt: Date.now(),
+      topic,
+      settings: getCurrentSettings(),
+      assets: assets.map(a => ({ ...a })),
+      thumbnail: null,
+    };
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const req = tx.objectStore(STORE_NAME).put(draft);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    console.error('[Draft] 임시저장 실패:', e);
+  }
+}
+
+/**
+ * 임시저장 불러오기
+ */
+export async function loadDraft(): Promise<SavedProject | null> {
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(DRAFT_ID);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 임시저장 삭제
+ */
+export async function clearDraft(): Promise<void> {
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([STORE_NAME], 'readwrite');
+      const req = tx.objectStore(STORE_NAME).delete(DRAFT_ID);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { /* 무시 */ }
+}
+
 /**
  * 특정 프로젝트 가져오기
  */
