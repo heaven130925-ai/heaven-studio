@@ -2077,24 +2077,36 @@ ${charDesc}
 2. 가치제안형: 시청자가 얻을 수 있는 이득을 명확하게 강조 (구체적 숫자, 방법, 혜택)
 3. 스토리감정형: 강렬한 감정적 후기나 서사적 긴장감 활용 (경험, 감정, 공감)
 
-다음 JSON 배열 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
+반드시 아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트, 마크다운 코드블록(백틱) 없이 순수 JSON 배열만 출력하세요.
+각 항목의 imagePrompt는 반드시 영어로 작성하고, 큰따옴표 안에 큰따옴표를 사용하지 마세요.
+
 [
   {
     "type": "호기심유발",
-    "title": "YouTube 제목 (30자 이내, 클릭 유발, 한국어)",
-    "mainText": "썸네일 메인 문구 (8자 이내, 임팩트, 한국어)",
+    "title": "YouTube 제목 (30자 이내, 한국어)",
+    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
     "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
-    "imagePrompt": "YouTube thumbnail background image only, NO TEXT. ${params.characterEnabled ? params.characterDetails + ', ' : ''}dramatic composition, high contrast colors, professional YouTube style. Specific visual: [구체적 장면 영어로]",
-    "description": "SEO 최적화 설명문 첫 2줄 (핵심 키워드 포함, 한국어, 100자 이내)",
-    "tags": "핵심태그1, 태그2, 태그3, 태그4, 태그5"
+    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Dramatic composition, high contrast colors, professional YouTube style. Specific scene for this strategy.",
+    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
+    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
   },
   {
     "type": "가치제안",
-    ...
+    "title": "YouTube 제목 (30자 이내, 한국어)",
+    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
+    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
+    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Bold graphic composition, bright colors, professional YouTube style. Specific scene for this strategy.",
+    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
+    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
   },
   {
     "type": "스토리감정",
-    ...
+    "title": "YouTube 제목 (30자 이내, 한국어)",
+    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
+    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
+    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Emotional cinematic composition, warm colors, professional YouTube style. Specific scene for this strategy.",
+    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
+    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
   }
 ]`;
 
