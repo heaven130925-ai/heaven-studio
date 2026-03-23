@@ -29,12 +29,12 @@ export const GCLOUD_KO_VOICES: GCloudVoice[] = [
 function buildProsody(toneId: string, moodId: string, baseRatePct: number): string {
   // pitch 반음(semitone) 누적
   const tonePitch: Record<string, number> = {
-    '낮은톤': -4, '차분한': -2, '밝은톤': +3, '활기찬': +5,
+    '낮은톤': -3, '차분한': -2, '밝은톤': +2, '활기찬': +3,
   };
   const moodPitch: Record<string, number> = {
     '친근하게': +1, '따뜻하게': -1, '뉴스형식': 0,
-    '부드럽게': -2, '부드럽고강하게': -1, '강하고따뜻하게': +2,
-    '심각하게': -5, '울면서': -6,
+    '부드럽게': -1, '부드럽고강하게': -1, '강하고따뜻하게': +1,
+    '심각하게': -3, '울면서': -3,
   };
   // rate 퍼센트 누적
   const toneRate: Record<string, number> = {
@@ -52,12 +52,13 @@ function buildProsody(toneId: string, moodId: string, baseRatePct: number): stri
     '심각하게': -1, '울면서': -4,
   };
 
-  const pitchSt = (tonePitch[toneId] || 0) + (moodPitch[moodId] || 0);
+  const rawPitch = (tonePitch[toneId] || 0) + (moodPitch[moodId] || 0);
+  const pitchSt = Math.max(-4, Math.min(4, rawPitch)); // -4st ~ +4st 제한
   const ratePct = baseRatePct + (toneRate[toneId] || 0) + (moodRate[moodId] || 0);
   const volDb  = moodVolume[moodId] || 0;
 
   const pitchStr  = pitchSt !== 0 ? `pitch="${pitchSt > 0 ? '+' : ''}${pitchSt}st"` : '';
-  const rateStr   = `rate="${Math.max(70, Math.min(200, ratePct))}%"`;
+  const rateStr   = `rate="${Math.max(70, Math.min(180, ratePct))}%"`;
   const volumeStr = volDb !== 0 ? `volume="${volDb > 0 ? '+' : ''}${volDb}dB"` : '';
 
   return [rateStr, pitchStr, volumeStr].filter(Boolean).join(' ');
