@@ -470,6 +470,50 @@ function splitIntoSentences(text: string): string[] {
 }
 
 /**
+ * 씬 배열을 target 개수로 강제 조정 — 초과 시 균등 병합, 부족 시 긴 씬 분할
+ */
+function adjustSceneCount(scenes: ScriptScene[], target: number): ScriptScene[] {
+  if (scenes.length === target) return scenes;
+  if (scenes.length > target) {
+    const merged: ScriptScene[] = [];
+    const ratio = scenes.length / target;
+    for (let i = 0; i < target; i++) {
+      const start = Math.round(i * ratio);
+      const end = Math.round((i + 1) * ratio);
+      const group = scenes.slice(start, end);
+      merged.push({
+        sceneNumber: i + 1,
+        narration: group.map(s => s.narration).filter(Boolean).join(' '),
+        visualPrompt: group[0]?.visualPrompt || '',
+        analysis: group[0]?.analysis || {},
+      });
+    }
+    return merged;
+  } else {
+    const result = scenes.map(s => ({ ...s }));
+    while (result.length < target) {
+      let maxLen = 0, maxIdx = 0;
+      for (let i = 0; i < result.length; i++) {
+        if (result[i].narration.length > maxLen) { maxLen = result[i].narration.length; maxIdx = i; }
+      }
+      if (maxLen < 10) break;
+      const scene = result[maxIdx];
+      const narr = scene.narration;
+      const mid = Math.floor(narr.length / 2);
+      const before = narr.slice(0, mid);
+      const lastPunct = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('。'));
+      const splitPoint = lastPunct > 0 ? lastPunct + 1 : mid;
+      const first = narr.slice(0, splitPoint).trim();
+      const second = narr.slice(splitPoint).trim();
+      if (!first || !second) break;
+      result.splice(maxIdx, 1, { ...scene, narration: first }, { ...scene, narration: second });
+      result.forEach((s, i) => { s.sceneNumber = i + 1; });
+    }
+    return result.slice(0, target).map((s, i) => ({ ...s, sceneNumber: i + 1 }));
+  }
+}
+
+/**
  * 문장 배열을 N개 블록으로 분배 — 글자 수 기준 균등 분배
  * (문장 개수 기준은 긴 문장/짧은 문장 혼재 시 나레이션 길이 불균등 문제 발생)
  */
@@ -601,15 +645,17 @@ const generateScriptSingle = async (
     console.log(`${chunkLabel}[FixedScene] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes ?? '자동'}개`);
 
     if (sentences.length > 0) {
-      // maxScenes 지정 시 해당 수로 그룹핑, 미지정 시 문장 수 그대로 사용
-      const targetBlocks = maxScenes
-        ? Math.min(maxScenes, sentences.length)
-        : sentences.length;
+      const targetBlocks = maxScenes || sentences.length;
       const blocks = groupSentencesIntoBlocks(sentences, targetBlocks);
       console.log(`${chunkLabel}[FixedScene] JS 분할 완료: ${blocks.length}개 나레이션 고정 (AI 수정 불가)`);
-      return retryGeminiRequest("FixedScene Visual", () =>
+      let result = await retryGeminiRequest("FixedScene Visual", () =>
         generateVisualPromptsForBlocks(blocks, hasReferenceImage)
       );
+      if (maxScenes && result.length !== maxScenes) {
+        console.log(`${chunkLabel}[FixedScene] 씬 수 조정: ${result.length}개 → ${maxScenes}개`);
+        result = adjustSceneCount(result, maxScenes);
+      }
+      return result;
     }
   }
 
@@ -709,48 +755,10 @@ const generateScriptSingle = async (
       analysis: scene.analysis || {}
     }));
 
-    // ── 씬 수 엄격 고정: 초과 시 균등 병합, 부족 시 긴 씬 분할 ──
+    // ── 씬 수 엄격 고정 ──
     if (maxScenes && mapped.length !== maxScenes) {
-      if (mapped.length > maxScenes) {
-        console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 균등 병합`);
-        const merged: typeof mapped = [];
-        const ratio = mapped.length / maxScenes;
-        for (let i = 0; i < maxScenes; i++) {
-          const start = Math.round(i * ratio);
-          const end = Math.round((i + 1) * ratio);
-          const group = mapped.slice(start, end);
-          merged.push({
-            sceneNumber: i + 1,
-            narration: group.map(s => s.narration).filter(Boolean).join(' '),
-            visualPrompt: group[0]?.visualPrompt || '',
-            analysis: group[0]?.analysis || {},
-          });
-        }
-        mapped = merged;
-      } else {
-        console.log(`${chunkLabel}[Script] 씬 수 부족(${mapped.length}개) → ${maxScenes}개로 분할`);
-        while (mapped.length < maxScenes) {
-          let maxLen = 0, maxIdx = 0;
-          for (let i = 0; i < mapped.length; i++) {
-            if (mapped[i].narration.length > maxLen) { maxLen = mapped[i].narration.length; maxIdx = i; }
-          }
-          if (maxLen < 10) break;
-          const scene = mapped[maxIdx];
-          const narr = scene.narration;
-          const mid = Math.floor(narr.length / 2);
-          const before = narr.slice(0, mid);
-          const lastPunct = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('。'));
-          const splitPoint = lastPunct > 0 ? lastPunct + 1 : mid;
-          const first = narr.slice(0, splitPoint).trim();
-          const second = narr.slice(splitPoint).trim();
-          if (!first || !second) break;
-          mapped.splice(maxIdx, 1,
-            { ...scene, narration: first },
-            { ...scene, narration: second }
-          );
-          mapped = mapped.map((s, i) => ({ ...s, sceneNumber: i + 1 }));
-        }
-      }
+      console.log(`${chunkLabel}[Script] 씬 수 조정: ${mapped.length}개 → ${maxScenes}개`);
+      mapped = adjustSceneCount(mapped, maxScenes);
     }
 
     return mapped;

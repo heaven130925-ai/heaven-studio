@@ -703,6 +703,7 @@ const App: React.FC = () => {
 
           for (let i = 0; i < initialAssets.length; i++) {
               if (isAbortedRef.current) break;
+              if (assetsRef.current[i]?.imageData) continue;
               updateAssetAt(i, { status: 'generating' });
 
               let success = false;
