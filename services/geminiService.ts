@@ -2076,48 +2076,41 @@ ${charDesc}
 2. 가치제안형: 시청자가 얻을 수 있는 이득을 명확하게 강조 (구체적 숫자, 방법, 혜택)
 3. 스토리감정형: 강렬한 감정적 후기나 서사적 긴장감 활용 (경험, 감정, 공감)
 
-반드시 아래 JSON 배열 형식으로만 응답하세요. 다른 텍스트, 마크다운 코드블록(백틱) 없이 순수 JSON 배열만 출력하세요.
-각 항목의 imagePrompt는 반드시 영어로 작성하고, 큰따옴표 안에 큰따옴표를 사용하지 마세요.
-
-[
-  {
-    "type": "호기심유발",
-    "title": "YouTube 제목 (30자 이내, 한국어)",
-    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
-    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
-    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Dramatic composition, high contrast colors, professional YouTube style. Specific scene for this strategy.",
-    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
-    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
-  },
-  {
-    "type": "가치제안",
-    "title": "YouTube 제목 (30자 이내, 한국어)",
-    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
-    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
-    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Bold graphic composition, bright colors, professional YouTube style. Specific scene for this strategy.",
-    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
-    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
-  },
-  {
-    "type": "스토리감정",
-    "title": "YouTube 제목 (30자 이내, 한국어)",
-    "mainText": "썸네일 메인 문구 (8자 이내, 한국어)",
-    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
-    "imagePrompt": "YouTube thumbnail background image only. No text. ${charDesc ? charDesc + '. ' : ''}Emotional cinematic composition, warm colors, professional YouTube style. Specific scene for this strategy.",
-    "description": "SEO 설명문 첫 2줄 (100자 이내, 한국어)",
-    "tags": "태그1, 태그2, 태그3, 태그4, 태그5"
-  }
-]`;
+각 전략마다 다음 필드를 생성하세요:
+- type: 전략 유형 (호기심유발 / 가치제안 / 스토리감정)
+- title: YouTube 제목 30자 이내 한국어
+- mainText: 썸네일 메인 문구 8자 이내 한국어
+- subText: 썸네일 서브 문구 12자 이내 한국어
+- imagePrompt: 썸네일 배경 이미지 생성용 영어 프롬프트 (텍스트 없는 배경, 고대비, YouTube 스타일, 구체적 장면)
+- description: SEO 설명문 100자 이내 한국어
+- tags: 관련 태그 5개 쉼표 구분 한국어`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'array' as any,
+          items: {
+            type: 'object' as any,
+            properties: {
+              type:        { type: 'string' as any },
+              title:       { type: 'string' as any },
+              mainText:    { type: 'string' as any },
+              subText:     { type: 'string' as any },
+              imagePrompt: { type: 'string' as any },
+              description: { type: 'string' as any },
+              tags:        { type: 'string' as any },
+            },
+            required: ['type', 'title', 'mainText', 'subText', 'imagePrompt', 'description', 'tags'],
+          },
+        },
+      },
     });
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return null;
-    return JSON.parse(jsonMatch[0]);
+    return JSON.parse(text);
   } catch (e) {
     console.error('[ThumbnailStrategy] 분석 실패:', e);
     return null;
