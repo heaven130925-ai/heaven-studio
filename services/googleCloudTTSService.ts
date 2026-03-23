@@ -19,10 +19,10 @@ export const GCLOUD_KO_VOICES: GCloudVoice[] = [
   { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C (남성, 깊음)', gender: 'male',   tier: 'Wavenet' },
   { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D (여성, 낮음)', gender: 'female', tier: 'Wavenet' },
   // Standard — 기본 TTS (가격 저렴, 4가지 추가 음색)
-  { id: 'ko-KR-Standard-A', label: 'Standard-A (여성, 표준)', gender: 'female', tier: 'Wavenet' },
-  { id: 'ko-KR-Standard-B', label: 'Standard-B (남성, 표준)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Standard-C', label: 'Standard-C (남성, 밝음)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Standard-D', label: 'Standard-D (여성, 밝음)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-A', label: 'Standard-A (여성)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-B', label: 'Standard-B (여성)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-C', label: 'Standard-C (남성)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-D', label: 'Standard-D (여성)', gender: 'female', tier: 'Wavenet' },
 ];
 
 /** 톤/분위기 → SSML prosody — tone과 mood를 pitch/rate 수치로 합산 */

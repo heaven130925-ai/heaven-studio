@@ -1455,10 +1455,10 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                             { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B', desc: 'Wavenet · 남성 · 중간', gender: 'male' },
                             { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C', desc: 'Wavenet · 남성 · 깊음', gender: 'male' },
                             { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D', desc: 'Wavenet · 여성 · 낮음', gender: 'female' },
-                            { id: 'ko-KR-Standard-A', label: 'Standard-A', desc: 'Standard · 여성 · 표준', gender: 'female' },
-                            { id: 'ko-KR-Standard-B', label: 'Standard-B', desc: 'Standard · 남성 · 표준', gender: 'male' },
-                            { id: 'ko-KR-Standard-C', label: 'Standard-C', desc: 'Standard · 남성 · 밝음', gender: 'male' },
-                            { id: 'ko-KR-Standard-D', label: 'Standard-D', desc: 'Standard · 여성 · 밝음', gender: 'female' },
+                            { id: 'ko-KR-Standard-A', label: 'Standard-A', desc: 'Standard · 여성', gender: 'female' },
+                            { id: 'ko-KR-Standard-B', label: 'Standard-B', desc: 'Standard · 여성', gender: 'female' },
+                            { id: 'ko-KR-Standard-C', label: 'Standard-C', desc: 'Standard · 남성', gender: 'male' },
+                            { id: 'ko-KR-Standard-D', label: 'Standard-D', desc: 'Standard · 여성', gender: 'female' },
                           ] as { id: string; label: string; desc: string; gender: string }[]).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.05] hover:bg-white/[0.05] transition-colors ${gcloudVoice === voice.id ? 'bg-blue-600/20' : ''}`}>
                               <button type="button" onClick={async (e) => {
