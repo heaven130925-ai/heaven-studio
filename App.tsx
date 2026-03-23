@@ -906,10 +906,29 @@ const App: React.FC = () => {
     }
   }, [currentReferenceImages]);
 
-  // 씬 음성 개별 생성 핸들러 (SubtitleEditor에서 호출) — audioData 반환
+  // 씬 음성 개별 생성 핸들러 (SubtitleEditor에서 호출) — ElevenLabs 우선, 실패 시 Gemini TTS
   const handleGenerateSceneAudio = useCallback(async (idx: number): Promise<string | null> => {
     const scene = assetsRef.current[idx];
     if (!scene?.narration?.trim()) return null;
+
+    // 1) ElevenLabs 시도
+    try {
+      const elResult = await generateAudioWithElevenLabs(scene.narration);
+      if (elResult.audioData && assetsRef.current[idx]) {
+        assetsRef.current[idx] = {
+          ...assetsRef.current[idx],
+          audioData: elResult.audioData,
+          subtitleData: elResult.subtitleData,
+          audioDuration: elResult.estimatedDuration,
+        };
+        setGeneratedData([...assetsRef.current]);
+        return elResult.audioData;
+      }
+    } catch (e: any) {
+      console.warn(`[TTS] ElevenLabs 실패, Gemini TTS로 폴백:`, e.message);
+    }
+
+    // 2) Gemini TTS 폴백
     try {
       const audioData = await generateAudioForScene(scene.narration);
       if (audioData && assetsRef.current[idx]) {

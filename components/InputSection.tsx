@@ -529,7 +529,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
         </div>
 
         {/* ════ 오른쪽 메인 패널 ════ */}
-        <div className="flex-1 bg-white/[0.02] border border-l-0 border-white/[0.08] rounded-r-2xl overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 130px)' }}>
+        <div className="flex-1 bg-white/[0.02] border border-l-0 border-white/[0.08] rounded-r-2xl overflow-y-auto flex flex-col" style={{ maxHeight: 'calc(100vh - 130px)' }}>
 
           {activePanel === null ? (
             /* ── 기본 입력 패널 ── */
@@ -647,7 +647,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                                   )}
                                   <input type="text" value={youtubeChannels}
                                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setYoutubeChannels(e.target.value); localStorage.setItem('heaven_yt_channels', e.target.value); }}
-                                    placeholder="@채널핸들 쉼표 구분 (예: @mysterykr, @채널명) — 비우면 키워드 검색"
+                                    placeholder="채널 URL 쉼표 구분 (예: https://youtube.com/@mysterykr) — 비우면 키워드 검색"
                                     className="w-full bg-black/50 border border-red-500/20 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/25 focus:outline-none focus:border-red-400/50" />
                                 </div>
                               )}
