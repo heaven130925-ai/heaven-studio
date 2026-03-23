@@ -1547,7 +1547,6 @@ async function generateTtsChunk(text: string): Promise<string> {
   const { voiceName, systemInstruction } = getTtsConfig();
   const models = [
     'gemini-2.5-flash-preview-tts',
-    'gemini-2.5-flash-tts',
   ];
   let lastError: any;
   for (const model of models) {
