@@ -459,26 +459,21 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
         <div className="flex-none w-1/3 bg-white/[0.03] border border-white/[0.08] rounded-l-2xl flex flex-col overflow-y-auto" style={{ maxHeight: 'calc(100vh - 130px)' }}>
           {/* 비주얼 스타일 (항상 표시) */}
           {(() => {
-            const STYLE_EN: Record<string, string> = {
-              cinematic: 'CINEMATIC', kdrama: 'K-DRAMA', noir: 'NOIR', webtoon: 'WEBTOON',
-              'comic-webtoon': 'COMIC', '3d-animation': '3D ANIMATION', claymation: 'CLAYMATION',
-              'fairy-tale': 'FAIRY TALE', 'wool-doll': 'WOOL FELT', diorama: 'DIORAMA',
-              historical: 'HISTORICAL', webnovel: 'WEB NOVEL', ghibli: 'GHIBLI',
-              stickman: 'STICKMAN', custom: 'CUSTOM',
-            };
             return (
           <div className="p-3 border-b border-white/[0.07]">
             <p className="text-sm font-black text-white/80 uppercase tracking-widest mb-2 px-1 text-center">비주얼 스타일</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative p-2 rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] flex flex-col items-center justify-center text-center ${
+                  className={`relative rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] overflow-hidden ${
                     visualStyleId === style.id
-                      ? 'border-red-400/80 bg-red-900/30 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
-                      : 'border-white/[0.1] bg-slate-800/70 hover:border-white/30 hover:bg-slate-700/70'
+                      ? 'border-red-400/80 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
+                      : 'border-white/[0.1] hover:border-white/30'
                   }`}>
-                  <p className="text-sm font-black text-white leading-tight">{style.name}</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5 font-bold tracking-wider">{STYLE_EN[style.id] || ''}</p>
+                  <div className={`w-full aspect-square bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-0.5 p-1`}>
+                    <span className="text-2xl leading-none">{(style as any).emoji || ''}</span>
+                    <p className="text-[10px] font-black text-white leading-tight text-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] px-0.5">{style.name}</p>
+                  </div>
                   {visualStyleId === style.id && (
                     <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
                       <CheckIcon />
@@ -961,12 +956,13 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                 {/* 🎨 비주얼 스타일 패널 */}
                 {activePanel === 'visual' && (
                   <div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                          className={`relative p-2 rounded-xl border transition-all ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.25)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                          <div className={`w-full aspect-video rounded-lg bg-gradient-to-br ${style.bg} flex items-center justify-center overflow-hidden`}>
-                            <span className="text-[10px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center w-full block px-1 leading-snug">{style.name}</span>
+                          className={`relative rounded-xl border transition-all overflow-hidden hover:scale-[1.04] active:scale-[0.97] ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.35)]' : 'border-white/[0.08] hover:border-white/20'}`}>
+                          <div className={`w-full aspect-square bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1 p-1`}>
+                            <span className="text-3xl leading-none">{(style as any).emoji || ''}</span>
+                            <span className="text-[11px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center leading-snug px-0.5">{style.name}</span>
                           </div>
                           {visualStyleId === style.id && (
                             <div className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.6)]">
