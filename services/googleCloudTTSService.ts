@@ -10,14 +10,14 @@ export interface GCloudVoice {
 
 export const GCLOUD_KO_VOICES: GCloudVoice[] = [
   // Neural2 — 가장 자연스러운 AI 음성 (한국어 A/B/C만 존재)
-  { id: 'ko-KR-Neural2-A', label: 'Neural2-A (여성, 차분)', gender: 'female', tier: 'Neural2' },
-  { id: 'ko-KR-Neural2-B', label: 'Neural2-B (남성, 낮음)', gender: 'male',   tier: 'Neural2' },
-  { id: 'ko-KR-Neural2-C', label: 'Neural2-C (여성, 밝음)', gender: 'female', tier: 'Neural2' },
+  { id: 'ko-KR-Neural2-A', label: 'Neural2-A (여성)', gender: 'female', tier: 'Neural2' },
+  { id: 'ko-KR-Neural2-B', label: 'Neural2-B (여성)', gender: 'female', tier: 'Neural2' },
+  { id: 'ko-KR-Neural2-C', label: 'Neural2-C (남성)', gender: 'male',   tier: 'Neural2' },
   // Wavenet — 고품질 신경망 음성
-  { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A (여성, 부드)', gender: 'female', tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B (남성, 중간)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C (남성, 깊음)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D (여성, 낮음)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A (여성)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B (여성)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C (남성)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D (남성)', gender: 'male',   tier: 'Wavenet' },
   // Standard — 기본 TTS (가격 저렴, 4가지 추가 음색)
   { id: 'ko-KR-Standard-A', label: 'Standard-A (여성)', gender: 'female', tier: 'Wavenet' },
   { id: 'ko-KR-Standard-B', label: 'Standard-B (여성)', gender: 'female', tier: 'Wavenet' },

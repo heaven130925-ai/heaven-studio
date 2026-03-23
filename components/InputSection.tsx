@@ -1448,17 +1448,17 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         {/* 성우 선택 - Gemini 스타일 리스트 */}
                         <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.12)]">
                           {([
-                            { id: 'ko-KR-Neural2-A', label: 'Neural2-A', desc: 'Neural2 · 여성 · 차분', gender: 'female' },
-                            { id: 'ko-KR-Neural2-B', label: 'Neural2-B', desc: 'Neural2 · 남성 · 낮음', gender: 'male' },
-                            { id: 'ko-KR-Neural2-C', label: 'Neural2-C', desc: 'Neural2 · 여성 · 밝음', gender: 'female' },
-                            { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A', desc: 'Wavenet · 여성 · 부드러움', gender: 'female' },
-                            { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B', desc: 'Wavenet · 남성 · 중간', gender: 'male' },
-                            { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C', desc: 'Wavenet · 남성 · 깊음', gender: 'male' },
-                            { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D', desc: 'Wavenet · 여성 · 낮음', gender: 'female' },
+                            { id: 'ko-KR-Neural2-A', label: 'Neural2-A', desc: 'Neural2 · 여성', gender: 'female' },
+                            { id: 'ko-KR-Neural2-B', label: 'Neural2-B', desc: 'Neural2 · 여성', gender: 'female' },
+                            { id: 'ko-KR-Neural2-C', label: 'Neural2-C', desc: 'Neural2 · 남성', gender: 'male' },
+                            { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A', desc: 'Wavenet · 여성', gender: 'female' },
+                            { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B', desc: 'Wavenet · 여성', gender: 'female' },
+                            { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C', desc: 'Wavenet · 남성', gender: 'male' },
+                            { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D', desc: 'Wavenet · 남성', gender: 'male' },
                             { id: 'ko-KR-Standard-A', label: 'Standard-A', desc: 'Standard · 여성', gender: 'female' },
                             { id: 'ko-KR-Standard-B', label: 'Standard-B', desc: 'Standard · 여성', gender: 'female' },
                             { id: 'ko-KR-Standard-C', label: 'Standard-C', desc: 'Standard · 남성', gender: 'male' },
-                            { id: 'ko-KR-Standard-D', label: 'Standard-D', desc: 'Standard · 여성', gender: 'female' },
+                            { id: 'ko-KR-Standard-D', label: 'Standard-D', desc: 'Standard · 남성', gender: 'male' },
                           ] as { id: string; label: string; desc: string; gender: string }[]).map(voice => (
                             <div key={voice.id} className={`flex items-center gap-2 px-3 py-2.5 border-b border-white/[0.05] hover:bg-white/[0.05] transition-colors ${gcloudVoice === voice.id ? 'bg-blue-600/20' : ''}`}>
                               <button type="button" onClick={async (e) => {
