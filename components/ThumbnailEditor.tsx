@@ -552,7 +552,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
           const { generateThumbnailV2 } = await import('../services/geminiService');
           const inputRaw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
           const b64 = await generateThumbnailV2({
-            topic, mainText: '', subText: '',
+            topic, mainText: strategy?.mainText || '', subText: strategy?.subText || '',
             imagePrompt,
             borderStyle, thumbnailRatio,
             characterEnabled: charEnabled, characterType: charType,
@@ -569,7 +569,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
         const b64 = await generateThumbnailV2({
-          topic, mainText: '', subText: '',
+          topic, mainText: strategy?.mainText || '', subText: strategy?.subText || '',
           imagePrompt,
           borderStyle, thumbnailRatio,
           characterEnabled: charEnabled, characterType: charType,
