@@ -280,79 +280,57 @@ export const findYouTubeTopics = async (
   // 1단계: 채널 URL → 채널 ID 변환 (모든 URL 형식 지원)
   const resolveChannelId = async (input: string): Promise<string | null> => {
     const raw = input.trim().replace(/\/$/, '');
-    console.log('[YouTube] 채널 ID 변환 시도:', raw);
 
     // 이미 채널 ID (UC로 시작)
     if (raw.startsWith('UC') && raw.length > 20) return raw;
 
     // /channel/UCxxx 형식
     const channelMatch = raw.match(/\/channel\/(UC[\w\-]+)/);
-    if (channelMatch) { console.log('[YouTube] /channel/ 형식:', channelMatch[1]); return channelMatch[1]; }
+    if (channelMatch) return channelMatch[1];
 
-    // @handle 형식 (youtube.com/@name, @name 단독, /videos 등 경로 포함)
+    // watch?v= 또는 youtu.be/ — 영상 URL에서 채널 ID 추출
+    const videoMatch = raw.match(/(?:v=|youtu\.be\/)([\w\-]{11})/);
+    if (videoMatch) {
+      const qs = new URLSearchParams({ part: 'snippet', id: videoMatch[1], key: apiKey });
+      const res = await fetch(`${BASE}/videos?${qs}`);
+      const data = await res.json();
+      if (data.error) throw new Error(`YouTube API 오류: ${data.error.message}`);
+      return data.items?.[0]?.snippet?.channelId || null;
+    }
+
+    // @handle 형식
     const handleMatch = raw.match(/(?:youtube\.com\/)?@([\w\-\.]+)/);
     if (handleMatch) {
       const handle = handleMatch[1];
-      console.log('[YouTube] @handle 감지:', handle);
-
       // 1) forHandle API
-      try {
-        const qs = new URLSearchParams({ part: 'id', forHandle: `@${handle}`, key: apiKey });
-        const res = await fetch(`${BASE}/channels?${qs}`);
-        const data = await res.json();
-        console.log('[YouTube] forHandle 응답:', JSON.stringify(data).slice(0, 200));
-        if (data.items?.[0]?.id) return data.items[0].id;
-      } catch (e) { console.warn('[YouTube] forHandle 오류:', e); }
+      const qs1 = new URLSearchParams({ part: 'id', forHandle: `@${handle}`, key: apiKey });
+      const res1 = await fetch(`${BASE}/channels?${qs1}`);
+      const data1 = await res1.json();
+      if (data1.error) throw new Error(`YouTube API 오류(${data1.error.code}): ${data1.error.message}`);
+      if (data1.items?.[0]?.id) return data1.items[0].id;
 
-      // 2) 검색 폴백 (forHandle 이 채널을 못 찾을 때)
-      try {
-        const qs = new URLSearchParams({ part: 'snippet', q: `@${handle}`, type: 'channel', maxResults: '3', key: apiKey });
-        const res = await fetch(`${BASE}/search?${qs}`);
-        const data = await res.json();
-        console.log('[YouTube] 검색 폴백 응답:', JSON.stringify(data).slice(0, 200));
-        const found = data.items?.find((it: any) =>
-          it.snippet?.customUrl?.replace('@','').toLowerCase() === handle.toLowerCase() ||
-          it.snippet?.title?.toLowerCase().includes(handle.toLowerCase())
-        );
-        if (found?.snippet?.channelId) return found.snippet.channelId;
-        if (data.items?.[0]?.snippet?.channelId) return data.items[0].snippet.channelId;
-      } catch (e) { console.warn('[YouTube] 검색 폴백 오류:', e); }
-
-      return null;
+      // 2) 검색 폴백
+      const qs2 = new URLSearchParams({ part: 'snippet', q: handle, type: 'channel', maxResults: '3', key: apiKey });
+      const res2 = await fetch(`${BASE}/search?${qs2}`);
+      const data2 = await res2.json();
+      if (data2.error) throw new Error(`YouTube 검색 오류(${data2.error.code}): ${data2.error.message}`);
+      const found = data2.items?.find((it: any) =>
+        it.snippet?.customUrl?.replace('@','').toLowerCase() === handle.toLowerCase()
+      );
+      return found?.snippet?.channelId || data2.items?.[0]?.snippet?.channelId || null;
     }
 
-    // /c/customname 또는 /user/username 형식
+    // /c/ 또는 /user/ 형식
     const legacyMatch = raw.match(/youtube\.com\/(?:c|user)\/([^\/\?&]+)/);
     if (legacyMatch) {
-      const name = legacyMatch[1];
-      console.log('[YouTube] legacy 형식:', name);
-      try {
-        const qs = new URLSearchParams({ part: 'id', forUsername: name, key: apiKey });
-        const res = await fetch(`${BASE}/channels?${qs}`);
-        const data = await res.json();
-        if (data.items?.[0]?.id) return data.items[0].id;
-      } catch (e) { console.warn('[YouTube] forUsername 오류:', e); }
-      return null;
+      const qs = new URLSearchParams({ part: 'id', forUsername: legacyMatch[1], key: apiKey });
+      const res = await fetch(`${BASE}/channels?${qs}`);
+      const data = await res.json();
+      if (data.error) throw new Error(`YouTube API 오류: ${data.error.message}`);
+      return data.items?.[0]?.id || null;
     }
 
-    // watch?v=videoId 형식 — 영상 URL에서 채널 ID 추출
-    const videoMatch = raw.match(/(?:v=|youtu\.be\/)([\w\-]{11})/);
-    if (videoMatch) {
-      const videoId = videoMatch[1];
-      console.log('[YouTube] 영상 URL 감지, 채널 추출 중:', videoId);
-      try {
-        const qs = new URLSearchParams({ part: 'snippet', id: videoId, key: apiKey });
-        const res = await fetch(`${BASE}/videos?${qs}`);
-        const data = await res.json();
-        const channelId = data.items?.[0]?.snippet?.channelId;
-        console.log('[YouTube] 영상→채널:', channelId);
-        if (channelId) return channelId;
-      } catch (e) { console.warn('[YouTube] 영상→채널 변환 오류:', e); }
-      return null;
-    }
-
-    console.warn('[YouTube] URL 형식 인식 불가:', raw);
-    return null;
+    throw new Error(`인식할 수 없는 URL 형식입니다: ${raw}`);
   };
 
   // 2단계: 영상 검색
