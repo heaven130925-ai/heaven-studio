@@ -5,6 +5,7 @@ import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, g
 import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from "../config";
 import { faceSwapCharacter } from "./falService";
 import { getVoiceSetting } from "../utils/voiceStorage";
+import { generateGCloudTTS } from "./googleCloudTTSService";
 
 /**
  * Gemini API 클라이언트 초기화
@@ -1716,7 +1717,6 @@ export const generateAudioForScene = async (text: string): Promise<string | null
       // 아래 Gemini TTS 경로로 fall-through
     } else {
       try {
-        const { generateGCloudTTS } = await import('./googleCloudTTSService');
         const chunks = splitTtsText(text, 4500);
         if (chunks.length === 1) return await generateGCloudTTS(chunks[0]);
         // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)

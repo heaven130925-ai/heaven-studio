@@ -5,6 +5,7 @@ import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMA
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics } from '../services/geminiService';
+import { previewGCloudTTS } from '../services/googleCloudTTSService';
 import { getVoiceSetting, setVoiceSetting, removeVoiceSetting } from '../utils/voiceStorage';
 
 
@@ -1466,7 +1467,6 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                                 if (!gcloudApiKey) return;
                                 setPlayingGcloudVoice(voice.id);
                                 try {
-                                  const { previewGCloudTTS } = await import('../services/googleCloudTTSService');
                                   const b64 = await previewGCloudTTS('안녕하세요. 테스트 목소리입니다.', voice.id);
                                   if (b64) new Audio(`data:audio/mp3;base64,${b64}`).play();
                                 } catch {}
