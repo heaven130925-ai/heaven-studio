@@ -114,8 +114,14 @@ export const previewGCloudTTS = async (text: string, voiceName: string): Promise
   const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '';
   if (!apiKey) return null;
 
+  const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
+  const toneId = getVoiceSetting('heaven_gcloud_tone_id') || '';
+  const moodId = getVoiceSetting('heaven_gcloud_mood_id') || '';
+  const baseRatePct = Math.round(voiceSpeed * 100);
+  const prosodyAttrs = buildProsody(toneId, moodId, baseRatePct);
+
   const body = {
-    input: { text },
+    input: { ssml: `<speak><prosody ${prosodyAttrs}>${text}</prosody></speak>` },
     voice: { languageCode: 'ko-KR', name: voiceName },
     audioConfig: { audioEncoding: 'MP3' },
   };
