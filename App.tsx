@@ -647,15 +647,19 @@ const App: React.FC = () => {
                   }
               }
 
-              // ElevenLabs 실패 시 Google TTS 폴백
+              // ElevenLabs 실패 시 Gemini TTS 폴백
               if (!success && !isAbortedRef.current) {
                   try {
-                      console.log(`[TTS] 씬 ${i + 1} Google TTS 폴백 시도...`);
+                      console.log(`[TTS] 씬 ${i + 1} Gemini TTS 폴백 시도...`);
                       const fallbackAudio = await generateAudioForScene(assetsRef.current[i].narration);
                       updateAssetAt(i, { audioData: fallbackAudio });
+                      success = true;
                   } catch (fallbackError: any) {
-                      console.error(`[TTS] 씬 ${i + 1} Google TTS 폴백도 실패:`, fallbackError);
-                      setProgressMessage(`⚠️ 씬 ${i + 1} 오디오 생성 실패: ${fallbackError?.message || fallbackError}`);
+                      const msg = fallbackError?.message || String(fallbackError);
+                      const isQuota = msg.includes('일일 한도') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('429');
+                      console.error(`[TTS] 씬 ${i + 1} Gemini TTS 폴백 실패:`, msg);
+                      setProgressMessage(`⚠️ TTS 실패: ${msg}`);
+                      if (isQuota) break; // 쿼터 초과 시 나머지 씬도 같은 결과 → 즉시 중단
                   }
               }
 

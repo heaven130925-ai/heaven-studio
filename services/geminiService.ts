@@ -1516,6 +1516,8 @@ async function generateTtsChunk(text: string): Promise<string> {
   let lastError: any;
   for (const model of models) {
     try {
+      // TTS는 429 재시도 금지 — 재시도할수록 일일 한도(100회)를 낭비함
+      // maxRetries=1 = 단 1회 시도만
       return await retryGeminiRequest("TTS Generation", async () => {
         const ai = getAI();
         const response = await ai.models.generateContent({
@@ -1528,12 +1530,18 @@ async function generateTtsChunk(text: string): Promise<string> {
           }
         });
         const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (!data) throw new Error('TTS returned empty audio — retrying');
+        if (!data) throw new Error('TTS returned empty audio');
         return data;
-      });
+      }, 1); // maxRetries=1 → 429 시 즉시 포기 (한도 낭비 방지)
     } catch (e: any) {
       lastError = e;
-      console.warn(`[TTS] ${model} 실패:`, e.message);
+      const msg = e?.message || JSON.stringify(e);
+      const isQuota = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
+      if (isQuota) {
+        // 쿼터 초과는 다른 모델도 같은 키를 쓰므로 즉시 포기
+        throw new Error(`Gemini TTS 일일 한도(100회) 초과 — 내일 다시 시도하거나 설정에서 다른 TTS(Azure/Google Cloud)로 전환하세요.`);
+      }
+      console.warn(`[TTS] ${model} 실패:`, msg);
     }
   }
   throw lastError ?? new Error('모든 Gemini TTS 모델 실패');
