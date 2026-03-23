@@ -2041,14 +2041,24 @@ ${textInstruction}
   }
 };
 
-// ── 썸네일 전략 분석 ──────────────────────────────────────────────────────────
+// ── 썸네일 전략 분석 (3가지 방향) ────────────────────────────────────────────
+export interface ThumbnailVariantStrategy {
+  type: '호기심유발' | '가치제안' | '스토리감정';
+  title: string;       // YouTube 제목 (A/B 테스트용)
+  mainText: string;    // 썸네일 메인 문구 (10자 이내)
+  subText: string;     // 썸네일 서브 문구 (15자 이내)
+  imagePrompt: string; // 이미지 생성 프롬프트 (영어)
+  description: string; // SEO 설명문 첫 2줄
+  tags: string;        // 태그 (쉼표 구분)
+}
+
 export const analyzeThumbnailStrategy = async (params: {
   topic: string;
   characterEnabled: boolean;
   characterType: string;
   characterDetails: string;
   targetAudience: string;
-}): Promise<{ summary: string; mainText: string; subText: string; imagePrompt: string } | null> => {
+}): Promise<ThumbnailVariantStrategy[] | null> => {
   const ai = getAI();
   if (!ai) return null;
 
@@ -2056,19 +2066,37 @@ export const analyzeThumbnailStrategy = async (params: {
     ? `등장 피사체: ${params.characterType} - ${params.characterDetails}`
     : '피사체 없음 (배경/사물 중심)';
 
-  const prompt = `당신은 유튜브 썸네일 전략가입니다. 다음 정보를 바탕으로 클릭율을 극대화하는 썸네일 전략을 JSON으로 제안하세요.
+  const prompt = `당신은 유튜브 SEO 및 썸네일 전략 전문가입니다. 다음 영상 정보를 바탕으로 YouTube A/B 테스트용 3가지 전략을 생성하세요.
 
 영상 주제: "${params.topic}"
 ${charDesc}
 시청 타겟: ${params.targetAudience}
 
-다음 JSON 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
-{
-  "summary": "전략 분석 요약 (2-3문장, 한국어)",
-  "mainText": "메인 문구 (10자 이내, 임팩트 있게, 한국어)",
-  "subText": "서브 문구 (15자 이내, 한국어)",
-  "imagePrompt": "썸네일 이미지 생성 프롬프트 (한국어, 구체적으로 시각적 요소 묘사, 100자 이내)"
-}`;
+3가지 전략 방향:
+1. 호기심유발형: 결과가 궁금해서 클릭하게 만드는 미스터리한 접근 (의문형, 반전, 충격)
+2. 가치제안형: 시청자가 얻을 수 있는 이득을 명확하게 강조 (구체적 숫자, 방법, 혜택)
+3. 스토리감정형: 강렬한 감정적 후기나 서사적 긴장감 활용 (경험, 감정, 공감)
+
+다음 JSON 배열 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
+[
+  {
+    "type": "호기심유발",
+    "title": "YouTube 제목 (30자 이내, 클릭 유발, 한국어)",
+    "mainText": "썸네일 메인 문구 (8자 이내, 임팩트, 한국어)",
+    "subText": "썸네일 서브 문구 (12자 이내, 한국어)",
+    "imagePrompt": "YouTube thumbnail background image only, NO TEXT. ${params.characterEnabled ? params.characterDetails + ', ' : ''}dramatic composition, high contrast colors, professional YouTube style. Specific visual: [구체적 장면 영어로]",
+    "description": "SEO 최적화 설명문 첫 2줄 (핵심 키워드 포함, 한국어, 100자 이내)",
+    "tags": "핵심태그1, 태그2, 태그3, 태그4, 태그5"
+  },
+  {
+    "type": "가치제안",
+    ...
+  },
+  {
+    "type": "스토리감정",
+    ...
+  }
+]`;
 
   try {
     const response = await ai.models.generateContent({
@@ -2076,7 +2104,7 @@ ${charDesc}
       contents: prompt,
     });
     const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return null;
     return JSON.parse(jsonMatch[0]);
   } catch (e) {

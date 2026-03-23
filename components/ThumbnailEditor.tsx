@@ -6,6 +6,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GeneratedAsset } from '../types';
+import type { ThumbnailVariantStrategy } from '../services/geminiService';
 
 interface Props {
   scenes: GeneratedAsset[];
@@ -19,13 +20,6 @@ type CharType = 'person' | 'animal' | 'object';
 type BorderStyle = 'none' | 'solid' | 'neon' | 'sketch';
 type TargetAudience = 'young' | 'adult' | 'senior' | 'global';
 type FontStyle = 'gothic-bold' | 'gothic-rounded' | 'myeongjo';
-
-interface Strategy {
-  summary: string;
-  mainText: string;
-  subText: string;
-  imagePrompt: string;
-}
 
 interface TextPos { x: number; y: number }
 
@@ -446,7 +440,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const [targetAudience, setTargetAudience] = useState<TargetAudience | ''>('');
 
   // Step 4~5
-  const [strategy, setStrategy]     = useState<Strategy | null>(null);
+  const [strategies, setStrategies] = useState<ThumbnailVariantStrategy[]>([]);
   const [borderStyle, setBorderStyle]     = useState<BorderStyle>('none');
   const [thumbnailRatio, setThumbnailRatio] = useState<'16:9' | '9:16'>('16:9');
   const [showChannelName, setShowChannelName] = useState(false);
@@ -528,26 +522,22 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         characterDetails: getCharacterDetails(),
         targetAudience: targetAudience ? getTargetLabel(targetAudience as TargetAudience) : '전연령',
       });
-      if (result) {
-        setStrategy(result);
-        setMainSegments([{ text: result.mainText }]);
-        setSubSegments([{ text: result.subText }]);
-        setEditorKey(k => k + 1); // 에디터 내용 리셋
+      if (result && result.length > 0) {
+        setStrategies(result);
         setStep(5);
       } else { setStep(3); }
     } catch (e) { console.error(e); setStep(3); }
   };
 
-  const runGenerate = async (variantSuffix?: string, editReq?: string): Promise<string | null> => {
+  const runGenerate = async (strategy: ThumbnailVariantStrategy | null, editReq?: string): Promise<string | null> => {
     try {
       const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
       const isNanoBanana = selectedModel.startsWith('gemini-3');
-      const basePrompt = strategy?.imagePrompt || '';
-      const imagePrompt = variantSuffix ? `${basePrompt}\n\nComposition: ${variantSuffix}` : basePrompt;
+      const imagePrompt = strategy?.imagePrompt || '';
 
       let rawBg: string;
 
-      if (uploadedBgImage && !editReq && !variantSuffix) {
+      if (uploadedBgImage && !editReq) {
         if (isNanoBanana) {
           const { generateThumbnailV2 } = await import('../services/geminiService');
           const inputRaw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
@@ -594,13 +584,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setSelectedThumbIdx(0);
     setStep(6);
 
-    const variants = [
-      'Dynamic close-up, subject centered, dramatic high-energy lighting',
-      'Rule of thirds, subject positioned right side, wide dramatic angle with bold background',
-      'Graphic minimalist style, strong color contrast, bold geometric composition',
-    ];
-
-    const results = await Promise.all(variants.map(v => runGenerate(v)));
+    // 3가지 전략으로 각각 썸네일 생성
+    const results = await Promise.all(strategies.map(s => runGenerate(s)));
     const valid = results.filter(Boolean) as string[];
     setThumbnails(valid);
     if (valid[0]) onImageGenerated?.(valid[0]);
@@ -641,7 +626,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const reset = () => {
     setStep(1); setTopic(propTopic || ''); setScriptContent('');
     setCharEnabled(true); setCharType('person'); setTargetAudience('');
-    setStrategy(null); setThumbnails([]); setSelectedThumbIdx(0);
+    setStrategies([]); setThumbnails([]); setSelectedThumbIdx(0);
     setEditRequest(''); setBorderStyle('none'); setShowChannelName(false);
     setUploadedBgImage(null); setFromExternal(false);
     setMainPos({ x: 50, y: 4 }); setSubPos({ x: 50, y: 17 });
@@ -871,24 +856,45 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         )}
 
         {/* ── STEP 5 ── */}
-        {step === 5 && strategy && (
+        {step === 5 && strategies.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center pt-2"><BackButton toStep={3} /></div>
-            <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span>✨</span><h3 className="text-sm font-black text-white">썸네일 전략 제안</h3>
-              </div>
-              <div className="bg-slate-800/60 rounded-xl p-3">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">전략 분석 요약</p>
-                <p className="text-xs text-slate-300 leading-relaxed">{strategy.summary}</p>
-              </div>
-              <div className="bg-slate-800/40 rounded-xl p-3">
-                <p className="text-[10px] text-slate-500">💡 텍스트 없이 3가지 구도 변형 이미지를 생성합니다</p>
-              </div>
+
+            {/* 3가지 전략 카드 */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-black text-white flex items-center gap-2">✨ A/B 테스트 전략 3가지</h3>
+              {strategies.map((s, i) => {
+                const typeColor = i === 0
+                  ? 'border-purple-500/50 bg-purple-900/10'
+                  : i === 1
+                  ? 'border-blue-500/50 bg-blue-900/10'
+                  : 'border-orange-500/50 bg-orange-900/10';
+                const badge = i === 0 ? 'bg-purple-600 text-white' : i === 1 ? 'bg-blue-600 text-white' : 'bg-orange-600 text-white';
+                return (
+                  <div key={i} className={`rounded-2xl border p-4 space-y-2 ${typeColor}`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${badge}`}>{s.type}</span>
+                      <button onClick={() => navigator.clipboard.writeText(s.title)}
+                        className="text-[10px] text-slate-400 hover:text-white transition-colors">제목 복사 📋</button>
+                    </div>
+                    <p className="text-xs font-bold text-white leading-snug">{s.title}</p>
+                    <div className="flex gap-2 text-[10px] text-slate-400">
+                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg">{s.mainText}</span>
+                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg">{s.subText}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-slate-500 flex-1 line-clamp-1">{s.tags}</p>
+                      <button onClick={() => navigator.clipboard.writeText(`${s.title}\n\n${s.description}\n\n태그: ${s.tags}`)}
+                        className="text-[10px] text-slate-400 hover:text-white transition-colors ml-2 shrink-0">전체 복사 📋</button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
+            {/* 스타일 설정 */}
             <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
-              <div className="flex items-center gap-2"><span>🎨</span><h3 className="text-sm font-black text-white">추가 스타일 설정</h3></div>
+              <div className="flex items-center gap-2"><span>🎨</span><h3 className="text-sm font-black text-white">스타일 설정</h3></div>
               <div>
                 <label className="text-xs text-slate-400 font-bold mb-2 block">비율</label>
                 <div className="flex gap-2">
@@ -896,17 +902,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                     <button key={r} onClick={() => setThumbnailRatio(r)}
                       className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${thumbnailRatio === r ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>
                       {r === '16:9' ? '📺 16:9 가로형' : '📱 9:16 숏츠'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 font-bold mb-2 block">테두리 스타일</label>
-                <div className="flex gap-2">
-                  {BORDER_OPTIONS.map(b => (
-                    <button key={b.id} onClick={() => setBorderStyle(b.id)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${borderStyle === b.id ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>
-                      {b.icon} {b.label}
                     </button>
                   ))}
                 </div>
@@ -923,19 +918,10 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
               </div>
             </div>
 
-            <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">이미지 프롬프트</label>
-                <button onClick={() => navigator.clipboard.writeText(strategy.imagePrompt)}
-                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors">복사 📋</button>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">{strategy.imagePrompt}</p>
-            </div>
-
-            <p className="text-center text-xs text-slate-500">ⓘ 약 20초 소요</p>
+            <p className="text-center text-xs text-slate-500">ⓘ 3가지 전략으로 썸네일 동시 생성 · 약 30~60초</p>
             <button onClick={handleGenerate}
               className="w-full py-3.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-sm transition-colors flex items-center justify-center gap-2">
-              🖼 썸네일 생성하기 →
+              🖼 썸네일 3개 생성하기 →
             </button>
           </div>
         )}
@@ -944,7 +930,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         {step === 6 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              {fromExternal ? <div className="w-16" /> : <BackButton toStep={strategy ? 5 : 1} />}
+              {fromExternal ? <div className="w-16" /> : <BackButton toStep={strategies.length > 0 ? 5 : 1} />}
               <p className="text-sm font-bold text-white">
                 {isGenerating ? '생성 중...' : `썸네일 ${thumbnails.length}개 생성 완료`}
               </p>
