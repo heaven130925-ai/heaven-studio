@@ -419,8 +419,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
         return;
       }
       const dataUrl = selectedImage.startsWith('data:') ? selectedImage : `data:image/jpeg;base64,${selectedImage}`;
-      setGeneratedImage(dataUrl);
-      setBgImage(dataUrl);
+      setThumbnails([dataUrl]);
+      setSelectedThumbIdx(0);
       setFromExternal(true);
       setStep(6);
     }
@@ -467,15 +467,13 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
   // Step 6 상태
   const [isGenerating, setIsGenerating] = useState(false);
-  const [bgImage, setBgImage]           = useState<string | null>(null);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [thumbnails, setThumbnails]     = useState<string[]>([]);       // 3개 썸네일
+  const [selectedThumbIdx, setSelectedThumbIdx] = useState(0);          // 현재 선택 (편집용)
   const [editRequest, setEditRequest]   = useState('');
   const [isEditing, setIsEditing]       = useState(false);
-  const [isTextUpdating, setIsTextUpdating] = useState(false);
 
-  // 드래그
+  // 드래그 (외부 이미지 수신용)
   const previewRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState<'main' | 'sub' | null>(null);
   const wasDraggingRef = useRef(false);
   // onImageGenerated → selectedImage 피드백 루프 방지용 플래그
   const skipNextSelectedImageRef = useRef(false);
@@ -518,44 +516,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     e.target.value = '';
   };
 
-  // ── 텍스트 드래그 (document-level 리스너로 ghost 복제 방지) ───────────────
-  // dragging → null 전환 시 합성 트리거
-  useEffect(() => {
-    if (wasDraggingRef.current && dragging === null && bgImage) {
-      applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio).then(composited => {
-        skipNextSelectedImageRef.current = true;
-        setGeneratedImage(composited);
-        onImageGenerated?.(composited);
-      });
-    }
-    wasDraggingRef.current = dragging !== null;
-  }, [dragging]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleMouseDown = (which: 'main' | 'sub') => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragging(which);
-
-    const onMove = (ev: MouseEvent) => {
-      ev.preventDefault();
-      if (!previewRef.current) return;
-      const rect = previewRef.current.getBoundingClientRect();
-      const x = Math.max(5, Math.min(95, ((ev.clientX - rect.left) / rect.width)  * 100));
-      const y = Math.max(0, Math.min(93, ((ev.clientY - rect.top)  / rect.height) * 100));
-      if (which === 'main') setMainPos({ x, y });
-      else                  setSubPos({ x, y });
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      setDragging(null);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  };
-
   // ── AI 생성 ────────────────────────────────────────────────────────────────
   const handleAnalyze = async () => {
     setStep(4);
@@ -578,20 +538,22 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     } catch (e) { console.error(e); setStep(3); }
   };
 
-  const runGenerate = async (editReq?: string) => {
+  const runGenerate = async (variantSuffix?: string, editReq?: string): Promise<string | null> => {
     try {
-      let rawBg: string;
       const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
       const isNanoBanana = selectedModel.startsWith('gemini-3');
+      const basePrompt = strategy?.imagePrompt || '';
+      const imagePrompt = variantSuffix ? `${basePrompt}\n\nComposition: ${variantSuffix}` : basePrompt;
 
-      if (uploadedBgImage && !editReq) {
+      let rawBg: string;
+
+      if (uploadedBgImage && !editReq && !variantSuffix) {
         if (isNanoBanana) {
-          // Nano Banana + 업로드 이미지: generateThumbnailV2에 이미지 직접 전달 → 텍스트 굽기
           const { generateThumbnailV2 } = await import('../services/geminiService');
           const inputRaw = uploadedBgImage.startsWith('data:') ? uploadedBgImage.split(',')[1] : uploadedBgImage;
           const b64 = await generateThumbnailV2({
-            topic, mainText, subText,
-            imagePrompt: strategy?.imagePrompt || '',
+            topic, mainText: '', subText: '',
+            imagePrompt,
             borderStyle, thumbnailRatio,
             characterEnabled: charEnabled, characterType: charType,
             characterDetails: getCharacterDetails(),
@@ -607,8 +569,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       } else {
         const { generateThumbnailV2 } = await import('../services/geminiService');
         const b64 = await generateThumbnailV2({
-          topic, mainText, subText,
-          imagePrompt: strategy?.imagePrompt || '',
+          topic, mainText: '', subText: '',
+          imagePrompt,
           borderStyle, thumbnailRatio,
           characterEnabled: charEnabled, characterType: charType,
           characterDetails: getCharacterDetails(),
@@ -617,84 +579,69 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
           editRequest: editReq,
           model: selectedModel,
         });
-        if (!b64) return;
+        if (!b64) return null;
         rawBg = b64.startsWith('data:') ? b64 : `data:image/jpeg;base64,${b64}`;
       }
-      setBgImage(rawBg);
-      setFromExternal(false);
-      skipNextSelectedImageRef.current = true;
 
-      if (isNanoBanana) {
-        // Nano Banana 2: 텍스트가 이미지 안에 이미 렌더링됨 → Canvas 오버레이 불필요
-        setGeneratedImage(rawBg);
-        onImageGenerated?.(rawBg);
-      } else {
-        // 일반 Gemini: Canvas 텍스트 오버레이 적용
-        const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
-        setGeneratedImage(composited);
-        onImageGenerated?.(composited);
-      }
-    } catch (e) { console.error(e); }
+      skipNextSelectedImageRef.current = true;
+      return rawBg;
+    } catch (e) { console.error(e); return null; }
   };
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setThumbnails([]);
+    setSelectedThumbIdx(0);
     setStep(6);
-    await runGenerate();
+
+    const variants = [
+      'Dynamic close-up, subject centered, dramatic high-energy lighting',
+      'Rule of thirds, subject positioned right side, wide dramatic angle with bold background',
+      'Graphic minimalist style, strong color contrast, bold geometric composition',
+    ];
+
+    const results = await Promise.all(variants.map(v => runGenerate(v)));
+    const valid = results.filter(Boolean) as string[];
+    setThumbnails(valid);
+    if (valid[0]) onImageGenerated?.(valid[0]);
     setIsGenerating(false);
   };
 
-  // 텍스트만 재합성 (AI 없음)
-  const handleTextUpdate = async () => {
-    if (!bgImage) return;
-    setIsTextUpdating(true);
-    const composited = await applySegmentOverlay(bgImage, currentOverlayOpts(), thumbnailRatio);
-    skipNextSelectedImageRef.current = true;
-    setGeneratedImage(composited);
-    onImageGenerated?.(composited);
-    setIsTextUpdating(false);
-  };
-
-  // 배경만 AI 수정 (image-to-image)
+  // 선택된 썸네일 AI 수정 (image-to-image)
   const handleEdit = async () => {
-    if (!editRequest.trim() || !bgImage) return;
+    if (!editRequest.trim() || thumbnails.length === 0) return;
     setIsEditing(true);
     try {
       const { editImageWithGemini } = await import('../services/geminiService');
-      const rawBase64 = bgImage.startsWith('data:') ? bgImage.split(',')[1] : bgImage;
+      const current = thumbnails[selectedThumbIdx];
+      const rawBase64 = current.startsWith('data:') ? current.split(',')[1] : current;
       const edited = await editImageWithGemini(rawBase64, editRequest);
       if (edited) {
-        const selectedModel = localStorage.getItem('heaven_image_model') || '';
-        const isNanoBanana = selectedModel.startsWith('gemini-3');
         const rawBg = `data:image/jpeg;base64,${edited}`;
-        setBgImage(rawBg);
         skipNextSelectedImageRef.current = true;
-        if (isNanoBanana) {
-          setGeneratedImage(rawBg);
-          onImageGenerated?.(rawBg);
-        } else {
-          const composited = await applySegmentOverlay(rawBg, currentOverlayOpts(), thumbnailRatio);
-          setGeneratedImage(composited);
-          onImageGenerated?.(composited);
-        }
+        setThumbnails(prev => {
+          const next = [...prev];
+          next[selectedThumbIdx] = rawBg;
+          return next;
+        });
+        onImageGenerated?.(rawBg);
       }
     } catch (e) { console.error(e); }
     setEditRequest('');
     setIsEditing(false);
   };
 
-  const handleDownload = () => {
-    if (!generatedImage) return;
+  const downloadThumb = (img: string, idx: number) => {
     const a = document.createElement('a');
-    a.href = generatedImage;
-    a.download = `thumbnail_${Date.now()}.jpg`;
+    a.href = img;
+    a.download = `thumbnail_v${idx + 1}_${Date.now()}.jpg`;
     a.click();
   };
 
   const reset = () => {
     setStep(1); setTopic(propTopic || ''); setScriptContent('');
     setCharEnabled(true); setCharType('person'); setTargetAudience('');
-    setStrategy(null); setBgImage(null); setGeneratedImage(null);
+    setStrategy(null); setThumbnails([]); setSelectedThumbIdx(0);
     setEditRequest(''); setBorderStyle('none'); setShowChannelName(false);
     setUploadedBgImage(null); setFromExternal(false);
     setMainPos({ x: 50, y: 4 }); setSubPos({ x: 50, y: 17 });
@@ -935,17 +882,8 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">전략 분석 요약</p>
                 <p className="text-xs text-slate-300 leading-relaxed">{strategy.summary}</p>
               </div>
-              <div className="space-y-2">
-                <div>
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block mb-1">메인 문구 (MAIN)</label>
-                  <input value={mainText} onChange={e => setMainSegments([{ text: e.target.value }])}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm font-bold text-center focus:outline-none focus:border-blue-500" />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block mb-1">서브 문구 (SUB)</label>
-                  <input value={subText} onChange={e => setSubSegments([{ text: e.target.value }])}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm text-center focus:outline-none focus:border-blue-500" />
-                </div>
+              <div className="bg-slate-800/40 rounded-xl p-3">
+                <p className="text-[10px] text-slate-500">💡 텍스트 없이 3가지 구도 변형 이미지를 생성합니다</p>
               </div>
             </div>
 
@@ -1007,158 +945,52 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               {fromExternal ? <div className="w-16" /> : <BackButton toStep={strategy ? 5 : 1} />}
-              <p className="text-sm font-bold text-white">썸네일 생성 완료</p>
+              <p className="text-sm font-bold text-white">
+                {isGenerating ? '생성 중...' : `썸네일 ${thumbnails.length}개 생성 완료`}
+              </p>
               <div className="w-16" />
             </div>
 
-            {/* ── 인터랙티브 프리뷰 ── */}
-            <div
-              ref={previewRef}
-              className={`relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 select-none ${thumbnailRatio === '9:16' ? 'aspect-[9/16] max-w-[280px] mx-auto' : 'aspect-video'}`}
-              style={{ containerType: 'inline-size' }}
-            >
-              {isGenerating ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                  <div className="w-10 h-10 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-slate-400">생성 중...</p>
-                </div>
-              ) : bgImage ? (
-                <>
-                  {/* 배경 이미지 */}
-                  <img src={bgImage} className="absolute inset-0 w-full h-full object-cover pointer-events-none" alt="" />
-
-                  {/* 메인 텍스트 — 드래그 가능, 실시간 업데이트 (나노바나나2는 텍스트가 이미지 안에 있으므로 숨김) */}
-                  {mainText && !(localStorage.getItem('heaven_image_model') || '').startsWith('gemini-3') && (
-                    <div
-                      className={`absolute cursor-grab active:cursor-grabbing z-10 ${dragging === 'main' ? 'opacity-90' : ''}`}
-                      style={{
-                        left: `${mainPos.x}%`, top: `${mainPos.y}%`,
-                        transform: 'translate(-50%, 0)',
-                        lineHeight: 1.2, whiteSpace: 'nowrap',
-                        userSelect: 'none', WebkitUserSelect: 'none',
-                      }}
-                      onMouseDown={handleMouseDown('main')}
-                      onDragStart={e => e.preventDefault()}
-                      draggable={false}
-                      title="드래그하여 위치 조정"
-                    >
-                      {renderSegmentsHTML(mainSegments, mainColor, mainSizePct)}
-                      <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[9px] text-yellow-300 bg-black/60 px-1 rounded opacity-60 whitespace-nowrap pointer-events-none">↕ 드래그</span>
-                    </div>
-                  )}
-
-                  {/* 서브 텍스트 — 드래그 가능 (나노바나나2는 숨김) */}
-                  {subText && !(localStorage.getItem('heaven_image_model') || '').startsWith('gemini-3') && (
-                    <div
-                      className={`absolute cursor-grab active:cursor-grabbing z-10 ${dragging === 'sub' ? 'opacity-90' : ''}`}
-                      style={{
-                        left: `${subPos.x}%`, top: `${subPos.y}%`,
-                        transform: 'translate(-50%, 0)',
-                        lineHeight: 1.2, whiteSpace: 'nowrap',
-                        userSelect: 'none', WebkitUserSelect: 'none',
-                      }}
-                      onMouseDown={handleMouseDown('sub')}
-                      onDragStart={e => e.preventDefault()}
-                      draggable={false}
-                      title="드래그하여 위치 조정"
-                    >
-                      {renderSegmentsHTML(subSegments, subColor, subSizePct)}
-                    </div>
-                  )}
-                </>
-              ) : generatedImage ? (
-                <img src={generatedImage} className="w-full h-full object-contain" alt="썸네일" />
-              ) : (
-                <p className="absolute inset-0 flex items-center justify-center text-slate-500 text-sm">생성 실패. 다시 시도해주세요.</p>
-              )}
-            </div>
-
-            {!isGenerating && (bgImage || generatedImage) && (
+            {/* ── 썸네일 3개 그리드 ── */}
+            {isGenerating ? (
+              <div className={`bg-slate-900/80 rounded-2xl border border-slate-700 flex flex-col items-center justify-center gap-3 ${thumbnailRatio === '9:16' ? 'aspect-[3/4]' : 'aspect-video'}`}>
+                <div className="w-10 h-10 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-slate-400">3가지 구도 변형 생성 중...</p>
+                <p className="text-xs text-slate-500">약 30~60초 소요</p>
+              </div>
+            ) : thumbnails.length > 0 ? (
               <>
-                {/* 다운로드 */}
-                <button onClick={handleDownload}
-                  className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-sm transition-colors flex items-center justify-center gap-2">
-                  ⬇️ 다운로드 (JPG)
-                </button>
-
-                {/* ① 텍스트 & 폰트 수정 */}
-                <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-4">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">✏️ 텍스트 · 폰트 수정</p>
-
-                  {/* 전역 폰트 */}
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1.5">기본 폰트</label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {FONT_OPTIONS.map(f => (
-                        <button key={f.id} onClick={() => setFontStyle(f.id)}
-                          className={`py-2 px-1 rounded-xl border text-xs text-center transition-colors ${fontStyle === f.id ? 'bg-red-900/30 border-red-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-                          style={{ fontFamily: f.family }}>
-                          <span className="block font-bold">{f.label}</span>
-                          <span className="block text-[9px] text-slate-500 mt-0.5">{f.desc}</span>
+                <div ref={previewRef} className={`grid gap-2 ${thumbnails.length === 1 ? 'grid-cols-1 max-w-xs mx-auto' : thumbnails.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {thumbnails.map((img, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <button
+                        onClick={() => setSelectedThumbIdx(i)}
+                        className={`block w-full rounded-xl overflow-hidden border-2 transition-all ${selectedThumbIdx === i ? 'border-red-500 shadow-lg shadow-red-500/30' : 'border-slate-700 hover:border-slate-500'}`}
+                      >
+                        <div className={thumbnailRatio === '9:16' ? 'aspect-[9/16]' : 'aspect-video'}>
+                          <img src={img} className="w-full h-full object-cover" alt={`변형 ${i + 1}`} />
+                        </div>
+                      </button>
+                      <div className="flex gap-1">
+                        <span className="text-[10px] text-slate-500 flex-1 text-center">변형 {i + 1}</span>
+                        <button onClick={() => downloadThumb(img, i)}
+                          className="text-[10px] text-slate-400 hover:text-white transition-colors px-1">
+                          ⬇️
                         </button>
-                      ))}
+                      </div>
                     </div>
-                  </div>
-
-                  {/* 리치텍스트 에디터 — 메인 */}
-                  <RichTextEditor
-                    key={`main-${editorKey}`}
-                    initialText={mainText}
-                    onChange={setMainSegments}
-                    globalFontStyle={fontStyle}
-                    placeholder="메인 문구 입력"
-                    label="메인 문구 (MAIN)"
-                  />
-
-                  {/* 리치텍스트 에디터 — 서브 */}
-                  <RichTextEditor
-                    key={`sub-${editorKey}`}
-                    initialText={subText}
-                    onChange={setSubSegments}
-                    globalFontStyle={fontStyle}
-                    placeholder="서브 문구 입력"
-                    label="서브 문구 (SUB)"
-                  />
-
-                  {/* 전역 색상 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <ColorPicker colors={MAIN_COLORS} value={mainColor} onChange={setMainColor} label="메인 기본색" />
-                    <ColorPicker colors={SUB_COLORS}  value={subColor}  onChange={setSubColor}  label="서브 기본색" />
-                  </div>
-
-                  {/* 전역 크기 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">메인 크기 ({mainSizePct.toFixed(1)})</label>
-                      <input type="range" min={5} max={14} step={0.5} value={mainSizePct}
-                        onChange={e => setMainSizePct(Number(e.target.value))}
-                        className="w-full accent-red-500" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">서브 크기 ({subSizePct.toFixed(1)})</label>
-                      <input type="range" min={3} max={9} step={0.5} value={subSizePct}
-                        onChange={e => setSubSizePct(Number(e.target.value))}
-                        className="w-full accent-red-500" />
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-slate-500">💡 프리뷰 위 텍스트를 드래그하여 위치 조정 가능</p>
-
-                  <button onClick={handleTextUpdate} disabled={isTextUpdating || !bgImage}
-                    className="w-full py-2 rounded-xl bg-emerald-700/30 border border-emerald-500/50 text-emerald-300 text-sm font-bold hover:bg-emerald-700/50 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
-                    {isTextUpdating
-                      ? <><span className="w-3 h-3 border border-emerald-400 border-t-transparent animate-spin rounded-full" /> 적용 중...</>
-                      : '✓ 텍스트 적용 (고화질 저장)'}
-                  </button>
+                  ))}
                 </div>
 
-                {/* ② 배경 이미지 수정 (AI) */}
+                {/* 선택된 썸네일 AI 수정 */}
                 <div className="bg-slate-900/80 rounded-2xl border border-slate-700 p-4 space-y-3">
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">🪄 배경 이미지 수정 (AI 재생성)</p>
+                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                    🪄 변형 {selectedThumbIdx + 1} 수정 (AI)
+                  </p>
                   <div className="flex gap-2">
                     <input value={editRequest} onChange={e => setEditRequest(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleEdit()}
-                      placeholder="예: 더 어두운 분위기로, 폭발 장면 추가"
+                      placeholder="예: 더 어두운 분위기, 폭발 장면 추가"
                       className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
                     <button onClick={handleEdit} disabled={isEditing || !editRequest.trim()}
                       className="px-4 py-2 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-300 text-sm font-bold hover:bg-blue-600/35 disabled:opacity-40 transition-colors min-w-[52px]">
@@ -1166,7 +998,17 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                     </button>
                   </div>
                 </div>
+
+                {/* 전체 다운로드 */}
+                <button onClick={() => thumbnails.forEach((img, i) => downloadThumb(img, i))}
+                  className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-sm transition-colors flex items-center justify-center gap-2">
+                  ⬇️ 전체 다운로드 ({thumbnails.length}개)
+                </button>
               </>
+            ) : (
+              <p className="aspect-video flex items-center justify-center text-slate-500 text-sm bg-slate-900/80 rounded-2xl border border-slate-700">
+                생성 실패. 다시 시도해주세요.
+              </p>
             )}
 
             {/* 전체 다시 만들기 */}
