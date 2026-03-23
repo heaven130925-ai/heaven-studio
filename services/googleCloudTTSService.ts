@@ -25,43 +25,37 @@ export const GCLOUD_KO_VOICES: GCloudVoice[] = [
   { id: 'ko-KR-Standard-D', label: 'Standard-D (여성)', gender: 'female', tier: 'Wavenet' },
 ];
 
-/** 톤/분위기 → SSML prosody — tone과 mood를 pitch/rate 수치로 합산 */
-function buildProsody(toneId: string, moodId: string, baseRatePct: number): string {
-  // pitch 반음(semitone) 누적
+/** 톤/분위기 → audioConfig 파라미터 (SSML보다 안정적) */
+function buildAudioParams(toneId: string, moodId: string, baseRate: number): { speakingRate: number; pitch: number; volumeGainDb: number } {
+  // pitch 반음(semitone) — audioConfig.pitch 범위: -20~+20
   const tonePitch: Record<string, number> = {
     '낮은톤': -3, '차분한': -2, '밝은톤': +2, '활기찬': +3,
   };
   const moodPitch: Record<string, number> = {
     '친근하게': +1, '따뜻하게': -1, '뉴스형식': 0,
     '부드럽게': -1, '부드럽고강하게': -1, '강하고따뜻하게': +1,
-    '심각하게': -3, '울면서': -3,
+    '심각하게': -2, '울면서': -2,
   };
-  // rate 퍼센트 누적
-  const toneRate: Record<string, number> = {
-    '낮은톤': -5, '차분한': -10, '밝은톤': +8, '활기찬': +15,
+  // speakingRate 배율 누적 (audioConfig.speakingRate: 0.25~4.0)
+  const toneRateDelta: Record<string, number> = {
+    '낮은톤': -0.05, '차분한': -0.1, '밝은톤': +0.08, '활기찬': +0.15,
   };
-  const moodRate: Record<string, number> = {
-    '친근하게': +5, '따뜻하게': -5, '뉴스형식': -10,
-    '부드럽게': -15, '부드럽고강하게': -5, '강하고따뜻하게': +5,
-    '심각하게': -20, '울면서': -25,
+  const moodRateDelta: Record<string, number> = {
+    '친근하게': +0.05, '따뜻하게': -0.05, '뉴스형식': -0.08,
+    '부드럽게': -0.12, '부드럽고강하게': -0.05, '강하고따뜻하게': +0.05,
+    '심각하게': -0.15, '울면서': -0.18,
   };
-  // volume dB
   const moodVolume: Record<string, number> = {
-    '친근하게': 2, '따뜻하게': 1, '뉴스형식': 0,
-    '부드럽게': -3, '부드럽고강하게': 4, '강하고따뜻하게': 4,
-    '심각하게': -1, '울면서': -4,
+    '친근하게': 1.5, '따뜻하게': 1, '뉴스형식': 0,
+    '부드럽게': -2, '부드럽고강하게': 3, '강하고따뜻하게': 3,
+    '심각하게': -1, '울면서': -3,
   };
 
-  const rawPitch = (tonePitch[toneId] || 0) + (moodPitch[moodId] || 0);
-  const pitchSt = Math.max(-4, Math.min(4, rawPitch)); // -4st ~ +4st 제한
-  const ratePct = baseRatePct + (toneRate[toneId] || 0) + (moodRate[moodId] || 0);
-  const volDb  = moodVolume[moodId] || 0;
+  const pitch = Math.max(-6, Math.min(6, (tonePitch[toneId] || 0) + (moodPitch[moodId] || 0)));
+  const speakingRate = Math.max(0.75, Math.min(1.8, baseRate + (toneRateDelta[toneId] || 0) + (moodRateDelta[moodId] || 0)));
+  const volumeGainDb = moodVolume[moodId] || 0;
 
-  const pitchStr  = pitchSt !== 0 ? `pitch="${pitchSt > 0 ? '+' : ''}${pitchSt}st"` : '';
-  const rateStr   = `rate="${Math.max(70, Math.min(180, ratePct))}%"`;
-  const volumeStr = volDb !== 0 ? `volume="${volDb > 0 ? '+' : ''}${volDb}dB"` : '';
-
-  return [rateStr, pitchStr, volumeStr].filter(Boolean).join(' ');
+  return { speakingRate, pitch, volumeGainDb };
 }
 
 /**
@@ -77,16 +71,16 @@ export const generateGCloudTTS = async (text: string): Promise<string | null> =>
   const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const toneId = getVoiceSetting('heaven_gcloud_tone_id') || '';
   const moodId = getVoiceSetting('heaven_gcloud_mood_id') || '';
-  const baseRatePct = Math.round(voiceSpeed * 100);
-  const prosodyAttrs = buildProsody(toneId, moodId, baseRatePct);
-
-  const ssml = `<speak><prosody ${prosodyAttrs}>${text}</prosody></speak>`;
+  const { speakingRate, pitch, volumeGainDb } = buildAudioParams(toneId, moodId, voiceSpeed);
 
   const body = {
-    input: { ssml },
+    input: { text },
     voice: { languageCode: 'ko-KR', name: voiceName },
     audioConfig: {
       audioEncoding: 'MP3',
+      speakingRate,
+      pitch,
+      ...(volumeGainDb !== 0 && { volumeGainDb }),
     },
   };
 
@@ -118,13 +112,17 @@ export const previewGCloudTTS = async (text: string, voiceName: string): Promise
   const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const toneId = getVoiceSetting('heaven_gcloud_tone_id') || '';
   const moodId = getVoiceSetting('heaven_gcloud_mood_id') || '';
-  const baseRatePct = Math.round(voiceSpeed * 100);
-  const prosodyAttrs = buildProsody(toneId, moodId, baseRatePct);
+  const { speakingRate, pitch, volumeGainDb } = buildAudioParams(toneId, moodId, voiceSpeed);
 
   const body = {
-    input: { ssml: `<speak><prosody ${prosodyAttrs}>${text}</prosody></speak>` },
+    input: { text },
     voice: { languageCode: 'ko-KR', name: voiceName },
-    audioConfig: { audioEncoding: 'MP3' },
+    audioConfig: {
+      audioEncoding: 'MP3',
+      speakingRate,
+      pitch,
+      ...(volumeGainDb !== 0 && { volumeGainDb }),
+    },
   };
 
   const res = await fetch(
