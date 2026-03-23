@@ -277,13 +277,19 @@ export const findYouTubeTopics = async (
     publishedAfter = d.toISOString();
   }
 
-  // 1단계: @핸들 또는 URL → 채널 ID 변환
+  // 1단계: 채널 URL → 채널 ID 변환 (모든 URL 형식 지원)
   const resolveChannelId = async (input: string): Promise<string | null> => {
-    const raw = input.trim();
-    // 이미 채널 ID (UC로 시작하는 경우)
+    const raw = input.trim().replace(/\/$/, ''); // 끝 슬래시 제거
+
+    // 이미 채널 ID (UC로 시작)
     if (raw.startsWith('UC') && raw.length > 20) return raw;
-    // URL에서 핸들 추출: youtube.com/@handle 또는 @handle
-    const handleMatch = raw.match(/(?:youtube\.com\/)?@([\w\-]+)/);
+
+    // /channel/UCxxx 형식
+    const channelMatch = raw.match(/\/channel\/(UC[\w\-]+)/);
+    if (channelMatch) return channelMatch[1];
+
+    // @handle 형식 — URL 포함, 점(.) 허용 (예: youtube.com/@name.kr/videos)
+    const handleMatch = raw.match(/(?:youtube\.com\/)?@([\w\-\.]+)/);
     if (handleMatch) {
       const qs = new URLSearchParams({ part: 'id', forHandle: `@${handleMatch[1]}`, key: apiKey });
       const res = await fetch(`${BASE}/channels?${qs}`);
@@ -291,9 +297,17 @@ export const findYouTubeTopics = async (
       const data = await res.json();
       return data.items?.[0]?.id || null;
     }
-    // URL에서 /channel/UCxxx 추출
-    const idMatch = raw.match(/\/channel\/(UC[\w\-]+)/);
-    if (idMatch) return idMatch[1];
+
+    // /c/customname 또는 /user/username 형식
+    const legacyMatch = raw.match(/youtube\.com\/(?:c|user)\/([^\/\?&]+)/);
+    if (legacyMatch) {
+      const qs = new URLSearchParams({ part: 'id', forUsername: legacyMatch[1], key: apiKey });
+      const res = await fetch(`${BASE}/channels?${qs}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.items?.[0]?.id || null;
+    }
+
     return null;
   };
 
@@ -312,7 +326,7 @@ export const findYouTubeTopics = async (
   if (channelIds.length > 0) {
     // @핸들/URL → 실제 채널ID로 변환
     const resolvedIds = (await Promise.all(channelIds.slice(0, 4).map(resolveChannelId))).filter(Boolean) as string[];
-    if (resolvedIds.length === 0) throw new Error('채널을 찾지 못했습니다. @핸들을 확인해주세요.');
+    if (resolvedIds.length === 0) throw new Error('채널을 찾지 못했습니다. 유튜브 채널 URL을 그대로 붙여넣어 주세요. (예: https://www.youtube.com/@채널명)');
     for (const channelId of resolvedIds) {
       const items = await searchItems({ part: 'snippet', channelId, type: 'video', maxResults: '30', order: 'date' });
       for (const item of items) {
