@@ -9,39 +9,58 @@ export interface GCloudVoice {
 }
 
 export const GCLOUD_KO_VOICES: GCloudVoice[] = [
-  { id: 'ko-KR-Neural2-A', label: 'Neural2-A (여성)', gender: 'female', tier: 'Neural2' },
-  { id: 'ko-KR-Neural2-B', label: 'Neural2-B (남성)', gender: 'male',   tier: 'Neural2' },
-  { id: 'ko-KR-Neural2-C', label: 'Neural2-C (여성)', gender: 'female', tier: 'Neural2' },
-  { id: 'ko-KR-Neural2-D', label: 'Neural2-D (남성)', gender: 'male',   tier: 'Neural2' },
-  { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A (여성)', gender: 'female', tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B (남성)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C (남성)', gender: 'male',   tier: 'Wavenet' },
-  { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D (여성)', gender: 'female', tier: 'Wavenet' },
+  // Neural2 — 가장 자연스러운 AI 음성 (한국어 A/B/C만 존재)
+  { id: 'ko-KR-Neural2-A', label: 'Neural2-A (여성, 차분)', gender: 'female', tier: 'Neural2' },
+  { id: 'ko-KR-Neural2-B', label: 'Neural2-B (남성, 낮음)', gender: 'male',   tier: 'Neural2' },
+  { id: 'ko-KR-Neural2-C', label: 'Neural2-C (여성, 밝음)', gender: 'female', tier: 'Neural2' },
+  // Wavenet — 고품질 신경망 음성
+  { id: 'ko-KR-Wavenet-A', label: 'Wavenet-A (여성, 부드)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-B', label: 'Wavenet-B (남성, 중간)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-C', label: 'Wavenet-C (남성, 깊음)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Wavenet-D', label: 'Wavenet-D (여성, 낮음)', gender: 'female', tier: 'Wavenet' },
+  // Standard — 기본 TTS (가격 저렴, 4가지 추가 음색)
+  { id: 'ko-KR-Standard-A', label: 'Standard-A (여성, 표준)', gender: 'female', tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-B', label: 'Standard-B (남성, 표준)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-C', label: 'Standard-C (남성, 밝음)', gender: 'male',   tier: 'Wavenet' },
+  { id: 'ko-KR-Standard-D', label: 'Standard-D (여성, 밝음)', gender: 'female', tier: 'Wavenet' },
 ];
 
-/** 톤/분위기 → SSML prosody 파라미터 매핑 */
-function buildProsodyAttrs(toneId: string, moodId: string): string {
-  const toneMap: Record<string, { pitch?: string; rate?: string }> = {
-    '낮은톤':  { pitch: '-3st', rate: '-5%' },
-    '차분한':  { pitch: '-1st', rate: '-8%' },
-    '밝은톤':  { pitch: '+2st', rate: '+5%' },
-    '활기찬':  { pitch: '+3st', rate: '+10%' },
+/** 톤/분위기 → SSML prosody — tone과 mood를 pitch/rate 수치로 합산 */
+function buildProsody(toneId: string, moodId: string, baseRatePct: number): string {
+  // pitch 반음(semitone) 누적
+  const tonePitch: Record<string, number> = {
+    '낮은톤': -6, '차분한': -3, '밝은톤': +4, '활기찬': +7,
   };
-  const moodMap: Record<string, { pitch?: string; rate?: string; volume?: string }> = {
-    '친근하게':     { volume: '+2dB' },
-    '따뜻하게':     { pitch: '-0.5st', volume: '+1dB' },
-    '뉴스형식':     { rate: '-5%', pitch: 'medium' },
-    '부드럽게':     { volume: '-2dB', rate: '-5%' },
-    '부드럽고강하게': { volume: '+3dB', rate: '-3%' },
-    '강하고따뜻하게': { pitch: '+1st', volume: '+3dB' },
-    '심각하게':     { pitch: '-2st', rate: '-10%', volume: '-1dB' },
-    '울면서':       { pitch: '-2st', rate: '-15%', volume: '-3dB' },
+  const moodPitch: Record<string, number> = {
+    '친근하게': +1, '따뜻하게': -1, '뉴스형식': 0,
+    '부드럽게': -2, '부드럽고강하게': -1, '강하고따뜻하게': +2,
+    '심각하게': -5, '울면서': -6,
   };
-  const tone = toneMap[toneId] || {};
-  const mood = moodMap[moodId] || {};
-  const merged = { ...mood, ...tone }; // tone 우선
-  if (!Object.keys(merged).length) return '';
-  return Object.entries(merged).map(([k, v]) => `${k}="${v}"`).join(' ');
+  // rate 퍼센트 누적
+  const toneRate: Record<string, number> = {
+    '낮은톤': -10, '차분한': -15, '밝은톤': +10, '활기찬': +20,
+  };
+  const moodRate: Record<string, number> = {
+    '친근하게': +5, '따뜻하게': -5, '뉴스형식': -10,
+    '부드럽게': -15, '부드럽고강하게': -5, '강하고따뜻하게': +5,
+    '심각하게': -20, '울면서': -25,
+  };
+  // volume dB
+  const moodVolume: Record<string, number> = {
+    '친근하게': 2, '따뜻하게': 1, '뉴스형식': 0,
+    '부드럽게': -3, '부드럽고강하게': 4, '강하고따뜻하게': 4,
+    '심각하게': -1, '울면서': -4,
+  };
+
+  const pitchSt = (tonePitch[toneId] || 0) + (moodPitch[moodId] || 0);
+  const ratePct = baseRatePct + (toneRate[toneId] || 0) + (moodRate[moodId] || 0);
+  const volDb  = moodVolume[moodId] || 0;
+
+  const pitchStr  = pitchSt !== 0 ? `pitch="${pitchSt > 0 ? '+' : ''}${pitchSt}st"` : '';
+  const rateStr   = `rate="${Math.max(50, Math.min(200, ratePct))}%"`;
+  const volumeStr = volDb !== 0 ? `volume="${volDb > 0 ? '+' : ''}${volDb}dB"` : '';
+
+  return [rateStr, pitchStr, volumeStr].filter(Boolean).join(' ');
 }
 
 /**
@@ -57,12 +76,10 @@ export const generateGCloudTTS = async (text: string): Promise<string | null> =>
   const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0');
   const toneId = getVoiceSetting('heaven_gcloud_tone_id') || '';
   const moodId = getVoiceSetting('heaven_gcloud_mood_id') || '';
-  const prosodyAttrs = buildProsodyAttrs(toneId, moodId);
+  const baseRatePct = Math.round(voiceSpeed * 100);
+  const prosodyAttrs = buildProsody(toneId, moodId, baseRatePct);
 
-  const rateAttr = `rate="${Math.round(voiceSpeed * 100)}%"`;
-  const ssml = prosodyAttrs
-    ? `<speak><prosody ${rateAttr} ${prosodyAttrs}>${text}</prosody></speak>`
-    : `<speak><prosody ${rateAttr}>${text}</prosody></speak>`;
+  const ssml = `<speak><prosody ${prosodyAttrs}>${text}</prosody></speak>`;
 
   const body = {
     input: { ssml },
