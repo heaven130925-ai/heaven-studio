@@ -462,20 +462,24 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
             return (
           <div className="p-3 border-b border-white/[0.07]">
             <p className="text-sm font-black text-white/80 uppercase tracking-widest mb-2 px-1 text-center">비주얼 스타일</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               {VISUAL_STYLES.map(style => (
                 <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
-                  className={`relative rounded-xl border transition-all duration-200 hover:scale-[1.04] active:scale-[0.97] overflow-hidden ${
+                  className={`relative rounded-lg border transition-all duration-200 hover:scale-[1.03] active:scale-[0.97] overflow-hidden aspect-video ${
                     visualStyleId === style.id
-                      ? 'border-red-400/80 shadow-[0_0_14px_rgba(239,68,68,0.45)]'
-                      : 'border-white/[0.1] hover:border-white/30'
+                      ? 'border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]'
+                      : 'border-white/[0.1] hover:border-white/25'
                   }`}>
-                  <div className={`w-full aspect-square bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-0.5 p-1`}>
-                    <span className="text-2xl leading-none">{(style as any).emoji || ''}</span>
-                    <p className="text-[10px] font-black text-white leading-tight text-center drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] px-0.5">{style.name}</p>
+                  <div className={`absolute inset-0 bg-gradient-to-br ${(style as any).bg}`} />
+                  {(style as any).img && (
+                    <img src={(style as any).img} alt={style.name} className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-3 pb-1 px-1">
+                    <p className="text-[9px] font-bold text-white leading-tight text-center drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">{style.name}</p>
                   </div>
                   {visualStyleId === style.id && (
-                    <div className="absolute top-1 right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_6px_rgba(239,68,68,0.7)]">
+                    <div className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500 rounded-full flex items-center justify-center shadow-[0_0_5px_rgba(239,68,68,0.8)]">
                       <CheckIcon />
                     </div>
                   )}
@@ -960,7 +964,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                       {VISUAL_STYLES.map(style => (
                         <button key={style.id} type="button" onClick={() => selectVisualStyle(style.id as VisualStyleId)}
                           className={`relative rounded-xl border transition-all overflow-hidden hover:scale-[1.04] active:scale-[0.97] ${visualStyleId === style.id ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.35)]' : 'border-white/[0.08] hover:border-white/20'}`}>
-                          <div className={`w-full aspect-square bg-gradient-to-br ${style.bg} flex flex-col items-center justify-center gap-1 p-1`}>
+                          <div className={`w-full aspect-square bg-gradient-to-br ${(style as any).bg} flex flex-col items-center justify-center gap-1 p-1`}>
                             <span className="text-3xl leading-none">{(style as any).emoji || ''}</span>
                             <span className="text-[11px] font-black text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] text-center leading-snug px-0.5">{style.name}</span>
                           </div>
