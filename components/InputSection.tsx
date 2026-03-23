@@ -1173,7 +1173,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                             <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                               <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                               <div className="flex gap-2">
-                                {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                                {[['0.85', '느림'], ['1.1', '보통'], ['1.35', '빠름']].map(([val, label]) => (
                                   <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
                                     className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-purple-600/20 text-purple-200 border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-purple-500/30'}`}>
                                     {label}
@@ -1340,7 +1340,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         <div className="shrink-0 p-3 rounded-xl border border-sky-500/40 shadow-[0_0_10px_rgba(14,165,233,0.15)]">
                           <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                           <div className="flex gap-2">
-                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                            {[['0.85', '느림'], ['1.1', '보통'], ['1.35', '빠름']].map(([val, label]) => (
                               <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
                                 className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-sky-600/20 text-sky-200 border-sky-500/60 shadow-[0_0_10px_rgba(14,165,233,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-sky-500/30'}`}>
                                 {label}
@@ -1489,7 +1489,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         <div className="shrink-0 p-3 rounded-xl border border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.15)]">
                           <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                           <div className="flex gap-2">
-                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                            {[['0.85', '느림'], ['1.1', '보통'], ['1.35', '빠름']].map(([val, label]) => (
                               <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
                                 className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                                 {label}
@@ -1590,7 +1590,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         <div className="shrink-0 p-3 rounded-xl border border-teal-500/40 shadow-[0_0_10px_rgba(20,184,166,0.15)]">
                           <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">말하기 속도</p>
                           <div className="flex gap-2">
-                            {[['0.7', '느림'], ['1.0', '보통'], ['1.3', '빠름']].map(([val, label]) => (
+                            {[['0.85', '느림'], ['1.1', '보통'], ['1.35', '빠름']].map(([val, label]) => (
                               <button key={val} type="button" onClick={() => selectVoiceSpeed(val)}
                                 className={`flex-1 py-2 rounded-xl text-sm font-bold border ${voiceSpeed === val ? 'bg-teal-600/20 text-teal-200 border-teal-500/60 shadow-[0_0_10px_rgba(20,184,166,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-teal-500/30'}`}>
                                 {label}
