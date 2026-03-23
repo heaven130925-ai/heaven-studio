@@ -709,16 +709,46 @@ const generateScriptSingle = async (
       analysis: scene.analysis || {}
     }));
 
-    // ── 씬 수 엄격 고정: 초과 시 자름, 부족 시 채움 ──
-    if (maxScenes) {
+    // ── 씬 수 엄격 고정: 초과 시 균등 병합, 부족 시 긴 씬 분할 ──
+    if (maxScenes && mapped.length !== maxScenes) {
       if (mapped.length > maxScenes) {
-        console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 자름`);
-        mapped = mapped.slice(0, maxScenes);
-      } else if (mapped.length < maxScenes) {
-        console.log(`${chunkLabel}[Script] 씬 수 부족(${mapped.length}개) → ${maxScenes}개로 채움`);
-        const last = mapped[mapped.length - 1] || { narration: '', visualPrompt: '', analysis: {} };
+        console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 균등 병합`);
+        const merged: typeof mapped = [];
+        const ratio = mapped.length / maxScenes;
+        for (let i = 0; i < maxScenes; i++) {
+          const start = Math.round(i * ratio);
+          const end = Math.round((i + 1) * ratio);
+          const group = mapped.slice(start, end);
+          merged.push({
+            sceneNumber: i + 1,
+            narration: group.map(s => s.narration).filter(Boolean).join(' '),
+            visualPrompt: group[0]?.visualPrompt || '',
+            analysis: group[0]?.analysis || {},
+          });
+        }
+        mapped = merged;
+      } else {
+        console.log(`${chunkLabel}[Script] 씬 수 부족(${mapped.length}개) → ${maxScenes}개로 분할`);
         while (mapped.length < maxScenes) {
-          mapped.push({ ...last, sceneNumber: mapped.length + 1, narration: '' });
+          let maxLen = 0, maxIdx = 0;
+          for (let i = 0; i < mapped.length; i++) {
+            if (mapped[i].narration.length > maxLen) { maxLen = mapped[i].narration.length; maxIdx = i; }
+          }
+          if (maxLen < 10) break;
+          const scene = mapped[maxIdx];
+          const narr = scene.narration;
+          const mid = Math.floor(narr.length / 2);
+          const before = narr.slice(0, mid);
+          const lastPunct = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('。'));
+          const splitPoint = lastPunct > 0 ? lastPunct + 1 : mid;
+          const first = narr.slice(0, splitPoint).trim();
+          const second = narr.slice(splitPoint).trim();
+          if (!first || !second) break;
+          mapped.splice(maxIdx, 1,
+            { ...scene, narration: first },
+            { ...scene, narration: second }
+          );
+          mapped = mapped.map((s, i) => ({ ...s, sceneNumber: i + 1 }));
         }
       }
     }
@@ -2117,10 +2147,9 @@ ${charDesc}
         },
       },
     });
-    const raw = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    if (!cleaned) return null;
-    const parsed = JSON.parse(cleaned);
+    const raw = response.text || '';
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : null;
   } catch (e) {
     console.error('[ThumbnailStrategy] 분석 실패:', e);
