@@ -335,6 +335,22 @@ export const findYouTubeTopics = async (
       return null;
     }
 
+    // watch?v=videoId 형식 — 영상 URL에서 채널 ID 추출
+    const videoMatch = raw.match(/(?:v=|youtu\.be\/)([\w\-]{11})/);
+    if (videoMatch) {
+      const videoId = videoMatch[1];
+      console.log('[YouTube] 영상 URL 감지, 채널 추출 중:', videoId);
+      try {
+        const qs = new URLSearchParams({ part: 'snippet', id: videoId, key: apiKey });
+        const res = await fetch(`${BASE}/videos?${qs}`);
+        const data = await res.json();
+        const channelId = data.items?.[0]?.snippet?.channelId;
+        console.log('[YouTube] 영상→채널:', channelId);
+        if (channelId) return channelId;
+      } catch (e) { console.warn('[YouTube] 영상→채널 변환 오류:', e); }
+      return null;
+    }
+
     console.warn('[YouTube] URL 형식 인식 불가:', raw);
     return null;
   };
