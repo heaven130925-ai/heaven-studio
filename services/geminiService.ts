@@ -709,10 +709,18 @@ const generateScriptSingle = async (
       analysis: scene.analysis || {}
     }));
 
-    // ── 씬 수 엄격 적용: 초과 시 자름 ──
-    if (maxScenes && mapped.length > maxScenes) {
-      console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 자름`);
-      mapped = mapped.slice(0, maxScenes);
+    // ── 씬 수 엄격 고정: 초과 시 자름, 부족 시 채움 ──
+    if (maxScenes) {
+      if (mapped.length > maxScenes) {
+        console.log(`${chunkLabel}[Script] 씬 수 초과(${mapped.length}개) → ${maxScenes}개로 자름`);
+        mapped = mapped.slice(0, maxScenes);
+      } else if (mapped.length < maxScenes) {
+        console.log(`${chunkLabel}[Script] 씬 수 부족(${mapped.length}개) → ${maxScenes}개로 채움`);
+        const last = mapped[mapped.length - 1] || { narration: '', visualPrompt: '', analysis: {} };
+        while (mapped.length < maxScenes) {
+          mapped.push({ ...last, sceneNumber: mapped.length + 1, narration: '' });
+        }
+      }
     }
 
     return mapped;
@@ -2109,8 +2117,11 @@ ${charDesc}
         },
       },
     });
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return JSON.parse(text);
+    const raw = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    if (!cleaned) return null;
+    const parsed = JSON.parse(cleaned);
+    return Array.isArray(parsed) ? parsed : null;
   } catch (e) {
     console.error('[ThumbnailStrategy] 분석 실패:', e);
     return null;

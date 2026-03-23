@@ -224,6 +224,7 @@ export const ELEVENLABS_DEFAULT_VOICES = [
   { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male' as const, accent: 'American', description: '⭐ 가장 안정적, 뉴스/다큐 스타일, 긴 텍스트 OK' },
   { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', gender: 'male' as const, accent: 'American', description: '젊고 역동적, 유튜브/엔터테인먼트에 적합' },
   { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', gender: 'male' as const, accent: 'American', description: '차분하고 신뢰감, 교육/설명 콘텐츠에 적합' },
+  { id: 'nPczCjzI2devNBz1zQrb', name: 'Breu', gender: 'male' as const, accent: 'American', description: '중후하고 딥한 남성, 나레이션/다큐에 적합' },
 ] as const;
 
 // 기본 음성 타입 정의
