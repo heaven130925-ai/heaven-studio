@@ -1505,25 +1505,38 @@ function getTtsConfig() {
 }
 
 /**
- * TTS 단일 청크 생성 (내부용)
+ * TTS 단일 청크 생성 (내부용) — 모델 폴백 포함
  */
 async function generateTtsChunk(text: string): Promise<string> {
   const { voiceName, systemInstruction } = getTtsConfig();
-  return retryGeminiRequest("TTS Generation", async () => {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: { parts: [{ text }] },
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
-        systemInstruction,
-      }
-    });
-    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!data) throw new Error('TTS returned empty audio — retrying');
-    return data;
-  });
+  const models = [
+    'gemini-2.5-flash-preview-tts',
+    'gemini-2.5-flash-tts',
+  ];
+  let lastError: any;
+  for (const model of models) {
+    try {
+      return await retryGeminiRequest("TTS Generation", async () => {
+        const ai = getAI();
+        const response = await ai.models.generateContent({
+          model,
+          contents: { parts: [{ text }] },
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+            systemInstruction,
+          }
+        });
+        const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!data) throw new Error('TTS returned empty audio — retrying');
+        return data;
+      });
+    } catch (e: any) {
+      lastError = e;
+      console.warn(`[TTS] ${model} 실패:`, e.message);
+    }
+  }
+  throw lastError ?? new Error('모든 Gemini TTS 모델 실패');
 }
 
 /**

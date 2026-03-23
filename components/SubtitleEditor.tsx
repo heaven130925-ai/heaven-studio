@@ -300,6 +300,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
@@ -590,7 +591,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (!audioData) {
       if (!onGenerateAudio) return;
       setIsGeneratingAudio(true);
-      try { audioData = await onGenerateAudio(selectedIdx); } finally { setIsGeneratingAudio(false); }
+      setAudioError(null);
+      try {
+        audioData = await onGenerateAudio(selectedIdx);
+        if (!audioData) setAudioError('음성 생성 실패 — 브라우저 콘솔에서 오류를 확인하세요');
+      } catch (e: any) {
+        setAudioError(`TTS 오류: ${e?.message || e}`);
+      } finally {
+        setIsGeneratingAudio(false);
+      }
       if (!audioData) return;
       // preload effect가 이미 element를 만들었으면 재사용, 없으면 새로 생성
       if (!audioRef.current) {
@@ -900,6 +909,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               : '—'}
           </span>
         </div>
+
+        {/* TTS 에러 메시지 */}
+        {audioError && (
+          <div className="mx-4 mb-1 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-[11px] flex items-start gap-2">
+            <span className="shrink-0">⚠️</span>
+            <span>{audioError}</span>
+            <button onClick={() => setAudioError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-200">✕</button>
+          </div>
+        )}
 
         {/* 이미지 편집 명령 */}
         {onImageEditCommand && (

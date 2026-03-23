@@ -928,18 +928,13 @@ const App: React.FC = () => {
       console.warn(`[TTS] ElevenLabs 실패, Gemini TTS로 폴백:`, e.message);
     }
 
-    // 2) Gemini TTS 폴백
-    try {
-      const audioData = await generateAudioForScene(scene.narration);
-      if (audioData && assetsRef.current[idx]) {
-        assetsRef.current[idx] = { ...assetsRef.current[idx], audioData, audioDuration: null };
-        setGeneratedData([...assetsRef.current]);
-      }
-      return audioData;
-    } catch (e: any) {
-      console.error(`[TTS] 씬 ${idx + 1} 음성 생성 실패:`, e.message);
-      return null;
+    // 2) Gemini TTS 폴백 — 에러는 SubtitleEditor에서 표시하기 위해 throw
+    const audioData = await generateAudioForScene(scene.narration);
+    if (audioData && assetsRef.current[idx]) {
+      assetsRef.current[idx] = { ...assetsRef.current[idx], audioData, audioDuration: null };
+      setGeneratedData([...assetsRef.current]);
     }
+    return audioData;
   }, []); // eslint-disable-line
 
   // 씬별 줌 오버라이드 핸들러
