@@ -609,6 +609,26 @@ ${narrations.map((n, i) => `[${i + 1}] ${n}`).join('\n')}
         thinkingConfig: { thinkingBudget: 8192 },
         responseMimeType: 'application/json',
         maxOutputTokens: Math.min(65536, narrations.length * 600),
+        responseSchema: {
+          type: 'array' as any,
+          items: {
+            type: 'object' as any,
+            properties: {
+              sceneNumber:          { type: 'number' as any },
+              narration:            { type: 'string' as any },
+              visual_keywords:      { type: 'string' as any },
+              image_prompt_english: { type: 'string' as any },
+              analysis: {
+                type: 'object' as any,
+                properties: {
+                  sentiment:        { type: 'string' as any },
+                  composition_type: { type: 'string' as any },
+                },
+              },
+            },
+            required: ['sceneNumber', 'narration', 'image_prompt_english', 'analysis'],
+          },
+        },
       },
     });
     responseText = response.text || '[]';
@@ -728,6 +748,25 @@ const generateScriptSingle = async (
           responseMimeType: "application/json",
           systemInstruction: baseInstruction,
           maxOutputTokens: maxOutputTokens,
+          responseSchema: {
+            type: 'array' as any,
+            items: {
+              type: 'object' as any,
+              properties: {
+                sceneNumber:          { type: 'number' as any },
+                narration:            { type: 'string' as any },
+                image_prompt_english: { type: 'string' as any },
+                analysis: {
+                  type: 'object' as any,
+                  properties: {
+                    sentiment:        { type: 'string' as any },
+                    composition_type: { type: 'string' as any },
+                  },
+                },
+              },
+              required: ['sceneNumber', 'narration', 'image_prompt_english', 'analysis'],
+            },
+          },
         },
       });
       const finishReason = response.candidates?.[0]?.finishReason;
@@ -846,7 +885,21 @@ ${scriptSummary}
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
-          config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(65536, scenes.length * 200) },
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: Math.min(65536, scenes.length * 200),
+            responseSchema: {
+              type: 'array' as any,
+              items: {
+                type: 'object' as any,
+                properties: {
+                  sceneNumber:          { type: 'number' as any },
+                  image_prompt_english: { type: 'string' as any },
+                },
+                required: ['sceneNumber', 'image_prompt_english'],
+              },
+            },
+          },
         });
         responseText = response.text || '[]';
       }
@@ -854,7 +907,21 @@ ${scriptSummary}
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
-        config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(65536, scenes.length * 200) },
+        config: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: Math.min(65536, scenes.length * 200),
+          responseSchema: {
+            type: 'array' as any,
+            items: {
+              type: 'object' as any,
+              properties: {
+                sceneNumber:          { type: 'number' as any },
+                image_prompt_english: { type: 'string' as any },
+              },
+              required: ['sceneNumber', 'image_prompt_english'],
+            },
+          },
+        },
       });
       responseText = response.text || '[]';
       console.log('[Prompts] Gemini로 이미지 프롬프트 재작성 완료');
