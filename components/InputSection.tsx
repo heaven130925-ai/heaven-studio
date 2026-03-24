@@ -98,8 +98,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [gcloudTone, setGcloudTone] = useState<string>(getVoiceSetting('heaven_gcloud_tone_id') || '');
   const [gcloudMood, setGcloudMood] = useState<string>(getVoiceSetting('heaven_gcloud_mood_id') || '');
   const [voiceStyle, setVoiceStyle] = useState<number>(parseInt(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0'));
-  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud' | 'azure'>(
-    (getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure') || 'elevenlabs'
+  const [voiceSubTab, setVoiceSubTab] = useState<'elevenlabs' | 'google' | 'gcloud' | 'azure' | 'none'>(
+    (getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) as 'elevenlabs' | 'google' | 'gcloud' | 'azure' | 'none') || 'elevenlabs'
   );
   const [gcloudApiKey, setGcloudApiKey] = useState(localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '');
   const [gcloudVoice, setGcloudVoice] = useState(getVoiceSetting(CONFIG.STORAGE_KEYS.GCLOUD_TTS_VOICE) || 'ko-KR-Neural2-A');
@@ -1101,7 +1101,12 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                 {activePanel === 'voice' && (
                   <div className="flex-1 flex flex-col min-h-0 gap-2">
                     {/* TTS 제공자 탭 */}
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex gap-2 shrink-0 flex-wrap">
+                      <button type="button" onClick={() => { setVoiceSubTab('none'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'none'); }}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'none' ? 'bg-slate-600/40 text-slate-200 border-slate-400/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
+                        음성 없음
+                        <span className={`w-1.5 h-1.5 rounded-full ${voiceSubTab === 'none' ? 'bg-slate-400' : 'bg-slate-600'}`}/>
+                      </button>
                       <button type="button" onClick={() => { setVoiceSubTab('google'); setVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER, 'google'); }}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border ${voiceSubTab === 'google' ? 'bg-teal-600/20 text-teal-200 border-teal-500/60' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-white/10'}`}>
                         Gemini TTS
@@ -1123,6 +1128,11 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         <span className={`w-1.5 h-1.5 rounded-full ${elApiKey ? 'bg-emerald-400' : 'bg-amber-400'}`}/>
                       </button>
                     </div>
+                    {voiceSubTab === 'none' && (
+                      <div className="flex-1 flex items-center justify-center">
+                        <p className="text-slate-500 text-sm text-center">음성 생성 없이 이미지만 생성합니다.</p>
+                      </div>
+                    )}
 
                     {voiceSubTab === 'elevenlabs' && (
                       <div className="flex-1 flex flex-col min-h-0 gap-2">

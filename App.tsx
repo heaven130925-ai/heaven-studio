@@ -812,8 +812,9 @@ const App: React.FC = () => {
         }
       };
 
-      setProgressMessage(imageOnly ? '이미지 생성 중...' : audioOnly ? '오디오 생성 중...' : '시각 에셋 및 오디오 합성 중...');
-      if (imageOnly) await runImages();
+      const noAudio = (getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs') === 'none';
+      setProgressMessage(imageOnly ? '이미지 생성 중...' : audioOnly ? '오디오 생성 중...' : noAudio ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
+      if (imageOnly || noAudio) await runImages();
       else if (audioOnly) await runAudio();
       else await Promise.all([runAudio(), runImages()]);
 
