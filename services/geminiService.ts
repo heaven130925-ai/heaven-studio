@@ -184,6 +184,29 @@ const cleanJsonResponse = (text: string): string => {
     }
   }
 
+  // 마지막 검증: JSON이 유효한지 확인, 실패 시 문자열 내 제어문자 수리
+  try {
+    JSON.parse(cleaned);
+  } catch {
+    // 문자열 값 내부의 이스케이프되지 않은 개행/탭 등 제어문자 수리
+    let repaired = '';
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < cleaned.length; i++) {
+      const c = cleaned[i];
+      if (esc) { repaired += c; esc = false; continue; }
+      if (c === '\\') { repaired += c; esc = true; continue; }
+      if (c === '"') { inStr = !inStr; repaired += c; continue; }
+      if (inStr) {
+        if (c === '\n') { repaired += '\\n'; continue; }
+        if (c === '\r') { repaired += '\\r'; continue; }
+        if (c === '\t') { repaired += '\\t'; continue; }
+      }
+      repaired += c;
+    }
+    cleaned = repaired;
+  }
+
   return cleaned.trim();
 };
 

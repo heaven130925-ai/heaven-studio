@@ -395,8 +395,8 @@ async function generateVideoFFmpeg(
   onProgress: (msg: string) => void,
   abortRef?: { current: boolean }
 ): Promise<VideoGenerationResult | null> {
-  const FPS = 15;
-  const W = 1280, H = 720;
+  const FPS = 30;
+  const W = 1920, H = 1080;
 
   onProgress('FFmpeg 초기화 중...');
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
@@ -563,16 +563,16 @@ export const generateVideo = async (
       console.warn(`[Video] 씬 ${i + 1}: ${e.message}, 플레이스홀더 사용`);
       // 플레이스홀더 이미지 생성
       const placeholderCanvas = document.createElement('canvas');
-      placeholderCanvas.width = 1280;
-      placeholderCanvas.height = 720;
+      placeholderCanvas.width = 1920;
+      placeholderCanvas.height = 1080;
       const pCtx = placeholderCanvas.getContext('2d');
       if (pCtx) {
         pCtx.fillStyle = '#1a1a2e';
-        pCtx.fillRect(0, 0, 1280, 720);
+        pCtx.fillRect(0, 0, 1920, 1080);
         pCtx.fillStyle = '#fff';
         pCtx.font = 'bold 48px sans-serif';
         pCtx.textAlign = 'center';
-        pCtx.fillText(`씬 ${i + 1}`, 640, 360);
+        pCtx.fillText(`씬 ${i + 1}`, 960, 540);
       }
       img.src = placeholderCanvas.toDataURL();
     });
@@ -676,8 +676,8 @@ export const generateVideo = async (
 
   // 2. 캔버스 및 미디어 레코더 설정 (폴백)
   const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
+  canvas.width = 1920;
+  canvas.height = 1080;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error("캔버스 초기화 실패");
 

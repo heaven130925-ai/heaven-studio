@@ -462,6 +462,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   // Step 6 상태
   const [isGenerating, setIsGenerating] = useState(false);
   const [thumbnails, setThumbnails]     = useState<string[]>([]);       // 3개 썸네일
+  const [thumbnailMeta, setThumbnailMeta] = useState<{mainText: string, subText: string, isNanoBanana: boolean}[]>([]);
   const [selectedThumbIdx, setSelectedThumbIdx] = useState(0);          // 현재 선택 (편집용)
   const [editRequest, setEditRequest]   = useState('');
   const [isEditing, setIsEditing]       = useState(false);
@@ -581,13 +582,24 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const handleGenerate = async () => {
     setIsGenerating(true);
     setThumbnails([]);
+    setThumbnailMeta([]);
     setSelectedThumbIdx(0);
     setStep(6);
 
-    // 3가지 전략으로 각각 썸네일 생성
+    const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
+    const isNano = selectedModel.startsWith('gemini-3');
+
     const results = await Promise.all(strategies.map(s => runGenerate(s)));
-    const valid = results.filter(Boolean) as string[];
+    const valid: string[] = [];
+    const meta: {mainText: string, subText: string, isNanoBanana: boolean}[] = [];
+    results.forEach((src, i) => {
+      if (src) {
+        valid.push(src);
+        meta.push({ mainText: strategies[i]?.mainText || '', subText: strategies[i]?.subText || '', isNanoBanana: isNano });
+      }
+    });
     setThumbnails(valid);
+    setThumbnailMeta(meta);
     if (valid[0]) onImageGenerated?.(valid[0]);
     setIsGenerating(false);
   };
@@ -616,17 +628,43 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setIsEditing(false);
   };
 
-  const downloadThumb = (img: string, idx: number) => {
-    const a = document.createElement('a');
-    a.href = img;
-    a.download = `thumbnail_v${idx + 1}_${Date.now()}.jpg`;
-    a.click();
+  const downloadThumb = async (img: string, idx: number) => {
+    const meta = thumbnailMeta[idx];
+    let finalImg = img;
+
+    // 일반 Gemini(비-NanoBanana): 전략 텍스트를 캔버스 오버레이로 합성
+    if (meta && !meta.isNanoBanana && (meta.mainText || meta.subText)) {
+      finalImg = await applySegmentOverlay(img, {
+        mainSegments: meta.mainText ? [{ text: meta.mainText }] : [{ text: '' }],
+        subSegments:  meta.subText  ? [{ text: meta.subText  }] : [{ text: '' }],
+        fontStyle, mainColor, subColor, mainPos, subPos, mainSizePct, subSizePct,
+      }, thumbnailRatio);
+    }
+
+    try {
+      const res = await fetch(finalImg);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `thumbnail_v${idx + 1}_${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      const a = document.createElement('a');
+      a.href = finalImg;
+      a.download = `thumbnail_v${idx + 1}_${Date.now()}.jpg`;
+      a.click();
+    }
   };
 
   const reset = () => {
+    sessionStorage.removeItem('thumb_data');
     setStep(1); setTopic(propTopic || ''); setScriptContent('');
     setCharEnabled(true); setCharType('person'); setTargetAudience('');
-    setStrategies([]); setThumbnails([]); setSelectedThumbIdx(0);
+    setStrategies([]); setThumbnails([]); setThumbnailMeta([]); setSelectedThumbIdx(0);
     setEditRequest(''); setBorderStyle('none'); setShowChannelName(false);
     setUploadedBgImage(null); setFromExternal(false);
     setMainPos({ x: 50, y: 4 }); setSubPos({ x: 50, y: 17 });
@@ -643,6 +681,32 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [step]);
+
+  // sessionStorage 저장 (메인 이동 후 복원용)
+  useEffect(() => {
+    if (thumbnails.length > 0) {
+      try {
+        sessionStorage.setItem('thumb_data', JSON.stringify({ thumbnails, thumbnailMeta }));
+      } catch { /* 용량 초과 무시 */ }
+    }
+  }, [thumbnails, thumbnailMeta]);
+
+  // 마운트 시 이전 썸네일 복원
+  useEffect(() => {
+    if (selectedImage) return; // 외부 이미지 있으면 스킵
+    try {
+      const saved = sessionStorage.getItem('thumb_data');
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.thumbnails?.length) {
+          setThumbnails(data.thumbnails);
+          setThumbnailMeta(data.thumbnailMeta || []);
+          setStep(6);
+        }
+      }
+    } catch { /* 무시 */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const BackButton = ({ toStep }: { toStep: Step }) => (
     <button onClick={() => setStep(toStep)}
@@ -986,7 +1050,12 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                 </div>
 
                 {/* 전체 다운로드 */}
-                <button onClick={() => thumbnails.forEach((img, i) => downloadThumb(img, i))}
+                <button onClick={async () => {
+                  for (let i = 0; i < thumbnails.length; i++) {
+                    await downloadThumb(thumbnails[i], i);
+                    if (i < thumbnails.length - 1) await new Promise(r => setTimeout(r, 700));
+                  }
+                }}
                   className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-sm transition-colors flex items-center justify-center gap-2">
                   ⬇️ 전체 다운로드 ({thumbnails.length}개)
                 </button>
