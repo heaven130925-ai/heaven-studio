@@ -22,6 +22,7 @@ interface Props {
   onGenerateAudio?: (index: number) => Promise<string | null>;
   onDeleteScene?: (index: number) => void;
   onSceneZoomChange?: (index: number, zoom: ZoomEffect | null) => void;
+  aspectRatio?: '16:9' | '9:16';
 }
 
 // 자막 텍스트만 그리기 (배경 이미지 없이 — 줌 애니메이션과 합성용)
@@ -295,7 +296,7 @@ const ZoomPanel: React.FC<{
   );
 };
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange }) => {
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange, aspectRatio = '16:9' }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
   const [isRegenLoading, setIsRegenLoading] = useState(false);
@@ -824,12 +825,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
           className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={{ aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
+          style={aspectRatio === '9:16'
+            ? { aspectRatio: '9/16', width: '40%', maxWidth: '40%', margin: '0 auto', flexShrink: 0 }
+            : { aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
           <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
-            <canvas ref={canvasRef} width={1280} height={720} className="w-full h-full" />
+            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="w-full h-full" />
           </div>
 
           {/* 중심 가이드라인 (드래그 중) */}

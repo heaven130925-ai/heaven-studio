@@ -11,7 +11,7 @@ import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
 import { generateVideo, VideoGenerationResult } from './services/videoService';
 import { downloadSrtFromRecorded } from './services/srtService';
-import { generateVideoFromImage, generateTextToVideo, getFalApiKey } from './services/falService';
+import { generateVideoFromImage, getFalApiKey } from './services/falService';
 import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage, saveDraft, loadDraft, clearDraft } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
@@ -58,7 +58,9 @@ const App: React.FC = () => {
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
   const [progressMessage, setProgressMessage] = useState('');
   const [inputActiveTab, setInputActiveTab] = useState<'auto' | 'manual'>('auto');
-  const [inputManualScript, setInputManualScript] = useState<string>('');
+  const [inputManualScript, setInputManualScript] = useState<string>(
+    () => sessionStorage.getItem('lastManualScript') || ''
+  );
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
   const currentProjectIdRef = useRef<string | null>(null); // 현재 열린 프로젝트 ID (자동저장용)
   // 참조 이미지 상태 (강도 포함)
@@ -125,6 +127,7 @@ const App: React.FC = () => {
   const characterProfilesRef = useRef<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [charactersList, setCharactersList] = useState<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [showCharacterSetup, setShowCharacterSetup] = useState(false);
+  const [inputResetKey, setInputResetKey] = useState(0);
   const [isAnalyzingCharacters, setIsAnalyzingCharacters] = useState(false);
   const pendingInitialAssetsRef = useRef<GeneratedAsset[]>([]);
   const pendingRefImgsRef = useRef<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
@@ -425,6 +428,7 @@ const App: React.FC = () => {
     setStep(GenerationStep.IDLE);
     setProgressMessage('');
     resetCost();
+    setInputResetKey(k => k + 1);
   };
 
 
@@ -1025,35 +1029,6 @@ const App: React.FC = () => {
     }
   }, [animatingIndices]);
 
-  // Kling 텍스트→영상 핸들러
-  const handleGenerateTextToVideo = useCallback(async (idx: number, prompt: string) => {
-    const falKey = getFalApiKey();
-    if (!falKey) {
-      alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
-      return;
-    }
-    if (animatingIndices.has(idx)) return;
-
-    try {
-      setAnimatingIndices(prev => new Set(prev).add(idx));
-      setProgressMessage(`씬 ${idx + 1} Kling 텍스트→영상 생성 중...`);
-
-      const videoUrl = await generateTextToVideo(prompt, falKey);
-
-      if (videoUrl) {
-        updateAssetAt(idx, { videoData: videoUrl, videoDuration: CONFIG.ANIMATION.VIDEO_DURATION });
-        addCost('video', PRICING.VIDEO.perVideo, 1);
-        setProgressMessage(`씬 ${idx + 1} 영상 생성 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
-      } else {
-        setProgressMessage(`씬 ${idx + 1} 영상 생성 실패`);
-      }
-    } catch (e: any) {
-      console.error('Kling 텍스트→영상 실패:', e);
-      setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
-    } finally {
-      setAnimatingIndices(prev => { const next = new Set<number>(prev); next.delete(idx); return next; });
-    }
-  }, [animatingIndices]);
 
   const handleSelectThumbnail = useCallback((imageBase64: string) => {
     // SubtitleEditor / ResultTable에서 씬 이미지 선택 → 스토리보드 썸네일 탭에만 전달 (메인 썸네일과 연동 해제)
@@ -1319,13 +1294,14 @@ const App: React.FC = () => {
           activeTab={inputActiveTab}
           onTabChange={setInputActiveTab}
           manualScript={inputManualScript}
-          onManualScriptChange={setInputManualScript}
+          onManualScriptChange={(v) => { setInputManualScript(v); sessionStorage.setItem('lastManualScript', v); }}
           thumbnailBaseImage={thumbnailBaseImage}
           onThumbnailBaseImageChange={setThumbnailBaseImage}
           onAspectRatioChange={setAspectRatio}
           thumbnailScenes={[]}
           thumbnailTopic={currentTopic}
           onOpenGallery={() => setViewMode('gallery')}
+          resetKey={inputResetKey}
         />
 
         
@@ -1345,6 +1321,11 @@ const App: React.FC = () => {
               pendingCharAnalysisCallRef.current = null;
               call();
             }
+          }}
+          onCancel={() => {
+            // 순수 취소: 생성 시작하지 않고 메인으로 돌아감
+            setShowCharacterSetup(false);
+            pendingCharAnalysisCallRef.current = null;
           }}
         />
       )}
@@ -1432,6 +1413,7 @@ const App: React.FC = () => {
                 onGenerateAudio={handleGenerateSceneAudio}
                 onDeleteScene={handleDeleteScene}
                 onSceneZoomChange={handleSceneZoomChange}
+                aspectRatio={aspectRatio}
                 onImageEditCommand={async (idx, command) => {
                   const current = assetsRef.current[idx];
                   if (!current) return;
@@ -1467,7 +1449,6 @@ const App: React.FC = () => {
                   isExporting={isVideoGenerating}
                   animatingIndices={animatingIndices}
                   onGenerateAnimation={handleGenerateAnimation}
-                  onGenerateTextToVideo={handleGenerateTextToVideo}
                   onSelectThumbnail={handleSelectThumbnail}
                   aspectRatio={aspectRatio}
                 />

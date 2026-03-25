@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ThumbnailEditor from './ThumbnailEditor';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
-import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
+import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, VIDEO_MODELS, VideoModelId, DEFAULT_VIDEO_MODEL, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
 import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics } from '../services/geminiService';
 import { previewGCloudTTS } from '../services/googleCloudTTSService';
@@ -37,9 +37,10 @@ interface InputSectionProps {
   thumbnailScenes?: import('../types').GeneratedAsset[];
   thumbnailTopic?: string;
   onOpenGallery?: () => void;
+  resetKey?: number;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, isAnalyzingCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, isAnalyzingCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery, resetKey }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
 
@@ -58,8 +59,19 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [styleStrength, setStyleStrength] = useState(DEFAULT_REFERENCE_IMAGES.styleStrength);
   const [characterDescription, setCharacterDescription] = useState<string>(''); // Gemini Vision 자동 추출
 
+  // 리셋 시 캐릭터 레퍼런스 이미지 초기화
+  useEffect(() => {
+    if (resetKey === undefined || resetKey === 0) return;
+    setCharacterRefImages([]);
+    setStyleRefImages([]);
+    setCharacterDescription('');
+  }, [resetKey]);
+
   // 이미지 설정
   const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
+  const [videoModelId, setVideoModelId] = useState<VideoModelId>(
+    () => (localStorage.getItem('heaven_video_model') as VideoModelId) || DEFAULT_VIDEO_MODEL
+  );
   const [imageTextMode, setImageTextMode] = useState<string>('none');
 
   // 포맷
@@ -506,7 +518,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
           {/* 카테고리 버튼들 */}
           <div className="flex flex-col gap-1 p-2">
             {[
-              { id: 'image', label: '이미지 설정', icon: <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={1.5}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 15l-5-5L5 21"/></svg> },
+              { id: 'image', label: '이미지/영상 설정', icon: <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={1.5}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 15l-5-5L5 21"/></svg> },
               { id: 'voice', label: '음성 설정', icon: <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M9 11V7a3 3 0 116 0v4a3 3 0 11-6 0z"/></svg> },
               { id: 'thumbnail', label: '썸네일 생성', icon: <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg> },
               { id: 'project', label: '저장된 프로젝트', icon: <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg> },
@@ -783,9 +795,20 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                       placeholder={"여기에 대본을 붙여넣거나 직접 작성하세요.\n\n예)\n나레이션 1: 옛날 옛적...\n나레이션 2: ..."}
                       className="flex-1 bg-transparent text-white p-6 focus:ring-0 focus:outline-none placeholder-white/20 resize-none text-base" />
                     <div className="px-6 pb-3 flex items-center justify-between border-t border-white/[0.07] pt-2">
-                      <span className={`text-sm font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-white/25'}`}>
-                        {manualScript.length.toLocaleString()}자
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-sm font-mono ${manualScript.length > 10000 ? 'text-amber-400' : manualScript.length > 3000 ? 'text-blue-400' : 'text-white/25'}`}>
+                          {manualScript.length.toLocaleString()}자
+                        </span>
+                        {manualScript.trim().length > 0 && (
+                          <button
+                            onClick={() => onManualScriptChange('')}
+                            disabled={isProcessing}
+                            className="text-xs text-red-400/70 hover:text-red-400 font-bold transition-colors disabled:opacity-30"
+                          >
+                            대본 삭제
+                          </button>
+                        )}
+                      </div>
                       {/* 롱폼(16:9)에서만 예상 시간 표시 */}
                       {aspectRatio === '16:9' && manualScript.trim().length > 0 && (() => {
                         const totalSec = Math.round(manualScript.trim().length / 7.2); // 한국어 나레이션 약 432자/분 → 7.2자/초
@@ -944,7 +967,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
               <div className="flex items-center justify-between px-5 py-3 border-b border-white/[0.07] bg-black/30">
                 <h3 className="font-black text-white text-sm tracking-wide uppercase">
                   {activePanel === 'visual' && '비주얼 스타일'}
-                  {activePanel === 'image' && '이미지 설정'}
+                  {activePanel === 'image' && '이미지/영상 설정'}
                   {activePanel === 'voice' && '음성 설정'}
                   {activePanel === 'thumbnail' && '썸네일 생성'}
                   {activePanel === 'project' && '프로젝트'}
@@ -995,36 +1018,46 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                 {/* 🖼️ 이미지 설정 패널 */}
                 {activePanel === 'image' && (
                   <div className="space-y-5">
-                    {/* 이미지 모델 */}
-                    <div>
-                      <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 모델</p>
-                      <div className="space-y-1.5">
-                        {IMAGE_MODELS.map(m => (
-                          <button key={m.id} type="button" onClick={() => selectImageModel(m.id)}
-                            className={`w-full p-3 rounded-xl border text-left transition-all ${imageModelId === m.id ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold text-sm">{m.name}</span>
-                              <div className="text-right">
-                                <div className="text-green-400 text-xs font-bold">${m.pricePerImage.toFixed(3)}/장</div>
-                                <div className="text-slate-500 text-[10px]">≈ {Math.round(m.pricePerImage * 1450)}원</div>
+                    {/* 이미지 모델 + 영상 모델 — 좌우 반반 */}
+                    <div className="flex gap-3">
+                      {/* 왼쪽: 이미지 모델 */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 모델</p>
+                        <div className="space-y-1.5">
+                          {IMAGE_MODELS.map(m => (
+                            <button key={m.id} type="button" onClick={() => selectImageModel(m.id)}
+                              className={`w-full p-2.5 rounded-xl border text-left transition-all ${imageModelId === m.id ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+                              <div className="flex justify-between items-center gap-1">
+                                <span className="font-bold text-xs leading-tight">{m.name}</span>
+                                <div className="text-right shrink-0">
+                                  <div className="text-green-400 text-[10px] font-bold">${m.pricePerImage.toFixed(3)}/장</div>
+                                  <div className="text-slate-500 text-[9px]">≈ {Math.round(m.pricePerImage * 1450)}원</div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-xs opacity-60 mt-0.5">{m.description}</div>
-                          </button>
-                        ))}
-                        {/* 영상 모델 정보 */}
-                        <div className="mt-3 pt-3 border-t border-slate-700">
-                          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">영상 변환 모델</p>
-                          <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700">
-                            <div className="flex justify-between items-center">
-                              <span className="font-bold text-sm text-slate-300">PixVerse v5.5</span>
-                              <div className="text-right">
-                                <div className="text-green-400 text-xs font-bold">$0.150/영상</div>
-                                <div className="text-slate-500 text-[10px]">≈ 218원 (5초)</div>
+                              <div className="text-[10px] opacity-50 mt-0.5 leading-tight">{m.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 오른쪽: 영상 모델 */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">영상 모델</p>
+                        <div className="space-y-1.5">
+                          {VIDEO_MODELS.map(m => (
+                            <button key={m.id} type="button"
+                              onClick={() => { setVideoModelId(m.id); localStorage.setItem('heaven_video_model', m.id); }}
+                              className={`w-full p-2.5 rounded-xl border text-left transition-all ${videoModelId === m.id ? 'bg-orange-600/20 border-orange-500 text-white' : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'}`}>
+                              <div className="flex justify-between items-center gap-1">
+                                <span className="font-bold text-xs leading-tight">{m.name}</span>
+                                <div className="text-right shrink-0">
+                                  <div className="text-orange-400 text-[10px] font-bold">{m.priceLabel}</div>
+                                  <div className="text-slate-500 text-[9px]">{m.priceKRW}</div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="text-xs text-slate-600 mt-0.5">fal.ai · 이미지→영상 변환</div>
-                          </div>
+                              <div className="text-[10px] opacity-50 mt-0.5 leading-tight">{m.description}</div>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     </div>

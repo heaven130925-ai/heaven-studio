@@ -7,9 +7,10 @@ interface CharacterSetupProps {
   characters: CharacterInfo[];
   onDone: (characters: CharacterInfo[]) => void;
   onSkip: () => void;
+  onCancel?: () => void;
 }
 
-const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onSkip }) => {
+const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onSkip, onCancel }) => {
   const [chars, setChars] = useState<CharacterInfo[]>(characters);
 
   // 부모에서 캐릭터 추출 완료 시 새 캐릭터만 추가 (기존 편집 내용 유지)
@@ -81,7 +82,7 @@ const CharacterSetup: React.FC<CharacterSetupProps> = ({ characters, onDone, onS
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={onSkip}
+            onClick={onCancel ?? onSkip}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-sm font-bold transition-all border border-slate-600/50"
           >
             ← 메인으로

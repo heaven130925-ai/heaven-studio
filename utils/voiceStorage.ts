@@ -51,9 +51,10 @@ export function getVoiceSetting(key: string): string | null {
     : localStorage.getItem(key);
 }
 
-/** 음성 설정 쓰기: 음성 키는 sessionStorage만 업데이트 */
+/** 음성 설정 쓰기: 음성 키는 localStorage + sessionStorage 모두 저장 (영구 유지) */
 export function setVoiceSetting(key: string, value: string): void {
   if (VOICE_KEYS.has(key)) {
+    localStorage.setItem(key, value);
     sessionStorage.setItem(key, value);
   } else {
     localStorage.setItem(key, value);

@@ -343,7 +343,7 @@ export interface VideoGenerationResult {
 // ─── FFmpeg 헬퍼 ────────────────────────────────────────────────────────────
 
 /** Canvas → JPEG Uint8Array (동기, toDataURL 기반) */
-function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.85): Uint8Array {
+function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.95): Uint8Array {
   const b64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -480,10 +480,10 @@ async function generateVideoFFmpeg(
   onProgress('FFmpeg 인코딩 중: 75%');
   const ffArgs = hasAudio
     ? ['-r', String(FPS), '-i', 'f%06d.jpg', '-i', 'audio.wav',
-       '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
+       '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
        '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', 'output.mp4']
     : ['-r', String(FPS), '-i', 'f%06d.jpg',
-       '-c:v', 'libx264', '-preset', 'fast', '-crf', '22', '-pix_fmt', 'yuv420p',
+       '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
        '-movflags', '+faststart', 'output.mp4'];
 
   await ffmpeg.exec(ffArgs);

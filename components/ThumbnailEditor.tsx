@@ -943,8 +943,18 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
                     </div>
                     <p className="text-xs font-bold text-white leading-snug">{s.title}</p>
                     <div className="flex gap-2 text-[10px] text-slate-400">
-                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg">{s.mainText}</span>
-                      <span className="bg-slate-800 px-2 py-0.5 rounded-lg">{s.subText}</span>
+                      <input
+                        value={s.mainText}
+                        onChange={e => setStrategies(prev => prev.map((x, j) => j === i ? { ...x, mainText: e.target.value } : x))}
+                        placeholder="메인 텍스트"
+                        className="flex-1 bg-slate-800 px-2 py-0.5 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0"
+                      />
+                      <input
+                        value={s.subText}
+                        onChange={e => setStrategies(prev => prev.map((x, j) => j === i ? { ...x, subText: e.target.value } : x))}
+                        placeholder="서브 텍스트"
+                        className="flex-1 bg-slate-800 px-2 py-0.5 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-blue-500 min-w-0"
+                      />
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] text-slate-500 flex-1 line-clamp-1">{s.tags}</p>

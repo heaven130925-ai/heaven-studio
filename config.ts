@@ -71,25 +71,46 @@ export const IMAGE_MODELS = [
     description: '참조이미지 지원, 화풍 일관성',
     speed: '보통'
   },
-  {
-    id: 'veo-3.1-generate-preview',
-    name: 'Veo 3.1 Fast 영상',
-    provider: 'Google',
-    pricePerImage: 0,
-    description: '실사 동영상 생성 (구독 20크레딧/영상, 2~5분 소요)',
-    speed: '느림'
-  },
-  {
-    id: 'veo-2.0-generate-001',
-    name: 'Veo 2 영상',
-    provider: 'Google',
-    pricePerImage: 0,
-    description: '실사 동영상 생성 (구독 5크레딧/영상, 2~5분 소요)',
-    speed: '느림'
-  },
 ] as const;
 
 export type ImageModelId = typeof IMAGE_MODELS[number]['id'];
+
+// ── 영상 생성 모델 ──────────────────────────────────────────
+export const VIDEO_MODELS = [
+  {
+    id: 'pixverse-v5.5',
+    name: 'PixVerse v5.5',
+    provider: 'fal.ai',
+    pricePerVideo: 0.15,
+    priceLabel: '$0.150/영상',
+    priceKRW: '≈ 218원 (5초)',
+    description: '이미지→영상 변환 · 움직임 추가',
+    type: 'i2v' as const,
+  },
+  {
+    id: 'veo-3.1-generate-preview',
+    name: 'Veo 3.1 Fast',
+    provider: 'Google',
+    pricePerVideo: 0,
+    priceLabel: '20크레딧/영상',
+    priceKRW: '≈ Google AI Studio',
+    description: '실사 영상 생성 · 2~5분 소요',
+    type: 't2v' as const,
+  },
+  {
+    id: 'veo-2.0-generate-001',
+    name: 'Veo 2',
+    provider: 'Google',
+    pricePerVideo: 0,
+    priceLabel: '5크레딧/영상',
+    priceKRW: '≈ Google AI Studio',
+    description: '실사 영상 생성 · 2~5분 소요',
+    type: 't2v' as const,
+  },
+] as const;
+
+export type VideoModelId = typeof VIDEO_MODELS[number]['id'];
+export const DEFAULT_VIDEO_MODEL: VideoModelId = 'pixverse-v5.5';
 
 // Gemini 전용 스타일 카테고리 (3가지 핵심 화풍)
 export const GEMINI_STYLE_CATEGORIES = [
