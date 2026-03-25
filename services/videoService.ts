@@ -1,5 +1,5 @@
 
-import { GeneratedAsset, SubtitleData, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG } from '../types';
+import { GeneratedAsset, SubtitleData, SubtitleConfig, DEFAULT_SUBTITLE_CONFIG, ZoomEffect, DEFAULT_ZOOM_EFFECT, ZoomOrigin } from '../types';
 
 /**
  * 고정밀 오디오 디코딩: ElevenLabs(MP3)와 Gemini(PCM) 통합 처리
@@ -34,13 +34,65 @@ interface SubtitleChunk {
 
 interface PreparedScene {
   img: HTMLImageElement;
-  video: HTMLVideoElement | null;  // 애니메이션 영상 (있으면 이미지 대신 사용)
-  isAnimated: boolean;             // 애니메이션 씬 여부
+  video: HTMLVideoElement | null;
+  isAnimated: boolean;
   audioBuffer: AudioBuffer | null;
-  subtitleChunks: SubtitleChunk[];  // 미리 계산된 자막 청크들
+  subtitleChunks: SubtitleChunk[];
   startTime: number;
   endTime: number;
   duration: number;
+  zoom: ZoomEffect;  // 씬별 줌 효과
+}
+
+/**
+ * 줌/패닝 효과를 적용하여 이미지를 캔버스에 그리기
+ */
+function drawImageWithZoom(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  W: number, H: number,
+  progress: number,  // 0~1 (씬 진행률)
+  zoom: ZoomEffect
+): void {
+  if (img.width === 0 || img.height === 0) return;
+
+  const ratio = Math.min(W / img.width, H / img.height);
+  const baseW = img.width * ratio;
+  const baseH = img.height * ratio;
+  const factor = zoom.intensity / 100;
+
+  let scale = 1;
+  let tx = 0, ty = 0;
+
+  if (zoom.type === 'zoom-in') {
+    scale = 1 + factor * progress;
+  } else if (zoom.type === 'zoom-out') {
+    scale = (1 + factor) - factor * progress;
+  } else if (zoom.type === 'pan-left') {
+    scale = 1 + factor * 0.5;
+    tx = (W * factor * 0.5) * (1 - progress) * -1;
+  } else if (zoom.type === 'pan-right') {
+    scale = 1 + factor * 0.5;
+    tx = (W * factor * 0.5) * progress * -1 + W * factor * 0.5;
+  }
+  // 'none': scale=1, tx=0, ty=0
+
+  const nw = baseW * scale;
+  const nh = baseH * scale;
+
+  // origin 기반 앵커 오프셋
+  const originMap: Record<ZoomOrigin, [number, number]> = {
+    'center':       [0.5, 0.5],
+    'top-left':     [0,   0  ],
+    'top-right':    [1,   0  ],
+    'bottom-left':  [0,   1  ],
+    'bottom-right': [1,   1  ],
+  };
+  const [ox, oy] = originMap[zoom.origin] ?? [0.5, 0.5];
+  const x = (W - nw) * ox + tx;
+  const y = (H - nh) * oy + ty;
+
+  ctx.drawImage(img, x, y, nw, nh);
 }
 
 /**
@@ -289,6 +341,168 @@ export interface VideoGenerationResult {
   recordedSubtitles: RecordedSubtitleEntry[];
 }
 
+// ─── FFmpeg 헬퍼 ────────────────────────────────────────────────────────────
+
+/** Canvas → JPEG Uint8Array (동기, toDataURL 기반) */
+function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.95): Uint8Array {
+  const b64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** PreparedScene 배열의 오디오를 하나의 WAV Uint8Array로 병합 */
+function mergeSceneAudioToWav(scenes: PreparedScene[], sampleRate: number): Uint8Array {
+  const totalDuration = scenes[scenes.length - 1].endTime;
+  const totalSamples = Math.ceil(totalDuration * sampleRate);
+  const merged = new Float32Array(totalSamples);
+
+  for (const sc of scenes) {
+    if (!sc.audioBuffer) continue;
+    const start = Math.floor(sc.startTime * sampleRate);
+    const src = sc.audioBuffer.numberOfChannels > 0 ? sc.audioBuffer.getChannelData(0) : new Float32Array(0);
+    const len = Math.min(src.length, totalSamples - start);
+    for (let i = 0; i < len; i++) merged[start + i] = src[i];
+  }
+
+  const dataSize = totalSamples * 2; // 16-bit mono
+  const buf = new ArrayBuffer(44 + dataSize);
+  const v = new DataView(buf);
+  const ws = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); ws(8, 'WAVE');
+  ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, dataSize, true);
+  let off = 44;
+  for (let i = 0; i < totalSamples; i++) {
+    const s = Math.max(-1, Math.min(1, merged[i]));
+    v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    off += 2;
+  }
+  return new Uint8Array(buf);
+}
+
+/**
+ * FFmpeg.wasm 기반 고속 렌더링
+ * - requestAnimationFrame 실시간 제한 없음 → 3~5배 빠름
+ * - 15fps로 프레임 렌더링 후 FFmpeg이 MP4로 인코딩
+ */
+async function generateVideoFFmpeg(
+  preparedScenes: PreparedScene[],
+  config: SubtitleConfig,
+  enableSubtitles: boolean,
+  onProgress: (msg: string) => void,
+  abortRef?: { current: boolean }
+): Promise<VideoGenerationResult | null> {
+  const FPS = 30;
+  const W = 1920, H = 1080;
+
+  onProgress('FFmpeg 초기화 중...');
+  const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+  const ffmpeg = new FFmpeg();
+
+  await ffmpeg.load({
+    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js',
+    wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm',
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) throw new Error('Canvas 초기화 실패');
+
+  const recordedSubtitles: RecordedSubtitleEntry[] = [];
+  let subtitleIndex = 0;
+  let lastSubText: string | null = null;
+  let lastSubStart = 0;
+
+  let frameIndex = 0;
+  const totalFrames = Math.ceil(preparedScenes[preparedScenes.length - 1].endTime * FPS);
+
+  // ── 1. 프레임 렌더링 ──────────────────────────────────────
+  for (const scene of preparedScenes) {
+    const sceneFrames = Math.ceil(scene.duration * FPS);
+    for (let f = 0; f < sceneFrames; f++) {
+      if (abortRef?.current) { await ffmpeg.terminate(); return null; }
+
+      const sceneElapsed = f / FPS;
+      const sceneProgress = Math.min(sceneElapsed / scene.duration, 1);
+
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+
+      // 이미지 + 줌/패닝 효과
+      drawImageWithZoom(ctx, scene.img, W, H, sceneProgress, scene.zoom);
+
+      // 자막 렌더링
+      if (enableSubtitles) {
+        renderSubtitle(ctx, canvas, scene.subtitleChunks, sceneElapsed, config);
+        // 자막 타이밍 기록
+        const chunk = getCurrentChunk(scene.subtitleChunks, sceneElapsed);
+        const chunkText = chunk?.text || null;
+        const absTime = scene.startTime + sceneElapsed;
+        if (chunkText !== lastSubText) {
+          if (lastSubText !== null) {
+            recordedSubtitles.push({ index: subtitleIndex++, startTime: lastSubStart, endTime: absTime, text: lastSubText });
+          }
+          if (chunkText !== null) lastSubStart = absTime;
+          lastSubText = chunkText;
+        }
+      }
+
+      // 프레임 저장
+      const jpegBytes = canvasToJpegBytes(canvas);
+      await ffmpeg.writeFile(`f${String(frameIndex).padStart(6, '0')}.jpg`, jpegBytes);
+      frameIndex++;
+
+      if (frameIndex % 30 === 0) {
+        const pct = Math.round((frameIndex / totalFrames) * 60);
+        onProgress(`프레임 렌더링 중: ${pct}%`);
+        await new Promise(r => setTimeout(r, 0)); // UI 업데이트 기회 부여
+      }
+    }
+  }
+
+  // 마지막 자막 종료 처리
+  if (lastSubText !== null) {
+    recordedSubtitles.push({ index: subtitleIndex, startTime: lastSubStart, endTime: preparedScenes[preparedScenes.length - 1].endTime, text: lastSubText });
+  }
+
+  // ── 2. 오디오 WAV 합성 ────────────────────────────────────
+  onProgress('오디오 합성 중: 70%');
+  const sampleRate = preparedScenes.find(s => s.audioBuffer)?.audioBuffer?.sampleRate ?? 44100;
+  const wavBytes = mergeSceneAudioToWav(preparedScenes, sampleRate);
+  const hasAudio = preparedScenes.some(s => s.audioBuffer);
+  if (hasAudio) await ffmpeg.writeFile('audio.wav', wavBytes);
+
+  // ── 3. FFmpeg 인코딩 ─────────────────────────────────────
+  onProgress('FFmpeg 인코딩 중: 75%');
+  const ffArgs = hasAudio
+    ? ['-r', String(FPS), '-i', 'f%06d.jpg', '-i', 'audio.wav',
+       '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
+       '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', 'output.mp4']
+    : ['-r', String(FPS), '-i', 'f%06d.jpg',
+       '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
+       '-movflags', '+faststart', 'output.mp4'];
+
+  await ffmpeg.exec(ffArgs);
+  onProgress('영상 파일 생성 중: 95%');
+
+  const raw = await ffmpeg.readFile('output.mp4');
+  // SharedArrayBuffer 호환성 문제 해결: 새 ArrayBuffer로 복사
+  const data = new Uint8Array(raw instanceof Uint8Array ? raw.buffer.slice(0) : (raw as any));
+  await ffmpeg.terminate();
+
+  return {
+    videoBlob: new Blob([data], { type: 'video/mp4' }),
+    recordedSubtitles,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const generateVideo = async (
   assets: GeneratedAsset[],
   onProgress: (msg: string) => void,
@@ -310,7 +524,7 @@ export const generateVideo = async (
     console.log(`[Video] 자막 설정: ${config.wordsPerLine}단어/줄, 최대 ${config.maxLines}줄`);
   }
 
-  onProgress("에셋 메모리 사전 로딩 중 (1/3)...");
+  onProgress("에셋 메모리 사전 로딩 중...");
 
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
   const audioCtx = new AudioContextClass();
@@ -350,16 +564,16 @@ export const generateVideo = async (
       console.warn(`[Video] 씬 ${i + 1}: ${e.message}, 플레이스홀더 사용`);
       // 플레이스홀더 이미지 생성
       const placeholderCanvas = document.createElement('canvas');
-      placeholderCanvas.width = 1280;
-      placeholderCanvas.height = 720;
+      placeholderCanvas.width = 1920;
+      placeholderCanvas.height = 1080;
       const pCtx = placeholderCanvas.getContext('2d');
       if (pCtx) {
         pCtx.fillStyle = '#1a1a2e';
-        pCtx.fillRect(0, 0, 1280, 720);
+        pCtx.fillRect(0, 0, 1920, 1080);
         pCtx.fillStyle = '#fff';
         pCtx.font = 'bold 48px sans-serif';
         pCtx.textAlign = 'center';
-        pCtx.fillText(`씬 ${i + 1}`, 640, 360);
+        pCtx.fillText(`씬 ${i + 1}`, 960, 540);
       }
       img.src = placeholderCanvas.toDataURL();
     });
@@ -427,6 +641,9 @@ export const generateVideo = async (
     const startTime = timelinePointer;
     const endTime = startTime + duration;
 
+    // 씬별 줌 효과 (없으면 전역 설정, 전역도 없으면 기본값)
+    const zoom: ZoomEffect = asset.zoomEffect ?? config.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+
     preparedScenes.push({
       img,
       video,
@@ -435,17 +652,33 @@ export const generateVideo = async (
       subtitleChunks,
       startTime,
       endTime,
-      duration
+      duration,
+      zoom,
     });
     timelinePointer = endTime;
   }
 
   const totalDuration = timelinePointer;
 
-  // 2. 캔버스 및 미디어 레코더 설정
+  // ── FFmpeg 고속 렌더링 시도 ──────────────────────────────
+  // 애니메이션 씬이 없으면 FFmpeg 사용 (애니메이션은 프레임 seek 미지원)
+  const hasAnimated = preparedScenes.some(s => s.isAnimated);
+  if (!hasAnimated) {
+    try {
+      onProgress('FFmpeg 고속 렌더링 시작...');
+      const result = await generateVideoFFmpeg(preparedScenes, config, enableSubtitles, onProgress, abortRef);
+      await audioCtx.close();
+      return result;
+    } catch (e) {
+      console.warn('[Video] FFmpeg 실패, 기존 방식으로 폴백:', e);
+      onProgress('FFmpeg 실패 — 기존 방식으로 전환 중...');
+    }
+  }
+
+  // 2. 캔버스 및 미디어 레코더 설정 (폴백)
   const canvas = document.createElement('canvas');
-  canvas.width = 1280;
-  canvas.height = 720;
+  canvas.width = 1920;
+  canvas.height = 1080;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error("캔버스 초기화 실패");
 
@@ -582,10 +815,7 @@ export const generateVideo = async (
           const video = currentScene.video;
           if (video.videoWidth > 0 && video.videoHeight > 0) {
             const ratio = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-
-            // 부드러운 줌인 효과 (정적 이미지보다 약하게)
             const scale = 1.0 + 0.05 * sceneProgress;
-
             const nw = video.videoWidth * ratio * scale;
             const nh = video.videoHeight * ratio * scale;
             ctx.drawImage(video, (canvas.width - nw) / 2, (canvas.height - nh) / 2, nw, nh);
@@ -593,19 +823,9 @@ export const generateVideo = async (
           }
         }
 
-        // 정적 이미지 렌더링 (비디오 실패 시 또는 기본)
+        // 정적 이미지 렌더링 — 씬별 줌/패닝 효과 적용
         if (!rendered) {
-          const img = currentScene.img;
-          if (img.width > 0 && img.height > 0) {
-            const ratio = Math.min(canvas.width / img.width, canvas.height / img.height);
-
-            // 줌인 효과: 씬 진행률에 따라 1.0 → 1.1 (10% 확대)
-            const scale = 1.0 + 0.1 * sceneProgress;
-
-            const nw = img.width * ratio * scale;
-            const nh = img.height * ratio * scale;
-            ctx.drawImage(img, (canvas.width - nw) / 2, (canvas.height - nh) / 2, nw, nh);
-          }
+          drawImageWithZoom(ctx, currentScene.img, canvas.width, canvas.height, sceneProgress, currentScene.zoom);
         }
 
         // 자막 렌더링 (청크 기반)

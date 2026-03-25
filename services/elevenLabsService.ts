@@ -2,6 +2,7 @@
 import { CONFIG, ElevenLabsModelId } from "../config";
 import { SubtitleData, SubtitleWord, MeaningChunk } from "../types";
 import { splitSubtitleByMeaning } from "./geminiService";
+import { getVoiceSetting, setVoiceSetting } from "../utils/voiceStorage";
 
 /**
  * ElevenLabs API Service
@@ -14,7 +15,7 @@ const OUTPUT_FORMAT = "mp3_44100_128";
  * 저장된 ElevenLabs 모델 ID 가져오기
  */
 export const getElevenLabsModelId = (): ElevenLabsModelId => {
-  const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL);
+  const saved = getVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL);
   return (saved as ElevenLabsModelId) || CONFIG.DEFAULT_ELEVENLABS_MODEL;
 };
 
@@ -22,7 +23,7 @@ export const getElevenLabsModelId = (): ElevenLabsModelId => {
  * ElevenLabs 모델 ID 저장
  */
 export const setElevenLabsModelId = (modelId: ElevenLabsModelId): void => {
-  localStorage.setItem(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL, modelId);
+  setVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_MODEL, modelId);
 };
 
 export interface ElevenLabsResult {
@@ -169,8 +170,8 @@ export const generateAudioWithElevenLabs = async (
 ): Promise<ElevenLabsResult> => {
 
   const savedApiKey = process.env.ELEVENLABS_API_KEY || localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_API_KEY);
-  // localStorage(UI 선택)가 env 변수보다 우선 - 사용자가 UI에서 선택한 목소리를 존중
-  const savedVoiceId = localStorage.getItem(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || process.env.ELEVENLABS_VOICE_ID;
+  // sessionStorage(UI 선택)가 env 변수보다 우선 - 사용자가 UI에서 선택한 목소리를 존중
+  const savedVoiceId = getVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || process.env.ELEVENLABS_VOICE_ID;
 
   const finalKey = providedApiKey || savedApiKey;
   const finalVoiceId = providedVoiceId || savedVoiceId || CONFIG.DEFAULT_VOICE_ID;
@@ -195,11 +196,11 @@ export const generateAudioWithElevenLabs = async (
         text: text,
         model_id: finalModelId,
         output_format: OUTPUT_FORMAT,
-        speed: (() => { const voiceSpeed = parseFloat(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0'); return voiceSpeed; })(),
+        speed: (() => { const voiceSpeed = parseFloat(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0'); return voiceSpeed; })(),
         voice_settings: {
-          stability: parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50') / 100,
+          stability: parseInt(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STABILITY) || '50') / 100,
           similarity_boost: 0.75,
-          style: parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0') / 100,
+          style: parseInt(getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_STYLE) || '0') / 100,
           use_speaker_boost: true
         }
       }),

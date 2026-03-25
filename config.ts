@@ -75,6 +75,43 @@ export const IMAGE_MODELS = [
 
 export type ImageModelId = typeof IMAGE_MODELS[number]['id'];
 
+// ── 영상 생성 모델 ──────────────────────────────────────────
+export const VIDEO_MODELS = [
+  {
+    id: 'pixverse-v5.5',
+    name: 'PixVerse v5.5',
+    provider: 'fal.ai',
+    pricePerVideo: 0.15,
+    priceLabel: '$0.150/영상',
+    priceKRW: '≈ 218원 (5초)',
+    description: '이미지→영상 변환 · 움직임 추가',
+    type: 'i2v' as const,
+  },
+  {
+    id: 'veo-3.1-generate-preview',
+    name: 'Veo 3.1 Fast',
+    provider: 'Google',
+    pricePerVideo: 0,
+    priceLabel: '20크레딧/영상',
+    priceKRW: '≈ Google AI Studio',
+    description: '실사 영상 생성 · 2~5분 소요',
+    type: 't2v' as const,
+  },
+  {
+    id: 'veo-2.0-generate-001',
+    name: 'Veo 2',
+    provider: 'Google',
+    pricePerVideo: 0,
+    priceLabel: '5크레딧/영상',
+    priceKRW: '≈ Google AI Studio',
+    description: '실사 영상 생성 · 2~5분 소요',
+    type: 't2v' as const,
+  },
+] as const;
+
+export type VideoModelId = typeof VIDEO_MODELS[number]['id'];
+export const DEFAULT_VIDEO_MODEL: VideoModelId = 'pixverse-v5.5';
+
 // Gemini 전용 스타일 카테고리 (3가지 핵심 화풍)
 export const GEMINI_STYLE_CATEGORIES = [
   {
@@ -114,21 +151,39 @@ export type GeminiStyleId = typeof GEMINI_STYLE_CATEGORIES[number]['styles'][num
 
 // ─── 비주얼 스타일 (이미지 생성기 빠른 선택) ─────────────────────────────────
 export const VISUAL_STYLES = [
-  { id: 'custom',       name: '커스텀',         emoji: '✏️', bg: 'from-slate-700 to-slate-800',   prompt: '' },
-  { id: 'cinematic',    name: '시네마틱 실사',  emoji: '🎬', bg: 'from-slate-700 to-slate-900',   prompt: 'Cinematic photorealistic style, Hollywood blockbuster film aesthetic, professional cinematography, dramatic volumetric lighting, shallow depth of field, 8K ultra-detailed, rich cinematic color grading' },
-  { id: 'kdrama',       name: 'K-드라마 실사',  emoji: '🌸', bg: 'from-pink-800 to-rose-900',     prompt: 'Korean drama photorealistic style, soft romantic lighting, clean modern Korean aesthetics, beautiful actors with natural makeup, elegant drama set design, warm golden hour lighting, Netflix Korean drama quality' },
-  { id: 'noir',         name: '누아르',         emoji: '🌑', bg: 'from-gray-800 to-black',         prompt: 'Film noir style, dramatic black and white with deep moody shadows, 1940s detective noir aesthetic, high contrast chiaroscuro lighting, rain-soaked atmospheric streets, expressionist shadows and silhouettes' },
-  { id: 'webtoon',      name: '웹툰',           emoji: '📱', bg: 'from-blue-800 to-indigo-900',   prompt: 'Korean webtoon digital illustration style, clean bold black outlines, vibrant cel-shaded flat coloring, expressive characters, modern manhwa aesthetic, bright high contrast composition' },
-  { id: 'comic-webtoon',name: '만화웹툰',       emoji: '💥', bg: 'from-orange-800 to-red-900',    prompt: 'Comic manga webtoon style, bold dynamic thick outlines, exaggerated expressive faces, speed action lines, vibrant saturated colors, halftone texture, manga-influenced Korean comic panel composition' },
-  { id: '3d-animation', name: '3D 애니메이션',  emoji: '✨', bg: 'from-cyan-800 to-blue-900',     prompt: 'Pixar Disney quality 3D CGI animation style, smooth subsurface scattering render, expressive stylized 3D characters, vibrant rich colors, cinematic 3D studio lighting, Pixar movie aesthetic' },
-  { id: 'claymation',   name: '클레이 애니',    emoji: '🧸', bg: 'from-amber-700 to-yellow-900',  prompt: 'Claymation stop-motion style, textured plasticine clay figures, handcrafted Aardman aesthetic, visible clay finger texture, warm cozy tones, tactile handmade quality, Shaun the Sheep style' },
-  { id: 'fairy-tale',   name: '동화 일러스트',  emoji: '🧚', bg: 'from-purple-800 to-pink-900',   prompt: "Whimsical fairy tale children's picture book illustration, soft watercolor gouache technique, pastel dreamy color palette, gentle rounded organic shapes, magical glowing atmosphere, storybook quality" },
-  { id: 'wool-doll',    name: '동화 양모인형',  emoji: '🪆', bg: 'from-rose-700 to-fuchsia-900',  prompt: 'Wool felt doll fairy tale style, handmade textile art aesthetic, needle felt puppet with visible soft fiber texture, cozy warm tones, artisan handcraft quality, miniature woolly characters' },
-  { id: 'diorama',      name: '디오라마',       emoji: '🏠', bg: 'from-green-800 to-teal-900',    prompt: 'Miniature diorama tabletop style, tiny handcrafted scale model world, tilt-shift photography blur effect, warm studio lighting on miniatures, detailed scale buildings and props, toy-like railway model aesthetic' },
-  { id: 'historical',   name: '사극 일러스트',  emoji: '⚔️', bg: 'from-amber-900 to-stone-900',  prompt: 'Korean historical drama illustration style, Joseon dynasty period aesthetic, traditional Korean Hanbok costumes and architecture, classical East Asian ink painting influence, elegant brushwork, rich jewel tones with gold accents' },
-  { id: 'webnovel',     name: '웹소설 시그니쳐',emoji: '📖', bg: 'from-violet-800 to-purple-900', prompt: 'Korean web novel signature cover illustration style, dramatic fantasy character portrait, flowing hair and clothing in dynamic wind, intense gaze, glowing magical light effects, rich saturated fantasy colors' },
-  { id: 'ghibli',       name: '지브리풍',       emoji: '🌿', bg: 'from-emerald-700 to-green-900', prompt: 'Studio Ghibli inspired animation style, hand-drawn watercolor painterly backgrounds with lush organic detail, warm nostalgic atmosphere, Hayao Miyazaki aesthetic, expressive simple characters, magical realism, soft natural color palette' },
-  { id: 'stickman',     name: '스틱맨',         emoji: '🖊️', bg: 'from-slate-600 to-slate-800',  prompt: 'Simple stick figure illustration style, clean minimalist black line drawings on white background, xkcd-style stick figure characters, simple geometric shapes, hand-drawn marker whiteboard animation aesthetic' },
+  // ── 이미지 있는 스타일 ──
+  { id: 'cinematic',         name: '시네마틱 실사',   emoji: '🎬', bg: 'from-slate-700 to-slate-900',   img: '/style-previews/cinematic.jpg',        prompt: 'Cinematic photorealistic style, Hollywood blockbuster film aesthetic, professional cinematography, dramatic volumetric lighting, shallow depth of field, 8K ultra-detailed, rich cinematic color grading' },
+  { id: 'kdrama',            name: 'K-드라마 실사',   emoji: '🌸', bg: 'from-pink-800 to-rose-900',     img: '/style-previews/kdrama.jpg',           prompt: 'Korean drama photorealistic style, soft romantic lighting, clean modern Korean aesthetics, beautiful actors with natural makeup, elegant drama set design, warm golden hour lighting, Netflix Korean drama quality' },
+  { id: 'webtoon',           name: '웹툰',            emoji: '📱', bg: 'from-blue-800 to-indigo-900',   img: '/style-previews/webtoon.jpg',          prompt: 'Korean webtoon digital illustration style, clean bold black outlines, vibrant cel-shaded flat coloring, expressive characters with large eyes, modern manhwa aesthetic, rich warm color palette, high contrast dramatic composition' },
+  { id: 'retro-comic',       name: '레트로만화',      emoji: '🗞️', bg: 'from-yellow-700 to-orange-900', img: '/style-previews/retro-comic.jpg',      prompt: 'Retro vintage comic book style, 1960s-1970s American comic aesthetic, bold Roy Lichtenstein pop art halftone dots, thick black outlines, primary colors red yellow blue, Ben-Day dots texture, vintage print quality, dramatic speech bubbles' },
+  { id: 'japanese-anime',    name: '일본 애니',       emoji: '⛩️', bg: 'from-red-800 to-rose-950',     img: '/style-previews/japanese-anime.jpg',   prompt: 'Japanese anime illustration style, high-quality anime key visual, vibrant saturated colors, detailed shojo/shonen anime character design, cel-shaded with sharp highlights, expressive large eyes, dynamic anime composition, professional anime studio quality' },
+  { id: 'chibi',             name: '치비',            emoji: '🐣', bg: 'from-pink-700 to-fuchsia-900',  img: '/style-previews/chibi.jpg',            prompt: 'Cute chibi super-deformed character style, extremely adorable tiny proportions, oversized expressive head, small rounded body, pastel kawaii colors, sparkling anime eyes, soft glossy shading, ultra-cute kawaii aesthetic' },
+  { id: 'cyberpunk',         name: '사이버펑크',      emoji: '🤖', bg: 'from-violet-900 to-cyan-950',   img: '/style-previews/cyberpunk.jpg',        prompt: 'Cyberpunk dystopian illustration style, neon-lit rain-soaked city streets, glowing neon signs in purple cyan magenta, dark gritty urban future, holographic interfaces, chrome cybernetic implants, blade runner aesthetic, ultra-detailed sci-fi cityscape' },
+  { id: 'eastern-fantasy',   name: '동양 판타지',     emoji: '🐉', bg: 'from-red-900 to-amber-950',     img: '/style-previews/eastern-fantasy.jpg',  prompt: 'East Asian fantasy xianxia wuxia illustration style, Chinese fantasy aesthetic, flowing robes and ribbons in wind, divine immortal cultivator characters, misty mountain peaks, traditional architecture, jade and gold color palette, dramatic qi energy aura effects, donghua animation quality' },
+  { id: 'western-fantasy',   name: '서양 판타지',     emoji: '🧙', bg: 'from-indigo-900 to-blue-950',   img: '/style-previews/western-fantasy.jpg',  prompt: 'Western high fantasy illustration style, epic D&D fantasy art aesthetic, dramatic magical lighting, knights paladins elves wizards dragons, enchanted forest and castle ruins, rich jewel tone colors, glowing spell effects, detailed fantasy concept art quality' },
+  { id: 'eastern-3d-disney', name: '동양 3D디즈니',  emoji: '🏮', bg: 'from-red-800 to-orange-950',    img: '/style-previews/eastern-3d-disney.jpg',prompt: 'East Asian 3D Disney Pixar animation style, Chinese Japanese inspired fantasy world, Mulan Moana quality 3D rendering, expressive stylized 3D characters with Asian features, rich red gold teal color palette, traditional architecture in 3D, studio quality Disney lighting and render' },
+  { id: 'western-3d-disney', name: '서양 3D디즈니',  emoji: '🏰', bg: 'from-blue-800 to-purple-950',   img: '/style-previews/western-3d-disney.jpg',prompt: 'Western 3D Disney Pixar animation style, Frozen Tangled Encanto quality 3D CGI, expressive stylized characters, magical European fantasy setting, rich vibrant color palette, subsurface scattering skin render, Disney studio quality lighting, enchanted castle and forest' },
+  { id: 'minecraft',         name: '마인크래프트',    emoji: '⛏️', bg: 'from-green-700 to-lime-900',    img: '/style-previews/minecraft.jpg',        prompt: 'Minecraft video game pixel art voxel style, blocky cubic 3D world, pixelated low-res textures, green grass blocks brown dirt stone blocks, 16-bit color palette, isometric voxel art perspective, Minecraft game screenshot aesthetic' },
+  { id: 'rough-3d',          name: '러프 3D',         emoji: '🎲', bg: 'from-zinc-700 to-neutral-900',  img: '/style-previews/rough-3d.jpg',         prompt: 'Rough stylized 3D illustration style, intentionally loose imperfect 3D render, painterly textured surfaces, expressive gestural marks visible in 3D, warm sketch-like quality, indie animation aesthetic, rough clay render with artistic imperfections' },
+  { id: 'claymation',        name: '클레이 애니',     emoji: '🧸', bg: 'from-amber-700 to-yellow-900',  img: '/style-previews/claymation.jpg',       prompt: 'Claymation stop-motion style, textured plasticine clay figures, handcrafted Aardman Wallace and Gromit aesthetic, visible clay finger texture, warm cozy natural tones, tactile handmade quality, expressive clay characters with toothy grins' },
+  { id: 'wool-doll',         name: '동화 양모인형',   emoji: '🪆', bg: 'from-rose-700 to-fuchsia-900',  img: '/style-previews/wool-doll.jpg',        prompt: 'Crochet amigurumi wool doll style, handmade knitted textile characters with visible yarn texture, soft fiber art aesthetic, cozy warm earthy tones, cute stuffed animal proportions, artisan craft quality, miniature woolly crochet figures with button eyes' },
+  { id: 'xray-anatomy',      name: '투시 인체',       emoji: '🦴', bg: 'from-teal-800 to-cyan-950',     img: '/style-previews/xray-anatomy.jpg',     prompt: 'Medical anatomy X-ray cross-section illustration style, transparent body with visible skeleton muscles organs, scientific educational diagram aesthetic, blue-tinted X-ray glow, detailed anatomical accuracy, medical textbook illustration quality' },
+  { id: 'skeleton',          name: '해골',            emoji: '💀', bg: 'from-stone-700 to-gray-950',    img: '/style-previews/skeleton.jpg',         prompt: 'Gothic skeleton skull illustration style, highly detailed bone anatomy, dramatic dark background, Halloween gothic aesthetic, carved ivory texture on bones, baroque decorative skull motifs, macabre elegant memento mori composition' },
+  { id: 'horror',            name: '호러',            emoji: '👻', bg: 'from-red-950 to-black',          img: '/style-previews/horror.jpg',           prompt: 'Horror illustration style, deeply unsettling dark atmosphere, grotesque creature design, blood red shadows, psychological horror aesthetic, pale ghostly figures, sharp teeth claws, dark visceral imagery, disturbing surrealist horror composition' },
+  { id: 'stickwoman',        name: '스틱우먼',        emoji: '🚺', bg: 'from-pink-800 to-slate-900',    img: '/style-previews/stickwoman.jpg',       prompt: 'Stick figure woman with vibrant colorful background, white minimalist female stick figure with simple skirt detail, richly colored animated environments behind the character, clean bold black outlines, vivid saturated color palette, dynamic modern composition' },
+  { id: 'stickman',          name: '스틱맨',          emoji: '🖊️', bg: 'from-slate-600 to-slate-800',  img: '/style-previews/stickman.jpg',         prompt: 'Stick figure character with vibrant colorful background. The character MUST have: pure white round circle head, simple curved smug smile expression, white stick body with a RED TIE at the neck, white limbs with slightly rounded hands. Bold black outlines on the character. Behind the character: richly detailed colorful Korean webtoon-style city or environment backgrounds with vivid saturated colors. Strong contrast between the simple white stick figure and the detailed colorful background.' },
+  { id: 'historical',        name: '사극 일러스트',   emoji: '⚔️', bg: 'from-amber-900 to-stone-900',  img: '/style-previews/historical.jpg',       prompt: 'Korean historical drama illustration style, Joseon dynasty period aesthetic, traditional Korean Hanbok costumes and architecture, classical East Asian ink painting influence, elegant brushwork, rich jewel tones with gold accents' },
+  { id: 'ghibli',            name: '지브리풍',        emoji: '🌿', bg: 'from-emerald-600 to-green-800', img: '/style-previews/ghibli.jpg',           prompt: 'Studio Ghibli authentic hand-drawn animation style, Hayao Miyazaki masterpiece quality, ULTRA VIVID maximum saturation colors — neon emerald greens, electric cerulean blues, blazing golden sunset oranges, hot magenta flower fields, intense cobalt skies, crimson reds, lush overflowing vegetation with incredible painterly detail, Studio Ghibli film cel quality with visible brushstroke texture, dreamy magical realism atmosphere, richly layered backgrounds packed with nature detail, expressive hand-drawn character faces with large emotive eyes, warm golden sunlight glow, spirited away howls moving castle princess mononoke nausicaa aesthetic, every single color pushed to absolute maximum vibrancy and richness, no muted or desaturated tones whatsoever' },
+  { id: 'pixel-art',         name: '픽셀아트',        emoji: '🕹️', bg: 'from-indigo-800 to-violet-950', img: '/style-previews/pixel-art.jpg',        prompt: 'Retro pixel art style, 16-bit SNES era video game aesthetic, carefully placed square pixels, limited color palette, chunky pixel characters and environments, nostalgic 8-bit 16-bit game sprite art, RPG adventure game scene composition' },
+  // ── 이미지 없는 스타일 ──
+  { id: 'noir',              name: '누아르',          emoji: '🌑', bg: 'from-gray-800 to-black',         img: '',                                     prompt: 'Film noir style, dramatic black and white with deep moody shadows, 1940s detective noir aesthetic, high contrast chiaroscuro lighting, rain-soaked atmospheric streets, expressionist shadows and silhouettes' },
+  { id: 'comic-webtoon',     name: '만화웹툰',        emoji: '💥', bg: 'from-orange-800 to-red-900',    img: '',                                     prompt: 'Comic manga webtoon style, bold dynamic thick outlines, exaggerated expressive faces, speed action lines, vibrant saturated colors, halftone texture, manga-influenced Korean comic panel composition' },
+  { id: '3d-animation',      name: '3D 애니메이션',   emoji: '✨', bg: 'from-cyan-800 to-blue-900',     img: '',                                     prompt: 'Pixar Disney quality 3D CGI animation style, smooth subsurface scattering render, expressive stylized 3D characters, vibrant rich colors, cinematic 3D studio lighting, Pixar movie aesthetic' },
+  { id: 'fairy-tale',        name: '동화 일러스트',   emoji: '🧚', bg: 'from-purple-800 to-pink-900',   img: '',                                     prompt: "Whimsical fairy tale children's picture book illustration, soft watercolor gouache technique, pastel dreamy color palette, gentle rounded organic shapes, magical glowing atmosphere, storybook quality" },
+  { id: 'diorama',           name: '디오라마',        emoji: '🏠', bg: 'from-green-800 to-teal-900',    img: '',                                     prompt: 'Miniature diorama tabletop style, tiny handcrafted scale model world, tilt-shift photography blur effect, warm studio lighting on miniatures, detailed scale buildings and props, toy-like railway model aesthetic' },
+  { id: 'webnovel',          name: '웹소설 시그니쳐', emoji: '📖', bg: 'from-violet-800 to-purple-900', img: '',                                     prompt: 'Korean web novel signature cover illustration style, dramatic fantasy character portrait, flowing hair and clothing in dynamic wind, intense gaze, glowing magical light effects, rich saturated fantasy colors' },
+  // ── 커스텀 (맨 마지막) ──
+  { id: 'custom',            name: '커스텀',          emoji: '✏️', bg: 'from-slate-700 to-slate-800',   img: '',                                     prompt: '' },
 ] as const;
 
 export type VisualStyleId = typeof VISUAL_STYLES[number]['id'] | 'none';
@@ -193,6 +248,7 @@ export const ELEVENLABS_DEFAULT_VOICES = [
   { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', gender: 'male' as const, accent: 'American', description: '⭐ 가장 안정적, 뉴스/다큐 스타일, 긴 텍스트 OK' },
   { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', gender: 'male' as const, accent: 'American', description: '젊고 역동적, 유튜브/엔터테인먼트에 적합' },
   { id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam', gender: 'male' as const, accent: 'American', description: '차분하고 신뢰감, 교육/설명 콘텐츠에 적합' },
+  { id: 'nPczCjzI2devNBz1zQrb', name: 'Breu', gender: 'male' as const, accent: 'American', description: '중후하고 딥한 남성, 나레이션/다큐에 적합' },
 ] as const;
 
 // 기본 음성 타입 정의
@@ -208,9 +264,7 @@ export const GEMINI_TTS_VOICES = [
   { id: 'Puck',           name: 'Puck',           gender: 'male'   as const, description: '활기차고 경쾌한 남성' },
   { id: 'Oberon',         name: 'Oberon',         gender: 'male'   as const, description: '권위있고 명확한 남성' },
   { id: 'Iapetus',        name: 'Iapetus',        gender: 'male'   as const, description: '차분하고 신뢰감 있는 남성' },
-  { id: 'Gacrux',         name: 'Gacrux',         gender: 'male'   as const, description: '따뜻하고 풍부한 남성' },
   { id: 'Umbriel',        name: 'Umbriel',        gender: 'male'   as const, description: '깊고 성숙한 남성' },
-  { id: 'Achernar',       name: 'Achernar',       gender: 'male'   as const, description: '밝고 에너지 넘치는 남성' },
   { id: 'Achird',         name: 'Achird',         gender: 'male'   as const, description: '편안하고 친근한 남성' },
   { id: 'Algenib',        name: 'Algenib',        gender: 'male'   as const, description: '명쾌하고 또렷한 남성' },
   { id: 'Algieba',        name: 'Algieba',        gender: 'male'   as const, description: '부드럽고 세련된 남성' },
@@ -233,6 +287,8 @@ export const GEMINI_TTS_VOICES = [
   { id: 'Sulafat',        name: 'Sulafat',        gender: 'female' as const, description: '따뜻하고 감성적인 여성' },
   { id: 'Vindemiatrix',   name: 'Vindemiatrix',   gender: 'female' as const, description: '세련되고 전문적인 여성' },
   { id: 'Ariel',          name: 'Ariel',          gender: 'female' as const, description: '생기있고 활발한 여성' },
+  { id: 'Gacrux',         name: 'Gacrux',         gender: 'female' as const, description: '따뜻하고 풍부한 여성' },
+  { id: 'Achernar',       name: 'Achernar',       gender: 'female' as const, description: '밝고 에너지 넘치는 여성' },
 ] as const;
 
 export type GeminiTtsVoiceId = typeof GEMINI_TTS_VOICES[number]['id'];
@@ -262,7 +318,12 @@ export const CONFIG = {
     SUBTITLE_CONFIG: 'heaven_subtitle_config',
     PROJECTS: 'heaven_projects',
     GEMINI_TTS_VOICE: 'heaven_gemini_tts_voice',
-    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google'
+    TTS_PROVIDER: 'heaven_tts_provider',  // 'elevenlabs' | 'google' | 'gcloud' | 'azure'
+    GCLOUD_TTS_API_KEY: 'heaven_gcloud_tts_key',  // Google Cloud TTS API 키
+    GCLOUD_TTS_VOICE: 'heaven_gcloud_tts_voice',  // ko-KR-Neural2-A 등
+    AZURE_TTS_API_KEY: 'heaven_azure_tts_key',    // Azure Speech API 키
+    AZURE_TTS_REGION:  'heaven_azure_tts_region', // koreacentral 등
+    AZURE_TTS_VOICE:   'heaven_azure_tts_voice',  // ko-KR-SunHiNeural 등
     VOICE_SPEED: 'heaven_voice_speed',          // '0.7' | '1.0' | '1.3'
     VOICE_STABILITY: 'heaven_voice_stability',   // '0'-'100' (ElevenLabs)
     VOICE_STYLE: 'heaven_voice_style',           // '0'-'100' (ElevenLabs expressiveness)
@@ -270,6 +331,9 @@ export const CONFIG = {
     VISUAL_STYLE_ID: 'heaven_visual_style_id',   // VisualStyleId
     LONGFORM_DURATION: 'heaven_longform_duration',   // seconds per scene (longform)
     SHORTFORM_DURATION: 'heaven_shortform_duration', // seconds per scene (shortform)
+    CUSTOM_STYLE_PROMPT: 'heaven_custom_style_prompt', // 커스텀 스타일 프롬프트
+    YOUTUBE_API_KEY: 'heaven_youtube_key',           // YouTube Data API 키
+    CATEGORY_GUIDE_PREFIX: 'heaven_cat_guide_',      // + categoryId
   },
 
   // 애니메이션 설정

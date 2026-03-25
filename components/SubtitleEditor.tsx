@@ -6,8 +6,8 @@
  */
 
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS } from '../types';
-import { downloadProjectZip, downloadMediaZip, downloadAudioZip } from '../utils/csvHelper';
+import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS, ZoomEffect, ZoomType, ZoomOrigin, DEFAULT_ZOOM_EFFECT } from '../types';
+import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
 import { exportAssetsToZip } from '../services/exportService';
 
@@ -15,44 +15,24 @@ interface Props {
   scenes: GeneratedAsset[];
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
-  onNarrationChange?: (index: number, narration: string) => void;
   onImageEditCommand?: (index: number, command: string) => void;
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
   onSelectThumbnail?: (imageBase64: string) => void;
+  onGenerateAudio?: (index: number) => Promise<string | null>;
+  onDeleteScene?: (index: number) => void;
+  onSceneZoomChange?: (index: number, zoom: ZoomEffect | null) => void;
+  aspectRatio?: '16:9' | '9:16';
 }
 
-// 사전 로드된 Image 객체 사용 (매 프레임 base64 재파싱 방지)
-function renderSubtitleOnCanvas(
-  canvas: HTMLCanvasElement,
-  cachedImg: HTMLImageElement | null,
+// 자막 텍스트만 그리기 (배경 이미지 없이 — 줌 애니메이션과 합성용)
+function drawSubtitleText(
+  ctx: CanvasRenderingContext2D,
   text: string,
-  config: SubtitleConfig
+  config: SubtitleConfig,
+  W: number,
+  H: number
 ) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  if (cachedImg) {
-    const imgAspect = cachedImg.width / cachedImg.height;
-    const canvasAspect = W / H;
-    let drawW = W, drawH = H, drawX = 0, drawY = 0;
-    if (imgAspect > canvasAspect) {
-      drawH = W / imgAspect; drawY = (H - drawH) / 2;
-    } else {
-      drawW = H * imgAspect; drawX = (W - drawW) / 2;
-    }
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
-  } else {
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(0, 0, W, H);
-  }
-
   if (!text.trim()) return;
 
   const fontSize = config.fontSize;
@@ -126,30 +106,222 @@ function renderSubtitleOnCanvas(
   });
 }
 
-const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onNarrationChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail }) => {
+// 정적 이미지 + 자막 렌더링 (줌 없을 때)
+function renderSubtitleOnCanvas(
+  canvas: HTMLCanvasElement,
+  cachedImg: HTMLImageElement | null,
+  text: string,
+  config: SubtitleConfig
+) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (cachedImg) {
+    const imgAspect = cachedImg.width / cachedImg.height;
+    const canvasAspect = W / H;
+    let drawW = W, drawH = H, drawX = 0, drawY = 0;
+    if (imgAspect > canvasAspect) { drawH = W / imgAspect; drawY = (H - drawH) / 2; }
+    else { drawW = H * imgAspect; drawX = (W - drawW) / 2; }
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
+  } else {
+    ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, W, H);
+  }
+  drawSubtitleText(ctx, text, config, W, H);
+}
+
+const ZOOM_TYPE_LABELS: Record<ZoomType, string> = {
+  'none': '없음', 'zoom-in': '줌인', 'zoom-out': '줌아웃', 'pan-left': '←패닝', 'pan-right': '패닝→',
+};
+const ORIGIN_LABELS: Record<ZoomOrigin, string> = {
+  'center': '중앙', 'top-left': '↖', 'top-right': '↗', 'bottom-left': '↙', 'bottom-right': '↘',
+};
+
+// 줌/패닝 미리보기용 캔버스 드로잉
+function drawZoomPreview(
+  ctx: CanvasRenderingContext2D, img: HTMLImageElement,
+  W: number, H: number, progress: number, zoom: ZoomEffect
+) {
+  const factor = zoom.intensity / 100;
+  const originMap: Record<ZoomOrigin, [number, number]> = {
+    'center': [0.5, 0.5], 'top-left': [0, 0], 'top-right': [1, 0],
+    'bottom-left': [0, 1], 'bottom-right': [1, 1],
+  };
+  const [ox, oy] = originMap[zoom.origin];
+
+  // 이미지 cover fit
+  const imgAspect = img.width / img.height;
+  const canvasAspect = W / H;
+  let baseW = W, baseH = H;
+  if (imgAspect > canvasAspect) { baseH = H; baseW = H * imgAspect; }
+  else { baseW = W; baseH = W / imgAspect; }
+
+  let scale = 1;
+  let tx = 0, ty = 0;
+
+  if (zoom.type === 'zoom-in') {
+    scale = 1 + factor * progress;
+  } else if (zoom.type === 'zoom-out') {
+    scale = (1 + factor) - factor * progress;
+  } else if (zoom.type === 'pan-left') {
+    scale = 1 + factor;
+    tx = -factor * progress * W;
+  } else if (zoom.type === 'pan-right') {
+    scale = 1 + factor;
+    tx = factor * progress * W;
+  }
+
+  const drawW = baseW * scale;
+  const drawH = baseH * scale;
+  const anchorX = ox * W;
+  const anchorY = oy * H;
+  const drawX = anchorX - ox * drawW + tx;
+  const drawY = anchorY - oy * drawH + ty;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(img, drawX, drawY, drawW, drawH);
+}
+
+const ZoomPanel: React.FC<{
+  subConfig: SubtitleConfig;
+  onSubConfigChange: (cfg: SubtitleConfig) => void;
+  selectedIdx: number;
+  sceneZoom: ZoomEffect | null | undefined;
+  onSceneZoomChange?: (zoom: ZoomEffect | null) => void;
+}> = ({ subConfig, onSubConfigChange, selectedIdx, sceneZoom, onSceneZoomChange }) => {
+  const [mode, setMode] = useState<'global' | 'scene'>('global');
+
+  const gz = subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+  const hasOverride = sceneZoom != null;
+  const currentZoom = mode === 'global' ? gz : (sceneZoom ?? gz);
+
+  const setZoom = (partial: Partial<ZoomEffect>) => {
+    if (mode === 'global') {
+      onSubConfigChange({ ...subConfig, globalZoom: { ...gz, ...partial } });
+    } else {
+      onSceneZoomChange?.({ ...currentZoom, ...partial });
+    }
+  };
+
+  const switchToScene = () => {
+    setMode('scene');
+    if (!hasOverride) onSceneZoomChange?.({ ...gz });
+  };
+
+  const clearSceneOverride = () => {
+    onSceneZoomChange?.(null);
+    setMode('global');
+  };
+
+  return (
+    <div className="px-3 pb-1.5">
+      {/* 헤더: 라벨 + 모드 토글 */}
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-[10px] text-purple-300 uppercase tracking-wider font-black">
+          이미지 무빙 효과
+        </label>
+        <div className="flex gap-1">
+          <button onClick={() => setMode('global')}
+            className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
+              mode === 'global'
+                ? 'bg-purple-600/30 text-purple-200 border-purple-500/60'
+                : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-purple-500/40'
+            }`}>
+            전역
+          </button>
+          <button onClick={switchToScene}
+            className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors border ${
+              mode === 'scene'
+                ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
+                : 'bg-slate-800 text-slate-500 border-slate-700 hover:border-amber-500/40'
+            }`}>
+            씬 {selectedIdx + 1} 개별{hasOverride ? ' ●' : ''}
+          </button>
+          {mode === 'scene' && hasOverride && (
+            <button onClick={clearSceneOverride}
+              className="text-[10px] px-1.5 py-0.5 rounded font-bold border bg-slate-800 text-slate-500 border-slate-700 hover:text-red-400 hover:border-red-500/40 transition-colors">
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 타입 버튼 */}
+      <div className="flex gap-1 mb-1">
+        {(Object.keys(ZOOM_TYPE_LABELS) as ZoomType[]).map(t => (
+          <button key={t} onClick={() => setZoom({ type: t })}
+            className={`flex-1 py-1 rounded text-[10px] font-bold transition-colors border ${
+              currentZoom.type === t
+                ? mode === 'scene'
+                  ? 'bg-amber-600/30 text-amber-200 border-amber-500/60'
+                  : 'bg-purple-600/30 text-purple-200 border-purple-500/60'
+                : 'bg-slate-800 text-slate-400 border-slate-600/40 hover:text-slate-200'
+            }`}>
+            {ZOOM_TYPE_LABELS[t]}
+          </button>
+        ))}
+      </div>
+
+      {/* 강도 + 원점 */}
+      {currentZoom.type !== 'none' && (
+        <div className="flex gap-2 items-center">
+          <div className="flex-1">
+            <label className="text-[9px] text-slate-400 font-bold">강도 {currentZoom.intensity}%</label>
+            <input type="range" min={1} max={20} step={1}
+              value={currentZoom.intensity}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setZoom({ intensity: +e.target.value })}
+              className={`w-full h-1 ${mode === 'scene' ? 'accent-amber-500' : 'accent-purple-500'}`} />
+          </div>
+          {(currentZoom.type === 'zoom-in' || currentZoom.type === 'zoom-out') && (
+            <div className="flex gap-0.5 shrink-0">
+              {(Object.keys(ORIGIN_LABELS) as ZoomOrigin[]).map(o => (
+                <button key={o} onClick={() => setZoom({ origin: o })} title={o}
+                  className={`w-6 h-6 rounded text-[9px] font-bold transition-colors border ${
+                    currentZoom.origin === o
+                      ? mode === 'scene'
+                        ? 'bg-amber-600/40 text-amber-200 border-amber-500/60'
+                        : 'bg-purple-600/40 text-purple-200 border-purple-500/60'
+                      : 'bg-slate-800 text-slate-500 border-slate-700'
+                  }`}>
+                  {ORIGIN_LABELS[o]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onImageEditCommand, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange, aspectRatio = '16:9' }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
+  const [isRegenLoading, setIsRegenLoading] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const imgCacheRef = useRef<HTMLImageElement | null>(null);
+  const progressFillRef = useRef<HTMLDivElement>(null);
 
-  // 오디오 — WebAudio API
+  // 오디오 — HTMLAudioElement
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [currentSubTime, setCurrentSubTime] = useState(0);
   // Google TTS용 구두점 가중치 기반 자막 타이밍
   const [googleTtsGroups, setGoogleTtsGroups] = useState<{ text: string; startTime: number; endTime: number }[] | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const playIdRef = useRef(0);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const startTimeRef = useRef<number>(0);   // ctx.currentTime 기준 시작점 (offset 포함)
-  const durationRef = useRef<number>(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playingElRef = useRef<HTMLAudioElement | null>(null); // 실제 재생 중인 element (preload와 별도)
+  const raf = useRef<number>(0);
   const pausedAtRef = useRef<number>(0);    // 일시정지 위치 (초)
-  const isManualPauseRef = useRef<boolean>(false);
-  const progressTimerRef = useRef<number>(0);
-  const endTimeoutRef = useRef<number>(0);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const progressDragRef = useRef(false);
+  const autoPlayNextRef = useRef(false); // 씬 종료 후 다음 씬 자동 재생 플래그
+  const sceneListRef = useRef<HTMLDivElement>(null); // 씬 목록 스크롤용
+  const togglePlayRef = useRef<() => void>(() => {}); // 자동 재생용 최신 핸들러 ref
 
   // 줌/패닝 — 기본 98.5% (양쪽 클리핑 방지)
   const [zoom, setZoom] = useState(1.0);
@@ -159,6 +331,18 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   const dragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
 
   const [useMeaningChunks, setUseMeaningChunks] = useState(true);
+
+  // ── audioData가 바뀌면 즉시 HTMLAudioElement preload ──
+  useEffect(() => {
+    const ad = scenes[selectedIdx]?.audioData;
+    if (!ad) { audioRef.current = null; return; }
+    const el = new Audio();
+    el.src = audioDataUrl(ad);
+    el.preload = 'auto';
+    el.load();
+    audioRef.current = el;
+  }, [selectedIdx, scenes[selectedIdx]?.audioData]); // eslint-disable-line
+
   const set = (partial: Partial<SubtitleConfig>) => onSubConfigChange({ ...subConfig, ...partial });
   const scene = scenes[selectedIdx];
   const narration = scene?.narration ?? '';
@@ -198,28 +382,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // 2순위: AI 의미 단위 (wordGroups 없을 때만)
   // 3순위: 나레이션 시간 균등 분배 (Gemini TTS 폴백)
   const getSubtitleText = useCallback((t: number): string => {
-    // 1순위: ElevenLabs words 기반 (가장 정확)
+    // 1순위: ElevenLabs words 기반 (정확한 타임스탬프 — DELAY 없이 직접 사용)
     if (wordGroups && wordGroups.length > 0) {
-      if (t < wordGroups[0].startTime) return wordGroups[0].text;
+      if (t < wordGroups[0].startTime) return narration; // 첫 단어 전: 전체 나레이션 표시
       const g = wordGroups.find(grp => t >= grp.startTime && t < grp.endTime);
       return g ? g.text : wordGroups[wordGroups.length - 1].text;
     }
-    // 2순위: Google TTS 구두점 가중치 타이밍
+    // 2순위: Google TTS 구두점 가중치 타이밍 (비례 추정 → 0.25s 딜레이로 보정)
+    const DELAY = 0.6;
+    const tAdj = Math.max(0, t - DELAY);
     if (googleTtsGroups && googleTtsGroups.length > 0) {
-      if (t < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
-      const g = googleTtsGroups.find(grp => t >= grp.startTime && t < grp.endTime);
+      if (tAdj < googleTtsGroups[0].startTime) return googleTtsGroups[0].text;
+      const g = googleTtsGroups.find(grp => tAdj >= grp.startTime && tAdj < grp.endTime);
       return g ? g.text : googleTtsGroups[googleTtsGroups.length - 1].text;
     }
-    // 3순위: AI 의미 단위 (meaningChunks) — 0.15s 먼저 표시 (오디오 지연 보정)
+    // 3순위: AI 의미 단위 (meaningChunks)
     if (meaningChunks && meaningChunks.length > 0) {
-      const EARLY = 0.15;
-      const tAdj = t + EARLY;
       if (tAdj < meaningChunks[0].startTime) return meaningChunks[0].text;
       const g = meaningChunks.find((chunk: { startTime: number; endTime: number; text: string }) => tAdj >= chunk.startTime && tAdj < chunk.endTime);
       return g ? g.text : meaningChunks[meaningChunks.length - 1].text;
     }
     // Fallback: 나레이션을 maxChars 단위로 쪼개서 시간 균등 분배
-    const dur = durationRef.current;
+    const dur = audioRef.current?.duration ?? 0;
     if (!dur || !narration) return narration;
     const maxChars = subConfig.maxCharsPerChunk ?? 15;
     const textChunks: string[] = [];
@@ -256,15 +440,31 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   // ── 씬 변경 시 Google TTS 그룹 초기화 ──
   useEffect(() => { setGoogleTtsGroups(null); }, [selectedIdx]);
 
+  // ── 씬 자동 재생: 이전 씬 종료 후 다음 씬으로 넘어왔을 때 ──
+  useEffect(() => {
+    if (!autoPlayNextRef.current) return;
+    autoPlayNextRef.current = false;
+    // 프리로드 effect가 먼저 실행된 뒤 재생 (50ms 대기)
+    const t = setTimeout(() => togglePlayRef.current(), 50);
+    return () => clearTimeout(t);
+  }, [selectedIdx]); // eslint-disable-line
+
+  // ── 씬 선택 시 목록 스크롤 ──
+  useEffect(() => {
+    if (!sceneListRef.current) return;
+    const item = sceneListRef.current.children[selectedIdx] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [selectedIdx]);
+
   // ── audioData가 없어지면 재생 중인 오디오 즉시 정지 ──
   useEffect(() => {
-    if (!scene?.audioData && isPlaying) {
-      if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-      cancelAnimationFrame(progressTimerRef.current);
-      window.clearTimeout(endTimeoutRef.current);
+    if (!scene?.audioData) {
+      if (audioRef.current) { audioRef.current.pause(); }
+      cancelAnimationFrame(raf.current);
       setIsPlaying(false);
       setCurrentSubTime(0);
       setAudioProgress(0);
+      if (progressFillRef.current) progressFillRef.current.style.width = '0%';
       pausedAtRef.current = 0;
     }
   }, [scene?.audioData]); // eslint-disable-line
@@ -291,71 +491,79 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     if (cur.trim()) chunks.push(cur.trim());
     if (chunks.length === 0) return [];
 
-    // 구두점 pause 가중치 (현실적인 한국어 TTS 포즈 기준)
-    // 문장 끝 +2 ≈ +0.27s, 쉼표 +1 ≈ +0.13s (기존 6/3보다 낮춰서 자막 지연 방지)
+    // 구두점 pause 가중치 (Gemini TTS 문장 pause ~0.6s 기준 캘리브레이션)
     const weights = chunks.map(c => {
       let w = c.length;
-      w += (c.match(/[.!?。！？]/g) || []).length * 2;
-      w += (c.match(/[,，、]/g) || []).length * 1;
+      w += (c.match(/[.!?。！？]/g) || []).length * 5;
+      w += (c.match(/[,，、]/g) || []).length * 2;
       return Math.max(w, 2);
     });
     const total = weights.reduce((a, b) => a + b, 0);
 
-    // 0.15s 앞당겨 표시: TTS가 음절을 말하기 직전에 자막이 나오도록
-    const EARLY = 0.15;
     const result: { text: string; startTime: number; endTime: number }[] = [];
     let t = 0;
     for (let i = 0; i < chunks.length; i++) {
       const d = (weights[i] / total) * duration;
       result.push({
         text: chunks[i],
-        startTime: Math.max(0, t - EARLY),
-        endTime: t + d - EARLY,
+        startTime: t,
+        endTime: t + d,
       });
       t += d;
     }
     return result;
   }
 
-  // ── AudioBuffer 디코더 (MP3 + PCM16 fallback) — 끝 0.6s 패딩 추가 ──
-  async function decodeAudioBuffer(base64: string, ctx: AudioContext): Promise<{ buffer: AudioBuffer; contentDuration: number }> {
-    const b64 = base64.startsWith('data:') ? base64.split(',')[1] : base64;
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    let decoded: AudioBuffer;
-    try {
-      decoded = await ctx.decodeAudioData(bytes.buffer.slice(0));
-    } catch {
-      // Gemini TTS PCM16 24kHz
-      const pcm = new Int16Array(bytes.buffer);
-      const buf = ctx.createBuffer(1, pcm.length, 24000);
-      const ch = buf.getChannelData(0);
-      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
-      decoded = buf;
-    }
-    // MP3 인코더 지연으로 끝이 잘리는 현상 방지 — 무음 패딩 추가
-    const PAD = 1.5;
-    const sr = decoded.sampleRate;
-    const padSamples = Math.ceil(sr * PAD);
-    const padded = ctx.createBuffer(decoded.numberOfChannels, decoded.length + padSamples, sr);
-    for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-      padded.getChannelData(ch).set(decoded.getChannelData(ch), 0);
-    }
-    return { buffer: padded, contentDuration: decoded.duration };
+  // ── PCM16 raw → WAV Blob URL (data URL 대비 ~10배 빠름) ──
+  function pcm16ToWavBlobUrl(b64: string): string {
+    // Uint8Array.from + charCodeAt은 V8 네이티브 구현 → 루프보다 10x 빠름
+    const pcmBytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const wavByteLen = 44 + pcmBytes.length;
+    const buf = new ArrayBuffer(wavByteLen);
+    const view = new DataView(buf);
+    const wav = new Uint8Array(buf);
+    wav.set([82,73,70,70], 0);                       // "RIFF"
+    view.setUint32(4, wavByteLen - 8, true);
+    wav.set([87,65,86,69,102,109,116,32], 8);        // "WAVEfmt "
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);                     // PCM
+    view.setUint16(22, 1, true);                     // mono
+    view.setUint32(24, 24000, true);                 // 24kHz
+    view.setUint32(28, 48000, true);                 // byteRate
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    wav.set([100,97,116,97], 36);                    // "data"
+    view.setUint32(40, pcmBytes.length, true);
+    wav.set(pcmBytes, 44);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+
+  // ── magic byte로 컨테이너 감지 → Blob URL 또는 data URL 생성 ──
+  function audioDataUrl(b64: string): string {
+    const head = atob(b64.slice(0, 8));
+    const isMp3 = head.charCodeAt(0) === 0xFF && (head.charCodeAt(1) & 0xE0) === 0xE0;
+    const isId3 = head.slice(0,3) === 'ID3';
+    const isOgg = head.slice(0,4) === 'OggS';
+    const isRiff = head.slice(0,4) === 'RIFF';
+    if (isMp3 || isId3) return 'data:audio/mpeg;base64,' + b64;
+    if (isOgg) return 'data:audio/ogg;base64,' + b64;
+    if (isRiff) return 'data:audio/wav;base64,' + b64;
+    return pcm16ToWavBlobUrl(b64);  // PCM16 → Blob URL (fast)
   }
 
   // ── stopAudio: 완전 중지 + 위치 초기화 ──
   const stopAudio = useCallback(() => {
-    playIdRef.current++;
-    pausedAtRef.current = 0;
-    isManualPauseRef.current = false;
-    window.clearTimeout(endTimeoutRef.current);
-    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    cancelAnimationFrame(progressTimerRef.current);
+    const playing = playingElRef.current ?? audioRef.current;
+    if (playing) {
+      playing.pause();
+      playing.currentTime = 0;
+    }
+    playingElRef.current = null;
+    cancelAnimationFrame(raf.current);
     setIsPlaying(false);
     setAudioProgress(0);
     setCurrentSubTime(0);
+    pausedAtRef.current = 0;
   }, []);
 
   // 씬 변경 → 완전 중지
@@ -363,117 +571,111 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
   // 언마운트 정리
   useEffect(() => {
-    return () => {
-      stopAudio();
-      if (audioCtxRef.current) { audioCtxRef.current.close(); audioCtxRef.current = null; }
-    };
+    return () => { stopAudio(); };
   }, [stopAudio]);
 
   // ── togglePlay: 재생/일시정지 (정지 위치에서 이어서 재생) ──
   const togglePlay = useCallback(async () => {
+    // ── 일시정지: playingElRef(실제 재생 중인 element) 사용 ──
     if (isPlaying) {
-      // 일시정지 — 현재 위치 저장
-      isManualPauseRef.current = true;
-      if (audioCtxRef.current) {
-        pausedAtRef.current = Math.min(
-          audioCtxRef.current.currentTime - startTimeRef.current,
-          durationRef.current
-        );
-      }
-      if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-      cancelAnimationFrame(progressTimerRef.current);
+      const playing = playingElRef.current;
+      pausedAtRef.current = playing?.currentTime ?? pausedAtRef.current;
+      playing?.pause();
       setIsPlaying(false);
+      cancelAnimationFrame(raf.current);
       return;
     }
 
-    if (!scene?.audioData) return;
-    const thisPlayId = ++playIdRef.current;
-    try {
-      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
-        const AC = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext;
-        audioCtxRef.current = new AC();
+    // 음성 없으면 생성 후 다시 시도
+    let audioData = scenes[selectedIdx]?.audioData ?? null;
+    let el: HTMLAudioElement | null;
+    if (!audioData) {
+      if (!onGenerateAudio) return;
+      setIsGeneratingAudio(true);
+      setAudioError(null);
+      try {
+        audioData = await onGenerateAudio(selectedIdx);
+        if (!audioData) setAudioError('음성 생성 실패 — 브라우저 콘솔에서 오류를 확인하세요');
+      } catch (e: any) {
+        setAudioError(`TTS 오류: ${e?.message || e}`);
+      } finally {
+        setIsGeneratingAudio(false);
       }
-      const ctx = audioCtxRef.current;
-      if (ctx.state === 'suspended') await ctx.resume();
-      setIsPlaying(true);
-
-      const { buffer, contentDuration } = await decodeAudioBuffer(scene.audioData, ctx);
-      if (thisPlayId !== playIdRef.current) { setIsPlaying(false); return; }
-      isManualPauseRef.current = false;
-
-      // ElevenLabs words 기준으로만 클리핑 (정확한 타임스탬프 보유)
-      // Google TTS(meaningChunks만 있을 때)는 클리핑 금지 — 오디오 잘림 방지
-      const words = scene?.subtitleData?.words;
-      const lastWordEnd = words && words.length > 0 ? words[words.length - 1].end : null;
-      const effectiveDuration = lastWordEnd
-        ? Math.min(contentDuration, lastWordEnd + 0.5)
-        : contentDuration;
-
-      durationRef.current = effectiveDuration;
-
-      // Google TTS (wordGroups/meaningChunks 없을 때) → 구두점 가중치 타이밍 생성
-      if ((!wordGroups || wordGroups.length === 0) && (!scene?.subtitleData?.meaningChunks?.length)) {
-        setGoogleTtsGroups(createProportionalSubtitles(narration, effectiveDuration, subConfig.maxCharsPerChunk ?? 15));
+      if (!audioData) return;
+      // preload effect가 이미 element를 만들었으면 재사용, 없으면 새로 생성
+      if (!audioRef.current) {
+        el = new Audio(audioDataUrl(audioData));
+        el.preload = 'auto';
+        audioRef.current = el;
+      } else {
+        el = audioRef.current;
       }
+    } else {
+      el = audioRef.current;
+    }
 
-      const offset = Math.min(pausedAtRef.current, Math.max(0, effectiveDuration - 0.05));
+    if (!el) return;
 
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.onended = () => {
-        const wasManual = isManualPauseRef.current;
-        isManualPauseRef.current = false;
-        cancelAnimationFrame(progressTimerRef.current);
-        sourceRef.current = null;
-        if (!wasManual) {
-          // 자연 종료 → 마지막 자막 유지 후 1.2초 뒤 리셋
-          setCurrentSubTime(durationRef.current);
-          setAudioProgress(100);
-          pausedAtRef.current = 0;
-          endTimeoutRef.current = window.setTimeout(() => {
-            setAudioProgress(0);
-            setCurrentSubTime(0);
-          }, 1200);
+    // Google TTS (wordGroups/meaningChunks 없을 때) → 구두점 가중치 타이밍 생성
+    if ((!wordGroups || wordGroups.length === 0) && (!scene?.subtitleData?.meaningChunks?.length)) {
+      const dur = el.duration > 0 ? el.duration : (scene?.audioDuration ?? 0);
+      if (dur > 0) setGoogleTtsGroups(createProportionalSubtitles(narration, dur, subConfig.maxCharsPerChunk ?? 15));
+    }
+
+    el.currentTime = pausedAtRef.current;
+    // playingElRef에 실제 재생할 element 저장 (preload effect가 audioRef를 교체해도 문제 없음)
+    playingElRef.current = el;
+    // setIsPlaying을 먼저 true로 → 버튼이 즉시 반응 (로딩 없음)
+    setIsPlaying(true);
+
+    // 자막 타이밍 + 진행바 업데이트
+    const tick = () => {
+      if (!el || el.paused) return;
+      const t = el.currentTime;
+      const dur = el.duration || 1;
+      setCurrentSubTime(t);
+      setAudioProgress((t / dur) * 100);
+      if (progressFillRef.current) progressFillRef.current.style.width = `${(t / dur) * 100}%`;
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+
+    // 종료 이벤트
+    el.onended = () => {
+      setIsPlaying(false);
+      setCurrentSubTime(0);
+      setAudioProgress(0);
+      pausedAtRef.current = 0;
+      playingElRef.current = null;
+      cancelAnimationFrame(raf.current);
+      // 다음 씬 자동 재생
+      setSelectedIdx(prev => {
+        if (prev < scenes.length - 1) {
+          autoPlayNextRef.current = true;
+          return prev + 1;
         }
-        setIsPlaying(false);
-      };
-      // +0.5s 버퍼: PCM 마지막 음절 잘림 방지 (패딩 1.5s 범위 내)
-      const playDuration = effectiveDuration - offset + 0.5;
-      source.start(0, offset, playDuration > 0 ? playDuration : undefined);
-      sourceRef.current = source;
-      // 오디오 하드웨어 출력 지연 보정 (outputLatency: 실제 스피커 출력까지의 지연)
-      const hwLatency = (ctx as any).outputLatency ?? (ctx as any).baseLatency ?? 0;
-      startTimeRef.current = ctx.currentTime - offset + hwLatency;
+        return prev;
+      });
+    };
 
-      const rafLoop = () => {
-        const actx = audioCtxRef.current;
-        if (!actx || !sourceRef.current) return;
-        if (actx.state === 'suspended') actx.resume();
-        const elapsed = actx.currentTime - startTimeRef.current;
-        const clamped = Math.min(Math.max(elapsed, 0), durationRef.current);
-        setAudioProgress((clamped / durationRef.current) * 100);
-        setCurrentSubTime(clamped);
-        progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
-      };
-      progressTimerRef.current = requestAnimationFrame(rafLoop) as any;
-    } catch (e) {
+    el.play().catch((e: any) => {
       console.error('Audio error:', e);
       setIsPlaying(false);
-    }
-  }, [isPlaying, scene]);
+      playingElRef.current = null;
+      cancelAnimationFrame(raf.current);
+    });
+  }, [isPlaying, selectedIdx, scenes, onGenerateAudio, wordGroups, scene, narration, subConfig.maxCharsPerChunk]);
+
+  // handlePlayPause가 재생성될 때마다 ref 동기화 (자동 재생 effect에서 사용)
+  useEffect(() => { togglePlayRef.current = togglePlay; });
 
   // ── 프로그레스바 seek ──
   const seekToFraction = useCallback((fraction: number) => {
-    if (!durationRef.current) return;
-    const seekTime = Math.max(0, Math.min(1, fraction)) * durationRef.current;
-    isManualPauseRef.current = true;
-    if (sourceRef.current) { try { sourceRef.current.stop(); } catch {} sourceRef.current = null; }
-    cancelAnimationFrame(progressTimerRef.current);
-    window.clearTimeout(endTimeoutRef.current);
-    setIsPlaying(false);
-    pausedAtRef.current = seekTime;
-    setCurrentSubTime(seekTime);
+    const el = playingElRef.current ?? audioRef.current;
+    if (!el || !el.duration) return;
+    const t = fraction * el.duration;
+    el.currentTime = t;
+    pausedAtRef.current = t;
     setAudioProgress(fraction * 100);
   }, []);
 
@@ -493,12 +695,12 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     };
   }, [seekToFraction]);
 
-  // ── 스페이스바 단축키 ──
+  // ── 스페이스바 단축키 (INPUT/TEXTAREA 제외 모든 상황에서 동작) ──
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
-      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'BUTTON') {
-        e.preventDefault();
+      if (e.code === 'Space' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        e.preventDefault(); // 버튼 포커스 시 버튼 활성화 막고 재생/정지 처리
         togglePlay();
       }
     };
@@ -537,13 +739,28 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
   };
   const handleMouseUp = () => { dragRef.current = null; setIsDragging(false); };
 
-  // ── 캔버스 재렌더 (자막 텍스트 변경 시 포함) ──
+  const activeZoom = scene?.zoomEffect ?? subConfig.globalZoom ?? DEFAULT_ZOOM_EFFECT;
+
+  // ── 캔버스 재렌더 ──
+  // 줌 있을 때: currentSubTime / audioDuration으로 progress 계산 → 오디오와 완벽 동기
+  // 줌 없을 때: 정적 렌더
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
-      .finally(() => renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig));
-  }, [displaySubtitleText, subConfig]);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = imgCacheRef.current;
+
+    if (activeZoom.type !== 'none' && img) {
+      const dur = audioRef.current?.duration || scene?.audioDuration || 0;
+      const progress = dur > 0 ? Math.min(currentSubTime / dur, 1) : 0;
+      drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, activeZoom);
+      drawSubtitleText(ctx, displaySubtitleText, subConfig, canvas.width, canvas.height);
+    } else {
+      document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
+        .finally(() => renderSubtitleOnCanvas(canvas, img, displaySubtitleText, subConfig));
+    }
+  }, [currentSubTime, displaySubtitleText, subConfig, activeZoom, scene?.audioDuration]); // eslint-disable-line
 
   useEffect(() => { redraw(); }, [redraw]);
 
@@ -573,7 +790,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             {[
               { label: '전체 저장', onClick: () => downloadProjectZip(scenes) },
               { label: '이미지+음성', onClick: () => downloadMediaZip(scenes) },
-              { label: '오디오 ZIP', onClick: () => downloadAudioZip(scenes) },
               { label: '엑셀+이미지', onClick: () => exportAssetsToZip(scenes, `스토리보드_${new Date().toLocaleDateString('ko-KR')}`) },
               { label: 'SRT', onClick: async () => await downloadSrt(scenes, `subtitles_${Date.now()}.srt`) },
             ].map(btn => (
@@ -583,6 +799,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
               </button>
             ))}
           </div>
+          {/* 이미지 무빙 효과 (전역 + 씬별 개별) */}
+          <ZoomPanel
+            subConfig={subConfig}
+            onSubConfigChange={onSubConfigChange}
+            selectedIdx={selectedIdx}
+            sceneZoom={scene?.zoomEffect}
+            onSceneZoomChange={onSceneZoomChange ? (zoom) => onSceneZoomChange(selectedIdx, zoom) : undefined}
+          />
           {/* 내보내기 버튼 행 */}
           {onExportVideo && (
             <div className="flex gap-1.5 px-3 pb-2">
@@ -601,12 +825,14 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
           className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={{ aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
+          style={aspectRatio === '9:16'
+            ? { aspectRatio: '9/16', width: '40%', maxWidth: '40%', margin: '0 auto', flexShrink: 0 }
+            : { aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
           <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
-            <canvas ref={canvasRef} width={1280} height={720} className="w-full h-full" />
+            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="w-full h-full" />
           </div>
 
           {/* 중심 가이드라인 (드래그 중) */}
@@ -632,9 +858,15 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           {atTop    && <div className="absolute left-0 right-0 top-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
           {atBottom && <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-amber-400/80 pointer-events-none shadow-[0_0_6px_rgba(251,191,36,0.8)]" />}
 
-          {!scene?.imageData && (
+          {!scene?.imageData && !isRegenLoading && (
             <div className="absolute inset-0 flex items-center justify-center text-slate-500 text-xs pointer-events-none">
               이미지 생성 대기 중...
+            </div>
+          )}
+          {isRegenLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 pointer-events-none">
+              <div className="w-10 h-10 border-4 border-orange-400/30 border-t-orange-400 rounded-full animate-spin mb-3" />
+              <span className="text-orange-300 text-sm font-bold">이미지 편집 중...</span>
             </div>
           )}
         </div>
@@ -643,52 +875,50 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-900 border-b border-white/[0.07] shrink-0">
           <button
             onClick={togglePlay}
-            disabled={!hasAudio}
+            disabled={isGeneratingAudio}
             className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shrink-0 ${
-              hasAudio
-                ? isPlaying
+              isGeneratingAudio
+                ? 'bg-slate-800 text-slate-400 cursor-wait'
+                : isPlaying
                   ? 'bg-blue-500 text-white shadow-[0_0_10px_rgba(59,130,246,0.5)]'
                   : 'bg-blue-600/25 border border-blue-500/60 hover:bg-blue-600/45 text-blue-200'
-                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
             }`}
           >
-            {isPlaying
-              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
-              : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
+            {isGeneratingAudio
+              ? <div className="w-3.5 h-3.5 border-2 border-slate-400/40 border-t-slate-300 rounded-full animate-spin" />
+              : isPlaying
+                ? <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="4" height="10" rx="1"/><rect x="7" y="1" width="4" height="10" rx="1"/></svg>
+                : <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{marginLeft:'1px'}}><polygon points="2,1 11,6 2,11"/></svg>
             }
           </button>
           <div
             ref={progressBarRef}
             className="flex-1 relative h-3 bg-slate-700 rounded-full overflow-hidden cursor-pointer"
             onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => {
-              if (!hasAudio || !durationRef.current) return;
+              if (!hasAudio || !audioRef.current?.duration) return;
               progressDragRef.current = true;
               const rect = e.currentTarget.getBoundingClientRect();
               seekToFraction(Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)));
             }}
           >
-            <div className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
-              style={{ width: `${audioProgress}%`, transition: 'width 0.05s linear' }} />
+            <div ref={progressFillRef} className="h-full bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full pointer-events-none"
+              style={{ width: `${audioProgress}%` }} />
           </div>
           <span className="text-[10px] text-slate-400 shrink-0 w-20 text-right font-mono">
             {hasAudio
               ? isPlaying || pausedAtRef.current > 0
-                ? `${currentSubTime > 0 ? currentSubTime.toFixed(1) : pausedAtRef.current.toFixed(1)}s / ${durationRef.current > 0 ? durationRef.current.toFixed(1) : (scene?.audioDuration ?? 0).toFixed(1)}s`
+                ? `${currentSubTime > 0 ? currentSubTime.toFixed(1) : pausedAtRef.current.toFixed(1)}s / ${(audioRef.current?.duration ?? scene?.audioDuration ?? 0).toFixed(1)}s`
                 : scene?.audioDuration ? `${scene.audioDuration.toFixed(1)}s` : '●'
               : '—'}
           </span>
         </div>
 
-        {/* 자막 텍스트 편집 */}
-        {onNarrationChange && (
-          <div className="px-4 pt-3 pb-1">
-            <label className="text-sm text-slate-300 font-bold block mb-1">씬 {selectedIdx + 1} 자막 텍스트</label>
-            <textarea
-              value={narration}
-              onChange={e => onNarrationChange(selectedIdx, e.target.value)}
-              rows={5}
-              className="w-full mt-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-2 text-base text-white resize-none focus:outline-none focus:border-blue-500"
-            />
+        {/* TTS 에러 메시지 */}
+        {audioError && (
+          <div className="mx-4 mb-1 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-[11px] flex items-start gap-2">
+            <span className="shrink-0">⚠️</span>
+            <span>{audioError}</span>
+            <button onClick={() => setAudioError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-200">✕</button>
           </div>
         )}
 
@@ -701,20 +931,33 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 type="text"
                 value={editCmd}
                 onChange={e => setEditCmd(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && editCmd.trim()) {
-                    onImageEditCommand(selectedIdx, editCmd.trim());
+                onKeyDown={async (e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (e.key === 'Enter' && editCmd.trim() && !isRegenLoading) {
+                    const cmd = editCmd.trim();
                     setEditCmd('');
+                    setIsRegenLoading(true);
+                    try { await onImageEditCommand(selectedIdx, cmd); } finally { setIsRegenLoading(false); }
                   }
                 }}
+                disabled={isRegenLoading}
                 placeholder="예: 텍스트 지워줘 / 왼쪽 사람 없애줘"
-                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500"
+                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-50"
               />
               <button
-                onClick={() => { if (editCmd.trim()) { onImageEditCommand(selectedIdx, editCmd.trim()); setEditCmd(''); } }}
-                disabled={!editCmd.trim()}
-                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-600/30 border border-orange-500/50 text-orange-300 hover:bg-orange-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >재생성</button>
+                onClick={async () => {
+                  if (!editCmd.trim() || isRegenLoading) return;
+                  const cmd = editCmd.trim();
+                  setEditCmd('');
+                  setIsRegenLoading(true);
+                  try { await onImageEditCommand(selectedIdx, cmd); } finally { setIsRegenLoading(false); }
+                }}
+                disabled={!editCmd.trim() || isRegenLoading}
+                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-600/30 border border-orange-500/50 text-orange-300 hover:bg-orange-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+              >
+                {isRegenLoading
+                  ? <><div className="w-3.5 h-3.5 border-2 border-orange-300/40 border-t-orange-300 rounded-full animate-spin" />재생성 중</>
+                  : '재생성'}
+              </button>
             </div>
           </div>
         )}
@@ -872,7 +1115,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       </div>
 
       {/* ─── 오른쪽: 씬 목록 ─── */}
-      <div className="flex-1 overflow-y-auto py-2 px-2">
+      <div ref={sceneListRef} className="flex-1 overflow-y-auto py-2 px-2">
         {scenes.map((s, i) => (
           <div key={i} className={`flex items-start gap-3 px-3 py-3 rounded-xl mb-0.5 transition-all ${
             i === selectedIdx
@@ -891,13 +1134,32 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
                 <p className="text-sm text-slate-300 leading-snug line-clamp-2">{s.narration}</p>
               </div>
             </button>
-            {s.imageData && onSelectThumbnail && (
-              <button
-                onClick={() => onSelectThumbnail(s.imageData!)}
-                className="shrink-0 p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
-                title="썸네일로 선택"
-              >⭐</button>
-            )}
+            <div className="flex flex-col gap-1 shrink-0">
+              {s.imageData && onSelectThumbnail && (
+                <button
+                  onClick={() => onSelectThumbnail(s.imageData!)}
+                  className="p-1.5 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/40 border border-yellow-500/30 text-yellow-400 transition-all"
+                  title="썸네일로 선택"
+                >⭐</button>
+              )}
+              {onSceneZoomChange && s.zoomEffect != null && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-600/30 text-amber-300 border border-amber-500/40 text-center leading-tight" title="씬별 무빙 적용 중">
+                  {ZOOM_TYPE_LABELS[s.zoomEffect.type]}
+                </span>
+              )}
+              {onDeleteScene && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`씬 ${i + 1}을 삭제할까요?`)) {
+                      if (selectedIdx >= i && selectedIdx > 0) setSelectedIdx(selectedIdx - 1);
+                      onDeleteScene(i);
+                    }
+                  }}
+                  className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 transition-all text-xs font-bold"
+                  title="씬 삭제"
+                >✕</button>
+              )}
+            </div>
           </div>
         ))}
       </div>

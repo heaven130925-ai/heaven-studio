@@ -4,6 +4,8 @@ import { ScriptScene, ReferenceImages } from "../types";
 import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, getFinalVisualPrompt } from "./prompts";
 import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from "../config";
 import { faceSwapCharacter } from "./falService";
+import { getVoiceSetting } from "../utils/voiceStorage";
+import { generateGCloudTTS } from "./googleCloudTTSService";
 
 /**
  * Gemini API 클라이언트 초기화
@@ -47,6 +49,13 @@ const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
  */
 const cleanNarration = (text: string): string => {
   return text
+    // 청크 지시문 전체 제거 (멀티라인 포함): [파트 3/6 - 전체 대본의 일부입니다. 이 파트의 내용만 시각화하세요.]
+    .replace(/\[파트\s*\d+\/\d+[\s\S]*?\]\s*/gi, '')
+    // AI가 [파트 부분만 제거하고 /N - ...] 남긴 경우: /3 - 전체 대본의 일부입니다...] 제거
+    .replace(/\/\d+\s*-[^\]]*\]\s*/gi, '')
+    // 전체 대본 관련 문구가 포함된 줄 전체 제거
+    .replace(/^.*전체 대본의 일부.*$/gim, '')
+    .replace(/^.*이 파트의 내용만.*$/gim, '')
     // 파트N: / 파트 N: / [파트N] / [파트 N]
     .replace(/^[\[【]?\s*파트\s*\d+\s*[\]】]?\s*[:：]?\s*/gim, '')
     // 씬N: / 씬 N: / [씬N]
@@ -175,6 +184,29 @@ const cleanJsonResponse = (text: string): string => {
     }
   }
 
+  // 마지막 검증: JSON이 유효한지 확인, 실패 시 문자열 내 제어문자 수리
+  try {
+    JSON.parse(cleaned);
+  } catch {
+    // 문자열 값 내부의 이스케이프되지 않은 개행/탭 등 제어문자 수리
+    let repaired = '';
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < cleaned.length; i++) {
+      const c = cleaned[i];
+      if (esc) { repaired += c; esc = false; continue; }
+      if (c === '\\') { repaired += c; esc = true; continue; }
+      if (c === '"') { inStr = !inStr; repaired += c; continue; }
+      if (inStr) {
+        if (c === '\n') { repaired += '\\n'; continue; }
+        if (c === '\r') { repaired += '\\r'; continue; }
+        if (c === '\t') { repaired += '\\t'; continue; }
+      }
+      repaired += c;
+    }
+    cleaned = repaired;
+  }
+
   return cleaned.trim();
 };
 
@@ -246,6 +278,185 @@ const retryGeminiRequest = async <T>(
   throw lastError;
 };
 
+// YouTube Data API로 바이럴 영상 기반 주제 추출
+// - timeRange: 기간 필터 (3months/6months/1year/all)
+// - 바이럴 지수 = 조회수 ÷ 구독자수 (구독자 대비 폭발적 조회수 우선)
+export const findYouTubeTopics = async (
+  category: string,
+  channelIds: string[],
+  timeRange: '3months' | '6months' | '1year' | 'all' = '6months'
+): Promise<Array<{rank: number; topic: string; reason: string}>> => {
+  const apiKey = localStorage.getItem('heaven_youtube_key') || '';
+  if (!apiKey) throw new Error('YouTube API 키가 없습니다. 설정에서 입력해주세요.');
+
+  const BASE = 'https://www.googleapis.com/youtube/v3';
+
+  // 기간 계산
+  let publishedAfter = '';
+  if (timeRange !== 'all') {
+    const d = new Date();
+    if (timeRange === '3months') d.setMonth(d.getMonth() - 3);
+    else if (timeRange === '6months') d.setMonth(d.getMonth() - 6);
+    else if (timeRange === '1year') d.setFullYear(d.getFullYear() - 1);
+    publishedAfter = d.toISOString();
+  }
+
+  // 1단계: 채널 URL → 채널 ID 변환 (모든 URL 형식 지원)
+  const resolveChannelId = async (input: string): Promise<string | null> => {
+    const raw = input.trim().replace(/\/$/, '');
+
+    // 이미 채널 ID (UC로 시작)
+    if (raw.startsWith('UC') && raw.length > 20) return raw;
+
+    // /channel/UCxxx 형식
+    const channelMatch = raw.match(/\/channel\/(UC[\w\-]+)/);
+    if (channelMatch) return channelMatch[1];
+
+    // watch?v= 또는 youtu.be/ — 영상 URL에서 채널 ID 추출
+    const videoMatch = raw.match(/(?:v=|youtu\.be\/)([\w\-]{11})/);
+    if (videoMatch) {
+      const qs = new URLSearchParams({ part: 'snippet', id: videoMatch[1], key: apiKey });
+      const res = await fetch(`${BASE}/videos?${qs}`);
+      const data = await res.json();
+      if (data.error) throw new Error(`YouTube API 오류: ${data.error.message}`);
+      return data.items?.[0]?.snippet?.channelId || null;
+    }
+
+    // @handle 형식
+    const handleMatch = raw.match(/(?:youtube\.com\/)?@([\w\-\.]+)/);
+    if (handleMatch) {
+      const handle = handleMatch[1];
+      // 1) forHandle API
+      const qs1 = new URLSearchParams({ part: 'id', forHandle: `@${handle}`, key: apiKey });
+      const res1 = await fetch(`${BASE}/channels?${qs1}`);
+      const data1 = await res1.json();
+      if (data1.error) throw new Error(`YouTube API 오류(${data1.error.code}): ${data1.error.message}`);
+      if (data1.items?.[0]?.id) return data1.items[0].id;
+
+      // 2) 검색 폴백
+      const qs2 = new URLSearchParams({ part: 'snippet', q: handle, type: 'channel', maxResults: '3', key: apiKey });
+      const res2 = await fetch(`${BASE}/search?${qs2}`);
+      const data2 = await res2.json();
+      if (data2.error) throw new Error(`YouTube 검색 오류(${data2.error.code}): ${data2.error.message}`);
+      const found = data2.items?.find((it: any) =>
+        it.snippet?.customUrl?.replace('@','').toLowerCase() === handle.toLowerCase()
+      );
+      return found?.snippet?.channelId || data2.items?.[0]?.snippet?.channelId || null;
+    }
+
+    // /c/ 또는 /user/ 형식
+    const legacyMatch = raw.match(/youtube\.com\/(?:c|user)\/([^\/\?&]+)/);
+    if (legacyMatch) {
+      const qs = new URLSearchParams({ part: 'id', forUsername: legacyMatch[1], key: apiKey });
+      const res = await fetch(`${BASE}/channels?${qs}`);
+      const data = await res.json();
+      if (data.error) throw new Error(`YouTube API 오류: ${data.error.message}`);
+      return data.items?.[0]?.id || null;
+    }
+
+    throw new Error(`인식할 수 없는 URL 형식입니다: ${raw}`);
+  };
+
+  // 2단계: 영상 검색
+  const allVideoIds: string[] = [];
+  const videoChannelMap: Record<string, string> = {};
+  const videoTitles: Record<string, string> = {};
+
+  const searchItems = async (params: Record<string, string>) => {
+    const qs = new URLSearchParams({ ...params, key: apiKey, ...(publishedAfter ? { publishedAfter } : {}) });
+    const res = await fetch(`${BASE}/search?${qs}`);
+    if (!res.ok) throw new Error(`YouTube 검색 오류: ${res.status}`);
+    return (await res.json()).items || [];
+  };
+
+  if (channelIds.length > 0) {
+    // @핸들/URL → 실제 채널ID로 변환
+    const resolvedIds = (await Promise.all(channelIds.slice(0, 4).map(resolveChannelId))).filter(Boolean) as string[];
+    if (resolvedIds.length === 0) throw new Error('채널을 찾지 못했습니다. 유튜브 채널 URL을 그대로 붙여넣어 주세요. (예: https://www.youtube.com/@채널명)');
+    for (const channelId of resolvedIds) {
+      const items = await searchItems({ part: 'snippet', channelId, type: 'video', maxResults: '30', order: 'date' });
+      for (const item of items) {
+        const vid = item.id?.videoId; if (!vid) continue;
+        allVideoIds.push(vid);
+        videoChannelMap[vid] = item.snippet?.channelId || '';
+        videoTitles[vid] = item.snippet?.title || '';
+      }
+    }
+  } else {
+    const items = await searchItems({ part: 'snippet', q: category, type: 'video', maxResults: '50', order: 'viewCount', regionCode: 'KR', relevanceLanguage: 'ko' });
+    for (const item of items) {
+      const vid = item.id?.videoId; if (!vid) continue;
+      allVideoIds.push(vid);
+      videoChannelMap[vid] = item.snippet?.channelId || '';
+      videoTitles[vid] = item.snippet?.title || '';
+    }
+  }
+
+  if (allVideoIds.length === 0) throw new Error('해당 기간에 영상을 찾지 못했습니다.');
+
+  // 2단계: 영상 조회수 배치 조회
+  const videoStats: Record<string, number> = {};
+  for (let i = 0; i < allVideoIds.length; i += 50) {
+    const chunk = allVideoIds.slice(i, i + 50);
+    const qs = new URLSearchParams({ part: 'statistics', id: chunk.join(','), key: apiKey });
+    const res = await fetch(`${BASE}/videos?${qs}`);
+    if (!res.ok) continue;
+    for (const item of (await res.json()).items || []) {
+      videoStats[item.id] = parseInt(item.statistics?.viewCount || '0');
+    }
+  }
+
+  // 3단계: 채널 구독자수 배치 조회
+  const uniqueChannelIds = [...new Set(Object.values(videoChannelMap))].filter(Boolean);
+  const channelStats: Record<string, number> = {};
+  for (let i = 0; i < uniqueChannelIds.length; i += 50) {
+    const chunk = uniqueChannelIds.slice(i, i + 50);
+    const qs = new URLSearchParams({ part: 'statistics', id: chunk.join(','), key: apiKey });
+    const res = await fetch(`${BASE}/channels?${qs}`);
+    if (!res.ok) continue;
+    for (const item of (await res.json()).items || []) {
+      channelStats[item.id] = parseInt(item.statistics?.subscriberCount || '1');
+    }
+  }
+
+  // 4단계: 바이럴 지수 계산 (조회수 ÷ 구독자수) → 정렬
+  const viralVideos = allVideoIds
+    .map(vid => {
+      const views = videoStats[vid] || 0;
+      const subs = Math.max(channelStats[videoChannelMap[vid]] || 1, 1);
+      return { title: videoTitles[vid], views, subs, viralRatio: Math.round(views / subs) };
+    })
+    .filter(v => v.views > 0)
+    .sort((a, b) => b.viralRatio - a.viralRatio)
+    .slice(0, 20);
+
+  if (viralVideos.length === 0) throw new Error('통계 데이터를 가져오지 못했습니다.');
+
+  // 5단계: Gemini로 바이럴 패턴 분석 → 새 주제 추천
+  const ai = getAI();
+  const videoList = viralVideos.map((v, i) =>
+    `${i + 1}. "${v.title}" — 조회수 ${v.views.toLocaleString()} / 구독자 ${v.subs.toLocaleString()} → 바이럴 지수 ${v.viralRatio}배`
+  ).join('\n');
+
+  const prompt = `다음은 "${category}" 카테고리에서 바이럴 지수(조회수÷구독자) 기준 상위 유튜브 영상들입니다 (기간: ${timeRange === 'all' ? '전체' : timeRange === '1year' ? '최근 1년' : timeRange === '6months' ? '최근 6개월' : '최근 3개월'}):
+
+${videoList}
+
+바이럴 지수가 높을수록 구독자 수에 비해 폭발적인 조회수를 얻은 영상입니다.
+이 영상들의 성공 패턴을 분석해서, 비슷한 방식으로 새 영상에서 다룰 수 있는 참신한 주제 10개를 추천해주세요.
+제목을 그대로 복사하지 말고 영감을 받아 새 주제로 만드세요.
+
+JSON 배열로만:
+[{"rank":1,"topic":"주제 제목","reason":"바이럴 패턴 분석 포함한 이유"},...]`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { responseMimeType: 'application/json' },
+  });
+  return JSON.parse(cleanJsonResponse(response.text));
+};
+
 export const findTrendingTopics = async (category: string, usedTopics: string[]) => {
   return retryGeminiRequest("Trend Search", async () => {
     const ai = getAI();
@@ -282,19 +493,185 @@ function splitIntoSentences(text: string): string[] {
 }
 
 /**
- * 문장 배열을 N개 블록으로 균등 분배
+ * 씬 배열을 target 개수로 강제 조정 — 초과 시 균등 병합, 부족 시 긴 씬 분할
+ */
+function adjustSceneCount(scenes: ScriptScene[], target: number): ScriptScene[] {
+  if (scenes.length === target) return scenes;
+  if (scenes.length > target) {
+    const merged: ScriptScene[] = [];
+    const ratio = scenes.length / target;
+    for (let i = 0; i < target; i++) {
+      const start = Math.round(i * ratio);
+      const end = Math.round((i + 1) * ratio);
+      const group = scenes.slice(start, end);
+      merged.push({
+        sceneNumber: i + 1,
+        narration: group.map(s => s.narration).filter(Boolean).join(' '),
+        visualPrompt: group[0]?.visualPrompt || '',
+        analysis: group[0]?.analysis || {},
+      });
+    }
+    return merged;
+  } else {
+    const result = scenes.map(s => ({ ...s }));
+    while (result.length < target) {
+      let maxLen = 0, maxIdx = 0;
+      for (let i = 0; i < result.length; i++) {
+        if (result[i].narration.length > maxLen) { maxLen = result[i].narration.length; maxIdx = i; }
+      }
+      if (maxLen < 10) break;
+      const scene = result[maxIdx];
+      const narr = scene.narration;
+      const mid = Math.floor(narr.length / 2);
+      const before = narr.slice(0, mid);
+      const lastPunct = Math.max(before.lastIndexOf('. '), before.lastIndexOf('! '), before.lastIndexOf('? '), before.lastIndexOf('。'));
+      const splitPoint = lastPunct > 0 ? lastPunct + 1 : mid;
+      const first = narr.slice(0, splitPoint).trim();
+      const second = narr.slice(splitPoint).trim();
+      if (!first || !second) break;
+      result.splice(maxIdx, 1, { ...scene, narration: first }, { ...scene, narration: second });
+      result.forEach((s, i) => { s.sceneNumber = i + 1; });
+    }
+    return result.slice(0, target).map((s, i) => ({ ...s, sceneNumber: i + 1 }));
+  }
+}
+
+/**
+ * 문장 배열을 N개 블록으로 분배 — 글자 수 기준 균등 분배
+ * (문장 개수 기준은 긴 문장/짧은 문장 혼재 시 나레이션 길이 불균등 문제 발생)
  */
 function groupSentencesIntoBlocks(sentences: string[], blockCount: number): string[] {
+  const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
+  const targetCharsPerBlock = totalChars / blockCount;
+
   const blocks: string[] = [];
-  const perBlock = sentences.length / blockCount;
-  for (let i = 0; i < blockCount; i++) {
-    const startIdx = Math.round(i * perBlock);
-    const endIdx = Math.round((i + 1) * perBlock);
-    const group = sentences.slice(startIdx, Math.min(endIdx, sentences.length)).join(' ');
-    if (group.trim()) blocks.push(group.trim());
+  let current: string[] = [];
+  let currentChars = 0;
+
+  for (const sentence of sentences) {
+    current.push(sentence);
+    currentChars += sentence.length;
+    // 목표 글자 수 도달 && 아직 블록 여유 있으면 블록 확정
+    if (currentChars >= targetCharsPerBlock && blocks.length < blockCount - 1) {
+      blocks.push(current.join(' ').trim());
+      current = [];
+      currentChars = 0;
+    }
   }
+  // 나머지 문장을 마지막 블록으로
+  if (current.length > 0) blocks.push(current.join(' ').trim());
+
   return blocks;
 }
+
+/**
+ * JS가 나레이션을 완전히 고정하고 AI는 이미지 프롬프트+분석만 생성
+ * → AI가 씬 수를 절대 변경할 수 없음 (가장 확실한 고정 씬 보장)
+ */
+const generateVisualPromptsForBlocks = async (
+  narrations: string[],
+  hasReferenceImage: boolean
+): Promise<ScriptScene[]> => {
+  const ai = getAI();
+  const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+
+  const charRefRule = hasReferenceImage
+    ? `- 사람이 등장하면 반드시 "THE CHARACTER"로만 표현. 외모(나이/성별/머리색 등) 묘사 절대 금지`
+    : `- 나레이션에 언급된 인물 특성을 반드시 반영 (할아버지→elderly man, 아이→child 등)`;
+
+  const prompt = `아래 ${narrations.length}개 나레이션 각각에 대해 image_prompt_english와 analysis를 생성하라.
+
+## 규칙
+- 나레이션 수정/병합/건너뛰기 절대 금지
+- 반드시 정확히 ${narrations.length}개 항목 출력 (누락 시 실패)
+- image_prompt_english: WHO/WHAT/WHERE/MOOD 포함, 최소 20단어 이상 영문
+- sentiment: POSITIVE / NEGATIVE / NEUTRAL 중 하나
+- composition_type: MICRO / STANDARD / MACRO / NO_CHAR 중 하나
+${charRefRule}
+
+## 나레이션 목록
+${narrations.map((n, i) => `[${i + 1}] ${n}`).join('\n')}
+
+## 출력 형식 (JSON 배열만, 설명 없음)
+[{"sceneNumber":1,"narration":"나레이션 그대로 복사","visual_keywords":"","analysis":{"sentiment":"NEUTRAL","composition_type":"STANDARD"},"image_prompt_english":"..."},...]`;
+
+  let responseText = '[]';
+
+  if (anthropicKey) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': anthropicKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: Math.min(65536, narrations.length * 600),
+          system: 'You are a visual storyboard director. Output ONLY valid JSON array, no markdown.',
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (resp.ok) {
+        const d = await resp.json();
+        responseText = d.content?.[0]?.text || '[]';
+        console.log(`[FixedScene] Claude 성공: ${narrations.length}개 나레이션`);
+      } else {
+        console.warn(`[FixedScene] Claude 실패 → Gemini fallback`);
+      }
+    } catch { console.warn(`[FixedScene] Claude 오류 → Gemini fallback`); }
+  }
+
+  if (responseText === '[]') {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        thinkingConfig: { thinkingBudget: 8192 },
+        responseMimeType: 'application/json',
+        maxOutputTokens: Math.min(65536, narrations.length * 600),
+        responseSchema: {
+          type: 'array' as any,
+          items: {
+            type: 'object' as any,
+            properties: {
+              sceneNumber:          { type: 'number' as any },
+              narration:            { type: 'string' as any },
+              visual_keywords:      { type: 'string' as any },
+              image_prompt_english: { type: 'string' as any },
+              analysis: {
+                type: 'object' as any,
+                properties: {
+                  sentiment:        { type: 'string' as any },
+                  composition_type: { type: 'string' as any },
+                },
+              },
+            },
+            required: ['sceneNumber', 'narration', 'image_prompt_english', 'analysis'],
+          },
+        },
+      },
+    });
+    responseText = response.text || '[]';
+  }
+
+  const result = JSON.parse(cleanJsonResponse(responseText));
+  const items: any[] = Array.isArray(result) ? result : (result.scenes || []);
+
+  // AI 결과와 JS 나레이션을 1:1 매핑 — AI가 반환한 순서 기준으로 매핑
+  // AI가 누락하거나 순서가 틀려도 JS 나레이션을 기준으로 정확히 N개 보장
+  return narrations.map((narration, idx) => {
+    const aiItem = items[idx] || {};
+    return {
+      sceneNumber: idx + 1,
+      narration,                              // ← JS 고정값 사용 (AI 값 무시)
+      visualPrompt: aiItem.image_prompt_english || '',
+      analysis: aiItem.analysis || {},
+    };
+  });
+};
 
 const generateScriptSingle = async (
   topic: string,
@@ -303,35 +680,36 @@ const generateScriptSingle = async (
   chunkInfo?: { current: number; total: number },
   maxScenes?: number
 ): Promise<ScriptScene[]> => {
+  // ─── 대본(수동입력)이 있을 때: JS 고정 나레이션 + AI 이미지 프롬프트만 생성 ───
+  // maxScenes 유무와 무관하게 AI가 나레이션을 절대 수정/삭제/병합 못하도록 분리
+  if (sourceContext) {
+    const chunkLabel = chunkInfo ? `[청크 ${chunkInfo.current}/${chunkInfo.total}] ` : '';
+    const sentences = splitIntoSentences(sourceContext);
+    console.log(`${chunkLabel}[FixedScene] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes ?? '자동'}개`);
+
+    if (sentences.length > 0) {
+      const targetBlocks = maxScenes || sentences.length;
+      const blocks = groupSentencesIntoBlocks(sentences, targetBlocks);
+      console.log(`${chunkLabel}[FixedScene] JS 분할 완료: ${blocks.length}개 나레이션 고정 (AI 수정 불가)`);
+      let result = await retryGeminiRequest("FixedScene Visual", () =>
+        generateVisualPromptsForBlocks(blocks, hasReferenceImage)
+      );
+      if (maxScenes && result.length !== maxScenes) {
+        console.log(`${chunkLabel}[FixedScene] 씬 수 조정: ${result.length}개 → ${maxScenes}개`);
+        result = adjustSceneCount(result, maxScenes);
+      }
+      return result;
+    }
+  }
+
   return retryGeminiRequest("Script Generation", async () => {
     const baseInstruction = topic === "Manual Script Input" ? SYSTEM_INSTRUCTIONS.MANUAL_VISUAL_MATCHER :
                             hasReferenceImage ? SYSTEM_INSTRUCTIONS.REFERENCE_MATCH :
                             SYSTEM_INSTRUCTIONS.CHIEF_ART_DIRECTOR;
 
     const chunkLabel = chunkInfo ? `[청크 ${chunkInfo.current}/${chunkInfo.total}] ` : '';
-
-    // ─── JS 사전 분할: maxScenes가 있고 대본이 있을 때 JS에서 균등 분배 ───
     let contentForPrompt = sourceContext || null;
-    let preSegmented = false;
     let targetSceneCount = maxScenes;
-
-    if (maxScenes && sourceContext) {
-      const sentences = splitIntoSentences(sourceContext);
-      console.log(`${chunkLabel}[Script] 문장 수: ${sentences.length}개, 목표 씬: ${maxScenes}개`);
-
-      if (sentences.length > 0) {
-        const actualBlocks = Math.min(maxScenes, sentences.length);
-        const blocks = groupSentencesIntoBlocks(sentences, actualBlocks);
-        // [SCENE_BLOCK_N] 마커로 포맷팅
-        contentForPrompt = blocks
-          .map((block, i) => `[SCENE_BLOCK_${i + 1}]\n${block}`)
-          .join('\n\n');
-        preSegmented = true;
-        targetSceneCount = blocks.length;
-        console.log(`${chunkLabel}[Script] JS 사전 분할 완료: ${blocks.length}개 블록`);
-        blocks.forEach((b, i) => console.log(`  블록 ${i + 1}: ${b.slice(0, 60)}...`));
-      }
-    }
 
     // 입력 길이 및 토큰 계산
     const inputText = contentForPrompt || topic;
@@ -342,7 +720,8 @@ const generateScriptSingle = async (
 
     console.log(`${chunkLabel}[Script] 입력: ${inputLength}자, 목표 씬: ${estimatedSceneCount}개, maxOutputTokens: ${maxOutputTokens}`);
 
-    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, preSegmented);
+    const writingGuide = localStorage.getItem('heaven_writing_guide') || '';
+    const promptText = getScriptGenerationPrompt(topic, contentForPrompt, targetSceneCount, false, undefined, writingGuide);
     const anthropicKey = localStorage.getItem('heaven_anthropic_key');
     let responseText: string;
 
@@ -392,6 +771,25 @@ const generateScriptSingle = async (
           responseMimeType: "application/json",
           systemInstruction: baseInstruction,
           maxOutputTokens: maxOutputTokens,
+          responseSchema: {
+            type: 'array' as any,
+            items: {
+              type: 'object' as any,
+              properties: {
+                sceneNumber:          { type: 'number' as any },
+                narration:            { type: 'string' as any },
+                image_prompt_english: { type: 'string' as any },
+                analysis: {
+                  type: 'object' as any,
+                  properties: {
+                    sentiment:        { type: 'string' as any },
+                    composition_type: { type: 'string' as any },
+                  },
+                },
+              },
+              required: ['sceneNumber', 'narration', 'image_prompt_english', 'analysis'],
+            },
+          },
         },
       });
       const finishReason = response.candidates?.[0]?.finishReason;
@@ -411,11 +809,161 @@ const generateScriptSingle = async (
       console.warn(`${chunkLabel}[Warning] 씬이 ${scenes.length}개만 생성됨. 대본이 제대로 분할되지 않았을 수 있음.`);
     }
 
-    return scenes.map((scene: any, idx: number) => ({
-      sceneNumber: scene.sceneNumber || idx + 1,
+    const sorted = [...scenes].sort((a: any, b: any) => (a.sceneNumber || 0) - (b.sceneNumber || 0));
+    let mapped = sorted.map((scene: any, idx: number) => ({
+      sceneNumber: idx + 1,
       narration: cleanNarration(scene.narration || ""),
       visualPrompt: scene.image_prompt_english || "",
       analysis: scene.analysis || {}
+    }));
+
+    // ── 씬 수 엄격 고정 ──
+    if (maxScenes && mapped.length !== maxScenes) {
+      console.log(`${chunkLabel}[Script] 씬 수 조정: ${mapped.length}개 → ${maxScenes}개`);
+      mapped = adjustSceneCount(mapped, maxScenes);
+    }
+
+    return mapped;
+  });
+};
+
+/**
+ * 전체 대본을 읽고 각 씬의 이미지 프롬프트를 재작성
+ * - 스크립트 생성 직후, 이미지 생성 전에 호출
+ * - AI가 전체 맥락(등장인물 나이/특성, 장소, 시간대 등)을 파악한 후 프롬프트 작성
+ */
+export const enrichImagePrompts = async (
+  scenes: ScriptScene[],
+  hasCharacterRef: boolean = false
+): Promise<ScriptScene[]> => {
+  if (scenes.length === 0) return scenes;
+
+  return retryGeminiRequest("Image Prompt Enrichment", async () => {
+    const ai = getAI();
+
+    // 전체 대본을 번호 리스트로 정리
+    const scriptSummary = scenes
+      .map(s => `[${s.sceneNumber}] ${s.narration}`)
+      .join('\n');
+
+    const charRefRule = hasCharacterRef
+      ? `- 사람이 등장하는 씬: 반드시 "THE CHARACTER"만 사용, 외모(나이/성별/머리색 등) 절대 묘사 금지`
+      : `- 나레이션에서 언급된 인물의 나이/특성을 반드시 반영 (할아버지→elderly man, 아이→child, 젊은 여성→young woman 등)`;
+
+    const prompt = `당신은 영상 스토리보드 전문가입니다.
+아래 전체 대본을 완독한 후, 각 씬의 이미지 프롬프트를 작성하라.
+
+## ⚠️ 핵심 규칙 (반드시 준수)
+1. **전체 대본 맥락 파악 필수**: 먼저 모든 씬의 나레이션을 읽고 전체 흐름을 이해하라
+2. **나레이션과 이미지 100% 일치**: 나레이션에 "산속"이면 반드시 mountain forest, "마당"이면 courtyard
+3. **인물 묘사 정확히**: 나레이션에서 언급된 인물의 특성을 반드시 반영
+${charRefRule}
+4. **장소 일치**: 나레이션에 나온 장소를 그대로 묘사 (집→house interior, 시장→marketplace 등)
+5. **같은 인물이 여러 씬에 등장**: 씬 간 일관성 유지 (한 씬에서 할아버지면 다음 씬도 동일 인물)
+
+## 이미지 프롬프트 작성 요소 (각 씬마다 포함)
+- WHO: 누가 (사람이면 나이/특성 포함, 인격체 없으면 NO_CHAR)
+- WHAT: 무엇을 하고 있는가 (구체적 행동)
+- WHERE: 정확한 장소 (나레이션 장소와 일치)
+- MOOD: 분위기/조명
+
+## 전체 대본
+${scriptSummary}
+
+## 출력 형식
+각 씬 번호에 대한 image_prompt_english를 JSON 배열로 출력:
+[{"sceneNumber": 1, "image_prompt_english": "...영문 프롬프트..."},...]
+
+출력은 JSON 배열만, 설명 텍스트 없음.`;
+
+    const anthropicKey = localStorage.getItem('heaven_anthropic_key');
+    let responseText: string;
+
+    if (anthropicKey) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': anthropicKey,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'anthropic-dangerous-direct-browser-access': 'true',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: Math.min(65536, scenes.length * 200),
+            system: 'Output ONLY a valid JSON array. No markdown, no explanation.',
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          responseText = data.content?.[0]?.text || '[]';
+          console.log('[Prompts] Claude로 이미지 프롬프트 재작성 완료');
+        } else {
+          throw new Error(`Claude ${resp.status}`);
+        }
+      } catch (e) {
+        console.warn('[Prompts] Claude 실패 → Gemini 폴백', e);
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: Math.min(65536, scenes.length * 200),
+            responseSchema: {
+              type: 'array' as any,
+              items: {
+                type: 'object' as any,
+                properties: {
+                  sceneNumber:          { type: 'number' as any },
+                  image_prompt_english: { type: 'string' as any },
+                },
+                required: ['sceneNumber', 'image_prompt_english'],
+              },
+            },
+          },
+        });
+        responseText = response.text || '[]';
+      }
+    } else {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: Math.min(65536, scenes.length * 200),
+          responseSchema: {
+            type: 'array' as any,
+            items: {
+              type: 'object' as any,
+              properties: {
+                sceneNumber:          { type: 'number' as any },
+                image_prompt_english: { type: 'string' as any },
+              },
+              required: ['sceneNumber', 'image_prompt_english'],
+            },
+          },
+        },
+      });
+      responseText = response.text || '[]';
+      console.log('[Prompts] Gemini로 이미지 프롬프트 재작성 완료');
+    }
+
+    const parsed = JSON.parse(cleanJsonResponse(responseText));
+    const promptMap = new Map<number, string>();
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item.sceneNumber && item.image_prompt_english) {
+          promptMap.set(item.sceneNumber, item.image_prompt_english);
+        }
+      }
+    }
+
+    // 원본 씬에 새 프롬프트 적용 (없으면 기존 유지)
+    return scenes.map(s => ({
+      ...s,
+      visualPrompt: promptMap.get(s.sceneNumber) || s.visualPrompt,
     }));
   });
 };
@@ -507,6 +1055,16 @@ export const generateScriptChunked = async (
 ): Promise<ScriptScene[]> => {
   const inputLength = sourceContext.length;
 
+  // ── maxScenes 지정 시 청크 분할 금지 ────────────────────────────────────
+  // 청크 분할은 비례 분배 → 반올림 오차 + AI 미준수로 씬 수 손실 발생.
+  // JS 사전분할(groupSentencesIntoBlocks)이 정확히 N개 블록을 보장하므로
+  // 전체 대본을 단일 호출로 처리한다.
+  if (maxScenes) {
+    console.log(`[Chunked Script] maxScenes=${maxScenes} 지정 → 청크 분할 없이 JS 사전분할 단일 처리`);
+    onProgress?.(`대본 분석 중... (${maxScenes}개 씬 목표)`);
+    return generateScriptSingle(topic, hasReferenceImage, sourceContext, undefined, maxScenes);
+  }
+
   // 청크 분할 기준 이하면 일반 처리
   if (inputLength <= chunkSize) {
     console.log(`[Chunked Script] 입력(${inputLength}자)이 청크 크기(${chunkSize}자) 이하. 일반 처리.`);
@@ -576,11 +1134,16 @@ export const generateScriptChunked = async (
     }
   }
 
+  // 최종 씬 번호 순서대로 정렬 후 1부터 재번호
+  const finalScenes = allScenes
+    .sort((a, b) => (a.sceneNumber || 0) - (b.sceneNumber || 0))
+    .map((scene, idx) => ({ ...scene, sceneNumber: idx + 1 }));
+
   console.log(`[Chunked Script] ========================================`);
-  console.log(`[Chunked Script] 총 ${allScenes.length}개 씬 생성 완료`);
+  console.log(`[Chunked Script] 총 ${finalScenes.length}개 씬 생성 완료`);
   console.log(`[Chunked Script] ========================================`);
 
-  return allScenes;
+  return finalScenes;
 };
 
 /**
@@ -968,6 +1531,63 @@ ${styleDesc.instruction}`
 };
 
 /**
+ * 기존 이미지 + 편집 명령으로 이미지 수정 (image-in → image-out)
+ * - 원본 이미지를 Gemini에 직접 전달하여 지정된 부분만 수정
+ */
+export const editImageWithGemini = async (imageBase64: string, command: string): Promise<string | null> => {
+  const ai = getAI();
+  // 이미지 편집: image input + image output 지원 모델 순서대로 시도
+  // gemini-2.0-flash-exp는 2026년 삭제됨 → 대체 모델 사용
+  const editModels = [
+    'gemini-2.0-flash-exp-image-generation',
+    'gemini-3.1-flash-image-preview',
+    'gemini-2.5-flash-image',
+    'gemini-3-pro-image-preview',
+  ];
+  let lastError: any;
+
+  // base64에 data: prefix가 있으면 제거
+  const rawBase64 = imageBase64.startsWith('data:') ? imageBase64.split(',')[1] : imageBase64;
+
+  for (const editModel of editModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: editModel,
+        contents: {
+          parts: [
+            { inlineData: { data: rawBase64, mimeType: 'image/jpeg' } },
+            {
+              text: [
+                `You are an image editor. Edit this exact image by applying ONLY the instruction below.`,
+                `Keep EVERYTHING ELSE identical — same composition, characters, poses, background, colors, art style, lighting.`,
+                `Do NOT redraw or regenerate. Do NOT change anything not mentioned in the instruction.`,
+                ``,
+                `INSTRUCTION: ${command}`,
+                ``,
+                `Output: one single edited image. No panels, no split screens, no borders, no before/after comparison.`,
+              ].join('\n')
+            }
+          ]
+        },
+        config: {
+          responseModalities: [Modality.TEXT, Modality.IMAGE],
+        }
+      });
+      const parts = response.candidates?.[0]?.content?.parts ?? [];
+      for (const part of parts) {
+        if ((part as any).inlineData?.data) return (part as any).inlineData.data;
+      }
+      console.warn(`[Image Edit] ${editModel} 응답에 이미지 없음:`, parts.map(p => Object.keys(p)));
+    } catch (e) {
+      console.warn(`[Image Edit] ${editModel} 실패, 다음 모델 시도:`, e);
+      lastError = e;
+    }
+  }
+  // 모든 모델 실패 시 에러 던지기 (호출부에서 사용자에게 표시)
+  throw lastError || new Error('이미지 편집 실패: 모든 모델에서 이미지를 반환하지 않았습니다');
+};
+
+/**
  * 긴 텍스트를 400자 단위로 자연스럽게 분할
  * - 문장 끝(. ? ! 。)에서 우선 분할
  * - 없으면 쉼표, 공백 순으로 분할
@@ -1038,31 +1658,65 @@ function concatenatePcmBase64(chunks: string[]): string {
 }
 
 /**
- * TTS 단일 청크 생성 (내부용)
+ * TTS 설정을 한 곳에서 읽어 일관성 보장
+ */
+function getTtsConfig() {
+  // 음성 설정은 sessionStorage에서 읽음 (창별 독립)
+  const voiceName  = getVoiceSetting(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
+  const voiceSpeed = getVoiceSetting(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
+  const tone       = getVoiceSetting('heaven_google_tts_tone') || '';
+  const mood       = getVoiceSetting('heaven_google_tts_mood') || '';
+
+  // 속도 지시를 systemInstruction으로 전달 → 청크 전체에 일관 적용
+  const speedInstruction =
+    voiceSpeed === '0.7' ? 'Speak slowly and clearly. Maintain consistent pace throughout.' :
+    voiceSpeed === '1.3' ? 'Speak quickly and energetically. Maintain consistent pace throughout.' :
+                           'Speak at a natural, steady pace. Maintain consistent pace throughout.';
+
+  const systemInstruction = [speedInstruction, tone, mood].filter(Boolean).join(' ');
+  return { voiceName, systemInstruction };
+}
+
+/**
+ * TTS 단일 청크 생성 (내부용) — 모델 폴백 포함
  */
 async function generateTtsChunk(text: string): Promise<string> {
-  const voiceName = localStorage.getItem(CONFIG.STORAGE_KEYS.GEMINI_TTS_VOICE) || CONFIG.DEFAULT_GEMINI_TTS_VOICE;
-  const voiceSpeed = localStorage.getItem(CONFIG.STORAGE_KEYS.VOICE_SPEED) || '1.0';
-  const speedInstruction = voiceSpeed === '0.7' ? '(천천히 또렷하게 말해주세요) ' : voiceSpeed === '1.3' ? '(빠르게 활기차게 말해주세요) ' : '';
-  // Google TTS 톤/분위기 텍스트 지시 (사용자가 선택한 감정 스타일)
-  const toneInstruction = localStorage.getItem('heaven_google_tts_tone') || '';
-  const moodInstruction = localStorage.getItem('heaven_google_tts_mood') || '';
-  const textWithSpeed = speedInstruction + toneInstruction + moodInstruction + text;
-  return retryGeminiRequest("TTS Generation", async () => {
-    const ai = getAI();
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: { parts: [{ text: textWithSpeed }] },
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } }
+  const { voiceName, systemInstruction } = getTtsConfig();
+  const models = [
+    'gemini-2.5-flash-preview-tts',
+  ];
+  let lastError: any;
+  for (const model of models) {
+    try {
+      // TTS는 429 재시도 금지 — 재시도할수록 일일 한도(100회)를 낭비함
+      // maxRetries=1 = 단 1회 시도만
+      return await retryGeminiRequest("TTS Generation", async () => {
+        const ai = getAI();
+        const response = await ai.models.generateContent({
+          model,
+          contents: { parts: [{ text }] },
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },
+            systemInstruction,
+          }
+        });
+        const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (!data) throw new Error('TTS returned empty audio');
+        return data;
+      }, 1); // maxRetries=1 → 429 시 즉시 포기 (한도 낭비 방지)
+    } catch (e: any) {
+      lastError = e;
+      const msg = e?.message || JSON.stringify(e);
+      const isQuota = msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
+      if (isQuota) {
+        // 쿼터 초과는 다른 모델도 같은 키를 쓰므로 즉시 포기
+        throw new Error(`Gemini TTS 일일 한도(100회) 초과 — 내일 다시 시도하거나 설정에서 다른 TTS(Azure/Google Cloud)로 전환하세요.`);
       }
-    });
-    // 빈 응답 시 재시도 트리거 (retryGeminiRequest가 exception을 retry 조건으로 사용)
-    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (!data) throw new Error('TTS returned empty audio — retrying');
-    return data;
-  });
+      console.warn(`[TTS] ${model} 실패:`, msg);
+    }
+  }
+  throw lastError ?? new Error('모든 Gemini TTS 모델 실패');
 }
 
 /**
@@ -1156,7 +1810,79 @@ export const generateAllScenesAudio = async (
  * - 400자 초과 시 청크 분할 후 이어붙이기
  */
 export const generateAudioForScene = async (text: string): Promise<string | null> => {
-  const chunks = splitTtsText(text, 400);
+  const provider = getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'google';
+
+  // Azure TTS 경로 (Neural — MP3 반환, 월 50만자 무료)
+  if (provider === 'azure') {
+    const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.AZURE_TTS_API_KEY) || '';
+    if (!apiKey) {
+      console.warn('[TTS] Azure API 키 없음 → Gemini TTS 폴백');
+    } else {
+      try {
+        const { generateAzureTTS } = await import('./azureTTSService');
+        const chunks = splitTtsText(text, 4500);
+        if (chunks.length === 1) return await generateAzureTTS(chunks[0]);
+        const parts: string[] = [];
+        for (const chunk of chunks) {
+          const b64 = await generateAzureTTS(chunk);
+          if (b64) parts.push(b64);
+        }
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+        const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+        const total = buffers.reduce((sum, b) => sum + b.length, 0);
+        const merged = new Uint8Array(total);
+        let off = 0;
+        for (const buf of buffers) { merged.set(buf, off); off += buf.length; }
+        let binary = '';
+        for (let i = 0; i < merged.length; i += 65536) {
+          binary += String.fromCharCode(...merged.subarray(i, i + 65536));
+        }
+        return btoa(binary);
+      } catch (e) {
+        console.warn('[TTS] Azure 실패 → Gemini TTS 폴백:', e);
+      }
+    }
+  }
+
+  // Google Cloud TTS 경로 (Neural2/Wavenet — MP3 반환, 한도 없음)
+  if (provider === 'gcloud') {
+    const apiKey = localStorage.getItem(CONFIG.STORAGE_KEYS.GCLOUD_TTS_API_KEY) || '';
+    if (!apiKey) {
+      console.warn('[TTS] gcloud API 키 없음 → Gemini TTS 폴백');
+      // 아래 Gemini TTS 경로로 fall-through
+    } else {
+      try {
+        const chunks = splitTtsText(text, 4500);
+        if (chunks.length === 1) return await generateGCloudTTS(chunks[0]);
+        // 청크별 MP3 생성 후 바이너리 이어붙이기 (MP3는 단순 concat 가능)
+        const parts: string[] = [];
+        for (const chunk of chunks) {
+          const b64 = await generateGCloudTTS(chunk);
+          if (b64) parts.push(b64);
+        }
+        if (parts.length === 0) return null;
+        if (parts.length === 1) return parts[0];
+        // base64 디코드 → 바이너리 합치기 → 다시 base64
+        const buffers = parts.map(b => Uint8Array.from(atob(b), c => c.charCodeAt(0)));
+        const total = buffers.reduce((sum, b) => sum + b.length, 0);
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const buf of buffers) { merged.set(buf, offset); offset += buf.length; }
+        let binary = '';
+        for (let i = 0; i < merged.length; i += 65536) {
+          binary += String.fromCharCode(...merged.subarray(i, i + 65536));
+        }
+        return btoa(binary);
+      } catch (e) {
+        console.warn('[TTS] gcloud 실패 → Gemini TTS 폴백:', e);
+        // 아래 Gemini TTS 경로로 fall-through
+      }
+    }
+  }
+
+  // Gemini TTS 경로 (기존)
+  const chunks = splitTtsText(text, 500);
 
   if (chunks.length === 1) {
     return generateTtsChunk(chunks[0]);
@@ -1330,39 +2056,37 @@ export interface CharacterInfo {
 export const extractCharactersFromScript = async (script: string): Promise<CharacterInfo[]> => {
   const ai = getAI();
 
-  const prompt = `아래 대본/스토리보드를 분석하여 등장인물(캐릭터)을 모두 추출하세요.
+  const prompt = `아래 대본을 분석하여 등장인물(사람 캐릭터)을 모두 추출하세요.
 
 대본:
 ${script}
 
-다음 JSON 배열 형식으로만 응답하세요. 설명 없이 JSON만:
-[
-  {
-    "name": "캐릭터 이름 (한국어)",
-    "description": "외모, 나이, 특징, 성격 등 상세 묘사 (한국어 2~3문장)",
-    "imagePrompt": "Portrait of [character], [detailed appearance in English: age, hair, clothing, expression, style]. Clean white background, professional portrait photo, high quality."
-  }
-]
+각 인물에 대해 대본에서 언급된 나이, 성별, 직업, 외모(머리색/스타일, 눈색, 피부색, 체형), 복장, 성격을 파악하세요. 단서가 없으면 이야기 맥락에서 합리적으로 추론하세요.
 
-주의사항:
-- 실제로 대본에 등장하는 인물만 포함 (추상 개념, 장소, 조직 제외)
-- 등장인물이 없으면 빈 배열 [] 반환
-- imagePrompt는 반드시 영어로 작성`;
+반드시 아래 JSON 배열 형식으로만 응답하세요. 마크다운 없이 JSON만:
+[{"name":"캐릭터이름","description":"한국어 상세묘사 3문장","imagePrompt":"Photorealistic portrait. Gender: female. Age: 30s. Hair: long black straight hair. Eyes: dark brown. Skin: fair. Build: slender. Wearing: white blouse and dark slacks. Expression: calm and composed. Professional studio portrait, soft lighting, neutral background, high quality."}]
+
+주의: imagePrompt는 영어로, 문장 형식(마침표로 구분)으로 작성. 대괄호나 특수기호 사용 금지.
+실제 등장인물이 없으면 빈 배열만 반환: []`;
 
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: { parts: [{ text: prompt }] },
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: { temperature: 0.3 }
   });
 
-  const raw = response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  const raw = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+  console.log('[extractCharacters] raw 길이:', raw.length, '앞부분:', raw.slice(0, 120));
 
   try {
     const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const parsed = JSON.parse(cleaned);
-    if (Array.isArray(parsed)) return parsed as CharacterInfo[];
-  } catch {
-    console.error('[extractCharacters] JSON 파싱 실패:', raw.slice(0, 200));
+    if (Array.isArray(parsed)) {
+      console.log('[extractCharacters] 추출 완료:', parsed.length, '명', parsed.map((c: any) => c.name));
+      return parsed as CharacterInfo[];
+    }
+  } catch (e) {
+    console.error('[extractCharacters] JSON 파싱 실패:', e, '\nraw:', raw.slice(0, 400));
   }
 
   return [];
@@ -1452,14 +2176,24 @@ ${textInstruction}
   }
 };
 
-// ── 썸네일 전략 분석 ──────────────────────────────────────────────────────────
+// ── 썸네일 전략 분석 (3가지 방향) ────────────────────────────────────────────
+export interface ThumbnailVariantStrategy {
+  type: '호기심유발' | '가치제안' | '스토리감정';
+  title: string;       // YouTube 제목 (A/B 테스트용)
+  mainText: string;    // 썸네일 메인 문구 (10자 이내)
+  subText: string;     // 썸네일 서브 문구 (15자 이내)
+  imagePrompt: string; // 이미지 생성 프롬프트 (영어)
+  description: string; // SEO 설명문 첫 2줄
+  tags: string;        // 태그 (쉼표 구분)
+}
+
 export const analyzeThumbnailStrategy = async (params: {
   topic: string;
   characterEnabled: boolean;
   characterType: string;
   characterDetails: string;
   targetAudience: string;
-}): Promise<{ summary: string; mainText: string; subText: string; imagePrompt: string } | null> => {
+}): Promise<ThumbnailVariantStrategy[] | null> => {
   const ai = getAI();
   if (!ai) return null;
 
@@ -1467,29 +2201,54 @@ export const analyzeThumbnailStrategy = async (params: {
     ? `등장 피사체: ${params.characterType} - ${params.characterDetails}`
     : '피사체 없음 (배경/사물 중심)';
 
-  const prompt = `당신은 유튜브 썸네일 전략가입니다. 다음 정보를 바탕으로 클릭율을 극대화하는 썸네일 전략을 JSON으로 제안하세요.
+  const prompt = `당신은 유튜브 SEO 및 썸네일 전략 전문가입니다. 다음 영상 정보를 바탕으로 YouTube A/B 테스트용 3가지 전략을 생성하세요.
 
 영상 주제: "${params.topic}"
 ${charDesc}
 시청 타겟: ${params.targetAudience}
 
-다음 JSON 형식으로 반드시 응답하세요 (다른 텍스트 없이 JSON만):
-{
-  "summary": "전략 분석 요약 (2-3문장, 한국어)",
-  "mainText": "메인 문구 (10자 이내, 임팩트 있게, 한국어)",
-  "subText": "서브 문구 (15자 이내, 한국어)",
-  "imagePrompt": "썸네일 이미지 생성 프롬프트 (한국어, 구체적으로 시각적 요소 묘사, 100자 이내)"
-}`;
+3가지 전략 방향:
+1. 호기심유발형: 결과가 궁금해서 클릭하게 만드는 미스터리한 접근 (의문형, 반전, 충격)
+2. 가치제안형: 시청자가 얻을 수 있는 이득을 명확하게 강조 (구체적 숫자, 방법, 혜택)
+3. 스토리감정형: 강렬한 감정적 후기나 서사적 긴장감 활용 (경험, 감정, 공감)
+
+각 전략마다 다음 필드를 생성하세요:
+- type: 전략 유형 (호기심유발 / 가치제안 / 스토리감정)
+- title: YouTube 제목 30자 이내 한국어
+- mainText: 썸네일 메인 문구 8자 이내 한국어
+- subText: 썸네일 서브 문구 12자 이내 한국어
+- imagePrompt: 썸네일 배경 이미지 생성용 영어 프롬프트 (텍스트 없는 배경, 고대비, YouTube 스타일, 구체적 장면)
+- description: SEO 설명문 100자 이내 한국어
+- tags: 관련 태그 5개 쉼표 구분 한국어`;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'array' as any,
+          items: {
+            type: 'object' as any,
+            properties: {
+              type:        { type: 'string' as any },
+              title:       { type: 'string' as any },
+              mainText:    { type: 'string' as any },
+              subText:     { type: 'string' as any },
+              imagePrompt: { type: 'string' as any },
+              description: { type: 'string' as any },
+              tags:        { type: 'string' as any },
+            },
+            required: ['type', 'title', 'mainText', 'subText', 'imagePrompt', 'description', 'tags'],
+          },
+        },
+      },
     });
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-    return JSON.parse(jsonMatch[0]);
+    const raw = response.text || '';
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
   } catch (e) {
     console.error('[ThumbnailStrategy] 분석 실패:', e);
     return null;
@@ -1512,6 +2271,7 @@ export const generateThumbnailV2 = async (params: {
   channelName: string;
   editRequest?: string;
   model?: string;
+  inputImage?: string; // base64 — 업로드된 배경 이미지 (Nano Banana에 직접 전달)
 }): Promise<string | null> => {
   const ai = getAI();
   if (!ai) return null;
@@ -1533,7 +2293,33 @@ export const generateThumbnailV2 = async (params: {
   const ratio = params.thumbnailRatio || '16:9';
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
-  const prompt = `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
+  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
+  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
+  const isNanoBanana = thumbnailModel.startsWith('gemini-3');
+
+  // Nano Banana 2: 텍스트 포함 완성 썸네일 생성 (이미지 안에 텍스트 직접 렌더링)
+  // 일반 Gemini: 배경만 생성 (텍스트는 Canvas 오버레이로 별도 추가)
+  const prompt = isNanoBanana
+    ? `Generate a complete YouTube thumbnail image. ${sizeDesc}.
+
+Topic: "${params.topic}"
+Target audience: ${params.targetAudience}
+${charDesc}
+${channelDesc}${editDesc}
+
+Visual direction: ${params.imagePrompt}
+${borderDesc[params.borderStyle] ? '\n' + borderDesc[params.borderStyle] : ''}
+
+TEXT TO RENDER IN THE IMAGE (required, render clearly):
+- Main title (very large, bold, top 30% of image): "${params.mainText}"
+- Subtitle (medium size, below main title): "${params.subText}"
+
+Requirements:
+- Korean text must be rendered beautifully with high contrast and strong outline/shadow
+- Main title: extremely large, bold, highly visible, impactful
+- Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style
+- ONE single continuous image. No panels, no splits, no borders.`
+    : `Generate a YouTube thumbnail BACKGROUND IMAGE ONLY. ${sizeDesc}.
 
 Topic: "${params.topic}"
 Target audience: ${params.targetAudience}
@@ -1549,17 +2335,20 @@ Visual direction: ${params.imagePrompt}
 3. BACKGROUND ONLY: Leave the upper 30% area relatively open (gradient or solid color) for text overlay placement.
 4. Strong visual impact, bright high-contrast colors, professional YouTube thumbnail style.`;
 
-  // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
-  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
-
   try {
+    // 업로드 이미지가 있으면 이미지+텍스트 같이 전달 (Nano Banana 이미지 편집)
+    const contents = (isNanoBanana && params.inputImage)
+      ? { parts: [
+          { inlineData: { data: params.inputImage, mimeType: 'image/jpeg' } },
+          { text: `이 이미지를 기반으로 유튜브 썸네일을 만들어줘. 이미지 구도와 분위기는 최대한 유지하면서 아래 텍스트를 크고 선명하게 추가해줘.\n\n${prompt}` }
+        ]}
+      : prompt;
     const response = await ai.models.generateContent({
       model: thumbnailModel,
-      contents: prompt,
-      config: {
-        responseModalities: [Modality.IMAGE],
-        imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' },
-      },
+      contents,
+      config: isNanoBanana
+        ? { responseModalities: [Modality.TEXT, Modality.IMAGE] }
+        : { responseModalities: [Modality.IMAGE], imageConfig: { aspectRatio: ratio === '9:16' ? '9:16' : '16:9' } },
     });
     const parts = response.candidates?.[0]?.content?.parts;
     if (parts) {
