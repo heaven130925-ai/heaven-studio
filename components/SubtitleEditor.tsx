@@ -433,7 +433,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     const img = new Image();
     img.onload = () => {
       imgCacheRef.current = img;
-      setImgLoadVersion(v => v + 1); // 이미지 로드 완료 → React re-render 트리거
+      // 이미지 로드 즉시 캔버스에 직접 렌더 (redraw 비동기 타이밍 문제 우회)
+      const canvas = canvasRef.current;
+      if (canvas) renderSubtitleOnCanvas(canvas, img, narration, subConfig);
+      setImgLoadVersion(v => v + 1); // re-render 트리거 (자막 설정 반영용)
     };
     img.src = `data:image/jpeg;base64,${scene.imageData}`;
   }, [scene?.imageData, selectedIdx]); // eslint-disable-line
@@ -759,7 +762,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       drawSubtitleText(ctx, displaySubtitleText, subConfig, canvas.width, canvas.height);
     } else {
       document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
-        .finally(() => renderSubtitleOnCanvas(canvas, img, displaySubtitleText, subConfig));
+        .finally(() => renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig));
     }
   }, [currentSubTime, displaySubtitleText, subConfig, activeZoom, scene?.audioDuration]); // eslint-disable-line
 
