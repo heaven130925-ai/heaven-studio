@@ -975,7 +975,7 @@ const App: React.FC = () => {
   }, [handleRegenerateImage]);
 
   // 애니메이션 생성 핸들러 (useCallback으로 메모이제이션)
-  const handleGenerateAnimation = useCallback(async (idx: number) => {
+  const handleGenerateAnimation = useCallback(async (idx: number, userMotionPrompt?: string) => {
     const falKey = getFalApiKey();
     if (!falKey) {
       alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
@@ -992,8 +992,8 @@ const App: React.FC = () => {
       setAnimatingIndices(prev => new Set(prev).add(idx));
       setProgressMessage(`씬 ${idx + 1} 움직임 분석 중...`);
 
-      // AI가 대본과 이미지를 분석해서 움직임 프롬프트 생성
-      const motionPrompt = await generateMotionPrompt(
+      // 사용자 입력 프롬프트가 있으면 바로 사용, 없으면 AI 자동 생성
+      const motionPrompt = userMotionPrompt || await generateMotionPrompt(
         assetsRef.current[idx].narration,
         assetsRef.current[idx].visualPrompt
       );

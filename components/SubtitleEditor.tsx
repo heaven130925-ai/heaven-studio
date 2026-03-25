@@ -16,7 +16,7 @@ interface Props {
   subConfig: SubtitleConfig;
   onSubConfigChange: (cfg: SubtitleConfig) => void;
   onImageEditCommand?: (index: number, command: string) => void;
-  onGenerateAnimation?: (index: number) => void;
+  onGenerateAnimation?: (index: number, motionPrompt?: string) => void;
   animatingIndices?: Set<number>;
   onExportVideo?: (enableSubtitles: boolean) => void;
   isExporting?: boolean;
@@ -301,6 +301,8 @@ const ZoomPanel: React.FC<{
 const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange, onImageEditCommand, onGenerateAnimation, animatingIndices, onExportVideo, isExporting, onSelectThumbnail, onGenerateAudio, onDeleteScene, onSceneZoomChange, aspectRatio = '16:9' }) => {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [editCmd, setEditCmd] = useState('');
+  const [animationPrompt, setAnimationPrompt] = useState('');
+  const [imgLoadVersion, setImgLoadVersion] = useState(0);
   const [isRegenLoading, setIsRegenLoading] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -431,13 +433,10 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     const img = new Image();
     img.onload = () => {
       imgCacheRef.current = img;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
-        .finally(() => renderSubtitleOnCanvas(canvas, img, narration, subConfig));
+      setImgLoadVersion(v => v + 1); // 이미지 로드 완료 → React re-render 트리거
     };
     img.src = `data:image/jpeg;base64,${scene.imageData}`;
-  }, [scene?.imageData]); // eslint-disable-line
+  }, [scene?.imageData, selectedIdx]); // eslint-disable-line
 
   // ── 씬 변경 시 Google TTS 그룹 초기화 ──
   useEffect(() => { setGoogleTtsGroups(null); }, [selectedIdx]);
@@ -764,7 +763,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
     }
   }, [currentSubTime, displaySubtitleText, subConfig, activeZoom, scene?.audioDuration]); // eslint-disable-line
 
-  useEffect(() => { redraw(); }, [redraw]);
+  useEffect(() => { redraw(); }, [redraw, imgLoadVersion]); // eslint-disable-line
 
   return (
     <div className="flex h-full overflow-hidden justify-center bg-slate-950">
@@ -924,19 +923,34 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
         )}
 
-        {/* 영상 변환 버튼 */}
+        {/* 영상 변환 */}
         {onGenerateAnimation && (
           <div className="px-4 pt-1 pb-2">
             <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">영상 변환</label>
-            <button
-              onClick={() => onGenerateAnimation(selectedIdx)}
-              disabled={animatingIndices?.has(selectedIdx)}
-              className="mt-1 w-full px-3 py-2 rounded-lg text-sm font-bold bg-purple-600/30 border border-purple-500/50 text-purple-300 hover:bg-purple-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-            >
-              {animatingIndices?.has(selectedIdx)
-                ? <><div className="w-3.5 h-3.5 border-2 border-purple-300/40 border-t-purple-300 rounded-full animate-spin" />변환 중...</>
-                : '🎬 PixVerse 영상 변환'}
-            </button>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="text"
+                value={animationPrompt}
+                onChange={e => setAnimationPrompt(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !animatingIndices?.has(selectedIdx)) {
+                    onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined);
+                  }
+                }}
+                disabled={animatingIndices?.has(selectedIdx)}
+                placeholder="움직임 지시 (비워두면 AI 자동 생성)"
+                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 disabled:opacity-50"
+              />
+              <button
+                onClick={() => onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined)}
+                disabled={animatingIndices?.has(selectedIdx)}
+                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-purple-600/30 border border-purple-500/50 text-purple-300 hover:bg-purple-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0"
+              >
+                {animatingIndices?.has(selectedIdx)
+                  ? <><div className="w-3.5 h-3.5 border-2 border-purple-300/40 border-t-purple-300 rounded-full animate-spin" />변환 중...</>
+                  : '🎬 변환'}
+              </button>
+            </div>
           </div>
         )}
 
