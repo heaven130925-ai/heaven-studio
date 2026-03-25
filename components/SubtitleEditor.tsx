@@ -940,36 +940,6 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           </div>
         )}
 
-        {/* 영상 변환 */}
-        {onGenerateAnimation && (
-          <div className="px-4 pt-1 pb-2">
-            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">영상 변환</label>
-            <div className="flex gap-2 mt-1">
-              <input
-                type="text"
-                value={animationPrompt}
-                onChange={e => setAnimationPrompt(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !animatingIndices?.has(selectedIdx)) {
-                    onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined);
-                  }
-                }}
-                disabled={animatingIndices?.has(selectedIdx)}
-                placeholder="움직임 지시 (비워두면 AI 자동 생성)"
-                className="flex-1 bg-slate-800/80 border border-white/[0.08] rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 disabled:opacity-50"
-              />
-              <button
-                onClick={() => onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined)}
-                disabled={animatingIndices?.has(selectedIdx)}
-                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-purple-600/30 border border-purple-500/50 text-purple-300 hover:bg-purple-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0"
-              >
-                {animatingIndices?.has(selectedIdx)
-                  ? <><div className="w-3.5 h-3.5 border-2 border-purple-300/40 border-t-purple-300 rounded-full animate-spin" />변환 중...</>
-                  : '🎬 변환'}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* 이미지 편집 명령 */}
         {onImageEditCommand && (
@@ -1163,8 +1133,41 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
         </div>
       </div>
 
-      {/* ─── 오른쪽: 씬 목록 ─── */}
-      <div ref={sceneListRef} className="flex-1 overflow-y-auto py-2 px-2">
+      {/* ─── 오른쪽: 영상 변환 + 씬 목록 ─── */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+
+        {/* 영상 변환 */}
+        {onGenerateAnimation && (
+          <div className="px-3 pt-2 pb-2 border-b border-white/[0.07] shrink-0">
+            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">🎬 영상 변환 (씬 {selectedIdx + 1})</label>
+            <div className="flex gap-2 mt-1">
+              <input
+                type="text"
+                value={animationPrompt}
+                onChange={e => setAnimationPrompt(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !animatingIndices?.has(selectedIdx)) {
+                    onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined);
+                  }
+                }}
+                disabled={animatingIndices?.has(selectedIdx)}
+                placeholder="움직임 지시 (비워두면 AI 자동 생성)"
+                className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 disabled:opacity-50"
+              />
+              <button
+                onClick={() => onGenerateAnimation(selectedIdx, animationPrompt.trim() || undefined)}
+                disabled={animatingIndices?.has(selectedIdx)}
+                className="px-3 py-1.5 rounded-lg text-sm font-bold bg-purple-600/30 border border-purple-500/50 text-purple-300 hover:bg-purple-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0"
+              >
+                {animatingIndices?.has(selectedIdx)
+                  ? <><div className="w-3.5 h-3.5 border-2 border-purple-300/40 border-t-purple-300 rounded-full animate-spin" />변환 중...</>
+                  : '변환'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div ref={sceneListRef} className="flex-1 overflow-y-auto py-2 px-2">
         {scenes.map((s, i) => (
           <div key={i} className={`flex items-start gap-3 px-3 py-3 rounded-xl mb-0.5 transition-all ${
             i === selectedIdx
@@ -1211,6 +1214,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
     </div>
