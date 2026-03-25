@@ -834,7 +834,7 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
-          className="relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
+          className="relative overflow-hidden cursor-grab active:cursor-grabbing select-none border-4 border-red-500"
           style={{
             ...(aspectRatio === '9:16'
               ? { aspectRatio: '9/16', width: '40%', maxWidth: '40%', margin: '0 auto', flexShrink: 0 }
