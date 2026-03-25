@@ -1413,6 +1413,8 @@ const App: React.FC = () => {
                 onGenerateAudio={handleGenerateSceneAudio}
                 onDeleteScene={handleDeleteScene}
                 onSceneZoomChange={handleSceneZoomChange}
+                onGenerateAnimation={handleGenerateAnimation}
+                animatingIndices={animatingIndices}
                 aspectRatio={aspectRatio}
                 onImageEditCommand={async (idx, command) => {
                   const current = assetsRef.current[idx];
