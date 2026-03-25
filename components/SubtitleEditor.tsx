@@ -5,7 +5,7 @@
  * - 하단: 자막 스타일 컨트롤
  */
 
-import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
+import React, { useRef, useEffect, useLayoutEffect, useCallback, useState, useMemo } from 'react';
 import { GeneratedAsset, SubtitleConfig, SUBTITLE_FONTS, ZoomEffect, ZoomType, ZoomOrigin, DEFAULT_ZOOM_EFFECT } from '../types';
 import { downloadProjectZip, downloadMediaZip } from '../utils/csvHelper';
 import { downloadSrt } from '../services/srtService';
@@ -761,12 +761,19 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
       drawZoomPreview(ctx, img, canvas.width, canvas.height, progress, activeZoom);
       drawSubtitleText(ctx, displaySubtitleText, subConfig, canvas.width, canvas.height);
     } else {
-      document.fonts.load(`${subConfig.fontWeight ?? 700} ${subConfig.fontSize}px ${subConfig.fontFamily}`)
-        .finally(() => renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig));
+      renderSubtitleOnCanvas(canvas, imgCacheRef.current, displaySubtitleText, subConfig);
     }
   }, [currentSubTime, displaySubtitleText, subConfig, activeZoom, scene?.audioDuration]); // eslint-disable-line
 
   useEffect(() => { redraw(); }, [redraw, imgLoadVersion]); // eslint-disable-line
+
+  // 이미지 로드 완료 직후 동기 렌더 (페인트 전 보장)
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const img = imgCacheRef.current;
+    if (!canvas || !img) return;
+    renderSubtitleOnCanvas(canvas, img, narration, subConfig);
+  }, [imgLoadVersion]); // eslint-disable-line
 
   return (
     <div className="flex h-full overflow-hidden justify-center bg-slate-950">
