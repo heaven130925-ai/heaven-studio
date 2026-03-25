@@ -834,23 +834,21 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
 
         {/* 캔버스 */}
         <div ref={canvasContainerRef}
-          className="relative bg-black overflow-hidden cursor-grab active:cursor-grabbing select-none"
-          style={aspectRatio === '9:16'
-            ? { aspectRatio: '9/16', width: '40%', maxWidth: '40%', margin: '0 auto', flexShrink: 0 }
-            : { aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }}
+          className="relative overflow-hidden cursor-grab active:cursor-grabbing select-none"
+          style={{
+            ...(aspectRatio === '9:16'
+              ? { aspectRatio: '9/16', width: '40%', maxWidth: '40%', margin: '0 auto', flexShrink: 0 }
+              : { aspectRatio: '16/9', width: '72%', maxWidth: '72%', margin: '0 auto', flexShrink: 0 }),
+            backgroundColor: '#000',
+            backgroundImage: scene?.imageData ? `url('data:image/jpeg;base64,${scene.imageData}')` : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
-          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%', position: 'relative' }}>
-            {/* 배경 이미지 — 캔버스가 그려지기 전에도 항상 표시 */}
-            {scene?.imageData && (
-              <img
-                src={`data:image/jpeg;base64,${scene.imageData}`}
-                className="absolute inset-0 w-full h-full object-cover"
-                alt=""
-              />
-            )}
-            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="absolute inset-0 w-full h-full" />
+          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
+            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="w-full h-full" />
           </div>
 
           {/* 중심 가이드라인 (드래그 중) */}
