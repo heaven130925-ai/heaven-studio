@@ -127,9 +127,8 @@ function renderSubtitleOnCanvas(
     else { drawW = H * imgAspect; drawX = (W - drawW) / 2; }
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
     ctx.drawImage(cachedImg, drawX, drawY, drawW, drawH);
-  } else {
-    ctx.fillStyle = '#1e293b'; ctx.fillRect(0, 0, W, H);
   }
+  // 이미지 없으면 투명 유지 — 뒤의 <img> 요소가 보임
   drawSubtitleText(ctx, text, config, W, H);
 }
 
@@ -842,8 +841,16 @@ const SubtitleEditor: React.FC<Props> = ({ scenes, subConfig, onSubConfigChange,
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
         >
-          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%' }}>
-            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="w-full h-full" />
+          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', width: '100%', height: '100%', position: 'relative' }}>
+            {/* 배경 이미지 — 캔버스가 그려지기 전에도 항상 표시 */}
+            {scene?.imageData && (
+              <img
+                src={`data:image/jpeg;base64,${scene.imageData}`}
+                className="absolute inset-0 w-full h-full object-cover"
+                alt=""
+              />
+            )}
+            <canvas ref={canvasRef} width={aspectRatio === '9:16' ? 720 : 1280} height={aspectRatio === '9:16' ? 1280 : 720} className="absolute inset-0 w-full h-full" />
           </div>
 
           {/* 중심 가이드라인 (드래그 중) */}
