@@ -61,6 +61,17 @@ function createThumbnail(base64Image: string, maxWidth: number = 640): Promise<s
 }
 
 /**
+ * blob URL은 페이지 새로고침 후 만료되므로 저장 전 제거
+ * data URL(base64)은 영구적이므로 유지
+ */
+function cleanVideoDataForStorage(asset: GeneratedAsset): GeneratedAsset {
+  return {
+    ...asset,
+    videoData: asset.videoData?.startsWith('blob:') ? null : (asset.videoData ?? null),
+  };
+}
+
+/**
  * 현재 설정값 가져오기
  */
 function getCurrentSettings() {
@@ -99,7 +110,7 @@ export async function saveProject(
     createdAt: now,
     topic,
     settings: getCurrentSettings(),
-    assets: assets.map(asset => ({ ...asset })),
+    assets: assets.map(cleanVideoDataForStorage),
     thumbnail,
     cost
   };
@@ -142,7 +153,7 @@ export async function updateProjectAssets(
         : existing.thumbnail;
       const updated: SavedProject = {
         ...existing,
-        assets: assets.map(a => ({ ...a })),
+        assets: assets.map(cleanVideoDataForStorage),
         thumbnail,
       };
       const putReq = store.put(updated);
@@ -168,9 +179,10 @@ export async function getSavedProjects(): Promise<SavedProject[]> {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        // 최신순 정렬
+        // 최신순 정렬 + 만료된 blob URL 제거
         const projects = (request.result as SavedProject[])
-          .sort((a, b) => b.createdAt - a.createdAt);
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map(p => ({ ...p, assets: p.assets.map(cleanVideoDataForStorage) }));
         resolve(projects);
       };
       request.onerror = () => reject(request.error);
@@ -196,7 +208,7 @@ export async function saveDraft(topic: string, assets: GeneratedAsset[]): Promis
       createdAt: Date.now(),
       topic,
       settings: getCurrentSettings(),
-      assets: assets.map(a => ({ ...a })),
+      assets: assets.map(cleanVideoDataForStorage),
       thumbnail: null,
     };
     await new Promise<void>((resolve, reject) => {
@@ -219,7 +231,15 @@ export async function loadDraft(): Promise<SavedProject | null> {
     return new Promise((resolve, reject) => {
       const tx = db.transaction([STORE_NAME], 'readonly');
       const req = tx.objectStore(STORE_NAME).get(DRAFT_ID);
-      req.onsuccess = () => resolve(req.result || null);
+      req.onsuccess = () => {
+        const draft: SavedProject | null = req.result || null;
+        if (!draft) { resolve(null); return; }
+        // 만료된 blob URL 제거
+        resolve({
+          ...draft,
+          assets: draft.assets.map(cleanVideoDataForStorage),
+        });
+      };
       req.onerror = () => reject(req.error);
     });
   } catch (e) {

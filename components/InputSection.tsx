@@ -4,7 +4,7 @@ import ThumbnailEditor from './ThumbnailEditor';
 import { GenerationStep, ProjectSettings, ReferenceImages, DEFAULT_REFERENCE_IMAGES } from '../types';
 import { CONFIG, ELEVENLABS_MODELS, ElevenLabsModelId, IMAGE_MODELS, ImageModelId, VIDEO_MODELS, VideoModelId, DEFAULT_VIDEO_MODEL, ELEVENLABS_DEFAULT_VOICES, VoiceGender, GEMINI_TTS_VOICES, GeminiTtsVoiceId, VISUAL_STYLES, VisualStyleId } from '../config';
 import { getElevenLabsModelId, setElevenLabsModelId, fetchElevenLabsVoices, ElevenLabsVoice } from '../services/elevenLabsService';
-import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics } from '../services/geminiService';
+import { generateGeminiTtsPreview, analyzeCharacterReference, findTrendingTopics, findYouTubeTopics, analyzeReferenceChannel } from '../services/geminiService';
 import { previewGCloudTTS } from '../services/googleCloudTTSService';
 import { getVoiceSetting, setVoiceSetting, removeVoiceSetting } from '../utils/voiceStorage';
 
@@ -23,7 +23,8 @@ function pcmBase64ToWavUrl(base64Pcm: string): string {
 }
 
 interface InputSectionProps {
-  onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, imageOnly?: boolean, audioOnly?: boolean, autoRun?: boolean) => void;
+  onGenerate: (topic: string, referenceImages: ReferenceImages, sourceText: string | null, sceneCount: number, autoRun?: boolean, autoRender?: boolean, referenceVideoContext?: string, category?: string, targetMinutes?: number, blueprint?: string) => void;
+  isVideoGenerating?: boolean;
   onCharacterAnalyze?: (topic: string, referenceImages: ReferenceImages, sourceText: string, sceneCount: number) => void;
   isAnalyzingCharacters?: boolean;
   step: GenerationStep;
@@ -38,11 +39,27 @@ interface InputSectionProps {
   thumbnailTopic?: string;
   onOpenGallery?: () => void;
   resetKey?: number;
+  onAudioFirstGenerate?: (audioFile: File, refImgs: ReferenceImages, sceneCount: number, scriptText?: string) => void;
 }
 
-const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, isAnalyzingCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery, resetKey }) => {
+const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnalyze, isAnalyzingCharacters, step, activeTab, onTabChange, manualScript, onManualScriptChange, thumbnailBaseImage, onThumbnailBaseImageChange, onAspectRatioChange, thumbnailScenes, thumbnailTopic, onOpenGallery, resetKey, isVideoGenerating, onAudioFirstGenerate }) => {
   const [topic, setTopic] = useState('');
   const [sceneCount, setSceneCount] = useState<number>(0);
+  // 로컬 탭: auto | manual | audio-first (부모 activeTab에 audio-first 추가)
+  const [localTab, setLocalTab] = useState<'auto' | 'manual' | 'audio-first'>(activeTab);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingAudioFile, setPendingAudioFile] = useState<File | null>(null);
+  const [audioScriptText, setAudioScriptText] = useState<string>('');
+
+  // 부모 activeTab 변경 시 localTab 동기화 (audio-first 유지)
+  useEffect(() => {
+    if (localTab !== 'audio-first') setLocalTab(activeTab);
+  }, [activeTab]); // eslint-disable-line
+
+  const handleLocalTabChange = (tab: 'auto' | 'manual' | 'audio-first') => {
+    setLocalTab(tab);
+    if (tab !== 'audio-first') onTabChange(tab);
+  };
 
   // 비주얼 스타일
   const [visualStyleId, setVisualStyleId] = useState<VisualStyleId>(
@@ -59,12 +76,13 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [styleStrength, setStyleStrength] = useState(DEFAULT_REFERENCE_IMAGES.styleStrength);
   const [characterDescription, setCharacterDescription] = useState<string>(''); // Gemini Vision 자동 추출
 
-  // 리셋 시 캐릭터 레퍼런스 이미지 초기화
+  // 리셋 시 캐릭터 레퍼런스 이미지 + 레퍼런스 영상 초기화
   useEffect(() => {
     if (resetKey === undefined || resetKey === 0) return;
     setCharacterRefImages([]);
     setStyleRefImages([]);
     setCharacterDescription('');
+    setRefVideoAnalysis('');
   }, [resetKey]);
 
   // 이미지 설정
@@ -72,6 +90,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [videoModelId, setVideoModelId] = useState<VideoModelId>(
     () => (localStorage.getItem('heaven_video_model') as VideoModelId) || DEFAULT_VIDEO_MODEL
   );
+  const [videoEnabled, setVideoEnabled] = useState(() => localStorage.getItem('heaven_video_enabled') !== 'false');
   const [imageTextMode, setImageTextMode] = useState<string>('none');
 
   // 포맷
@@ -151,10 +170,96 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const [autoRunMode, setAutoRunMode] = useState(false);
   const [writingGuide, setWritingGuide] = useState(localStorage.getItem('heaven_writing_guide') || '');
   const [showWritingGuide, setShowWritingGuide] = useState(false);
+
+  // ── 대본 구조 설계 (블루프린트) ───────────────────────────────────────────
+  const [scriptBlueprint, setScriptBlueprint] = useState(localStorage.getItem('heaven_script_blueprint') || '');
+  const [showBlueprint, setShowBlueprint] = useState(false);
+  const BLUEPRINT_PRESETS = [
+    { label: '야담/공포', value: `초반 후킹 (1분): 현재 상황에서 시작 — 충격적이고 소름 돋는 장면으로 바로 시작. 인사말/설명 없이 사건 한복판에서 시작.\n발단 (3분): 주인공과 배경 소개. 평범한 일상 속 이상한 조짐.\n전개 (10분): 갈등 심화. 점점 늘어나는 공포와 긴장감. 등장인물 감정선 집중.\n절정 (5분): 진실이 드러나는 반전. 시청자가 예상 못한 충격.\n결말 (1분): 여운 있는 마무리. 소름 돋는 마지막 한 마디.` },
+    { label: '역사/다큐', value: `인트로 훅 (1분): 현재와 연결되는 충격적 사실로 시작.\n역사 배경 (5분): 시대 상황과 주요 인물 소개.\n핵심 사건 (10분): 사건 전개를 드라마틱하게. 인물 감정 중심.\n반전/비화 (3분): 교과서에 없는 충격적 뒷이야기.\n현재와의 연결 (1분): 이 역사가 지금 우리에게 주는 교훈.` },
+    { label: '경제/투자', value: `충격 훅 (1분): 대부분이 모르는 돈 관련 충격 사실로 시작.\n문제 제시 (3분): 왜 이것이 중요한지, 모르면 어떤 손해를 보는지.\n핵심 내용 (10분): 3~5가지 핵심 포인트. 각 포인트에 실제 사례와 수치 포함.\n실천 방법 (4분): 지금 당장 할 수 있는 구체적 행동.\n마무리 (2분): 핵심 요약 + 행동 촉구.` },
+    { label: '심리/감성', value: `공감 훅 (1분): "혹시 이런 경험 있으신가요?" 강한 공감으로 시작.\n현상 설명 (4분): 왜 이런 감정/행동이 생기는지 심리학적 설명.\n사례 (8분): 실제 사례 2~3가지. 독자가 자신을 발견할 수 있게.\n해결책 (5분): 심리학 기반 실천 가능한 조언.\n마무리 (2분): 따뜻한 위로와 격려.` },
+  ];
+
+  // ── 글쓰기 프로필 (Gems) ──────────────────────────────────────────────────
+  interface WritingProfile { id: string; name: string; emoji: string; description: string; prompt: string; }
+  const DEFAULT_WRITING_PROFILES: WritingProfile[] = [
+    { id: 'horror', name: '공포/미스터리', emoji: '👻', description: '소름 돋는 반전, 몰입감 있는 공포 문체',
+      prompt: '반말 사용 필수. 공포스럽고 몰입감 있는 문체로 작성. 각 씬은 짧고 임팩트 있게. 마지막 씬은 반드시 소름 돋는 반전으로 마무리. 시청자가 혼자 보기 무서울 정도의 분위기를 만들어라. 지문 없이 나레이션만으로 장면을 생생하게 묘사. 긴장감을 위해 짧은 문장을 자주 활용 ("그 순간이었다.", "문이 열렸다." 등).' },
+    { id: 'history', name: '역사 스토리텔러', emoji: '📜', description: '흥미로운 이야기체, 인물 중심 서술',
+      prompt: '흥미로운 이야기체 서술. 역사적 사실 기반, 현재와의 연관성 언급. 인물 중심으로 감정 이입이 되도록 작성. "당신이 그 시대에 있었다면..." 식으로 시청자를 현장에 끌어들여라. 반말/존댓말 혼용 가능하나 생동감 있게. 교과서 느낌 절대 금지 — 친구에게 흥미로운 이야기 들려주듯 써라.' },
+    { id: 'economy', name: '경제 분석가', emoji: '📈', description: '숫자/수치 중심, 실생활 예시로 쉽게',
+      prompt: '친근하고 이해하기 쉬운 말투. 숫자와 수치를 반드시 포함 (예: "지난 10년간 38% 상승"). 어려운 경제 개념은 반드시 실생활 예시로 풀어서 설명. 핵심 포인트는 3가지로 간결하게 정리. 시청자가 "아, 이래서 그렇구나!" 하는 깨달음의 순간을 만들어라. 지나치게 전문적인 용어 사용 시 바로 괄호 안에 쉬운 설명 추가.' },
+    { id: 'science', name: '과학 해설자', emoji: '🔭', description: '경이로움 자극, 쉬운 비유, 규모감',
+      prompt: '경이로움과 설렘을 자극하는 문체. 어려운 개념은 반드시 일상적 비유로 설명 (예: "빛의 속도는 서울-부산을 1초에 500번 왕복하는 것과 같다"). 숫자로 규모감을 표현. "믿기 어렵겠지만", "과학자들도 놀란" 같은 표현으로 흥미 유발. 존댓말 사용, 친근하고 열정적인 톤.' },
+    { id: 'psychology', name: '심리 상담사', emoji: '🧠', description: '공감, 따뜻한 말투, 자기 돌아보기',
+      prompt: '공감하는 따뜻하고 부드러운 말투. 독자가 자기 자신을 돌아볼 수 있도록 일상 속 사례로 설명. "혹시 이런 경험 있으신가요?", "많은 분들이 이런 감정을 느낍니다" 식으로 공감대 형성. 심리학 용어는 반드시 쉽게 풀어서. 마지막은 따뜻한 위로나 실천 가능한 조언으로 마무리. 존댓말 사용.' },
+    { id: 'comedy', name: '유머/썰 풀기', emoji: '😂', description: '반말, 구어체, 과장된 리액션',
+      prompt: '반말 사용 필수. 썰 풀듯이 구어체로 자연스럽게 작성. 과장된 표현과 리액션 적극 활용 ("진짜 미쳤다", "이게 말이 돼?", "개웃김"). 상황을 생생하게 묘사해서 독자가 상상하며 웃을 수 있게. 예상치 못한 반전으로 마무리. 진지한 교훈이나 결말 절대 금지. 친구한테 재밌는 썰 풀어주는 느낌으로.' },
+    { id: 'news', name: '뉴스 앵커', emoji: '📰', description: '객관적, 핵심 팩트 중심, 간결',
+      prompt: '중립적이고 객관적인 시각. 핵심 팩트 중심으로 간결하게 전달. 각 씬은 "누가, 무엇을, 왜" 한 줄로 정리 가능해야 함. 감정적 표현 최소화, 사실 전달에 집중. 마지막에는 "이 이슈가 왜 중요한지" 한 줄 설명으로 마무리. 존댓말 사용, 신뢰감 있는 톤.' },
+    { id: 'health', name: '건강/의학 전문가', emoji: '💊', description: '신뢰감, 의학적 사실, 실천 조언',
+      prompt: '신뢰감 있고 권위 있는 말투. 의학적 사실과 연구 결과 기반. 어려운 의학 용어는 반드시 쉽게 풀어서 설명. 실천 가능한 구체적 조언 포함 (예: "하루 30분, 주 3회"). 공포심 자극은 적절히, 해결책도 함께 제시. 마지막은 "전문의 상담을 권장합니다" 같은 안전 문구로 마무리. 존댓말 사용.' },
+  ];
+
+  const loadWritingProfiles = (): WritingProfile[] => {
+    try {
+      const saved = localStorage.getItem('heaven_writing_profiles');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_WRITING_PROFILES;
+  };
+  const [writingProfiles, setWritingProfiles] = useState<WritingProfile[]>(loadWritingProfiles);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(localStorage.getItem('heaven_active_writing_profile'));
+  const [showProfilePanel, setShowProfilePanel] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<WritingProfile | null>(null);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+
+  const saveWritingProfiles = (profiles: WritingProfile[]) => {
+    setWritingProfiles(profiles);
+    localStorage.setItem('heaven_writing_profiles', JSON.stringify(profiles));
+  };
+
+  const selectProfile = (profile: WritingProfile | null) => {
+    const id = profile?.id ?? null;
+    setActiveProfileId(id);
+    if (id) localStorage.setItem('heaven_active_writing_profile', id);
+    else localStorage.removeItem('heaven_active_writing_profile');
+    const prompt = profile?.prompt ?? '';
+    setWritingGuide(prompt);
+    localStorage.setItem('heaven_writing_guide', prompt);
+  };
+
+  const deleteProfile = (id: string) => {
+    const updated = writingProfiles.filter(p => p.id !== id);
+    saveWritingProfiles(updated);
+    if (activeProfileId === id) selectProfile(null);
+  };
+
+  const saveEditingProfile = () => {
+    if (!editingProfile || !editingProfile.name.trim() || !editingProfile.prompt.trim()) return;
+    const existing = writingProfiles.find(p => p.id === editingProfile.id);
+    let updated: WritingProfile[];
+    if (existing) {
+      updated = writingProfiles.map(p => p.id === editingProfile.id ? editingProfile : p);
+    } else {
+      updated = [...writingProfiles, editingProfile];
+    }
+    saveWritingProfiles(updated);
+    // 새로 만든 프로필이거나 현재 활성 프로필을 수정한 경우 → 자동 활성화
+    if (isCreatingProfile || activeProfileId === editingProfile.id) {
+      selectProfile(editingProfile);
+    }
+    setEditingProfile(null);
+    setIsCreatingProfile(false);
+  };
+
+  const activeProfile = writingProfiles.find(p => p.id === activeProfileId) ?? null;
   const [isSequentialRunning, setIsSequentialRunning] = useState(false);
   const sequentialQueueRef = useRef<string[]>([]);
   const sequentialIndexRef = useRef(0);
   const prevStepRef = useRef(step);
+  const pendingNextTopicRef = useRef(false);
 
   // 프로젝트
   const [projects, setProjects] = useState<ProjectSettings[]>([]);
@@ -166,6 +271,11 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const characterFileInputRef = useRef<HTMLInputElement>(null);
   const styleFileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // 레퍼런스 채널
+  const [refChannelUrl, setRefChannelUrl] = useState<string>(localStorage.getItem('heaven_ref_channel') || '');
+  const [refVideoAnalysis, setRefVideoAnalysis] = useState<string>('');
+  const [isAnalyzingChannel, setIsAnalyzingChannel] = useState(false);
 
   useEffect(() => {
     const savedVoiceId = getVoiceSetting(CONFIG.STORAGE_KEYS.ELEVENLABS_VOICE_ID) || '';
@@ -195,13 +305,17 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
     '종교/영성/철학': '깊이 있고 사려깊은 문체, 다양한 관점 존중, 삶의 의미와 연결',
     '연예/문화': '가볍고 흥미로운 말투, 재미있는 에피소드 중심, 독자가 알면 놀랄 비하인드 스토리',
     '스포츠': '역동적이고 활기찬 문체, 경기 장면을 생생하게 묘사, 선수의 인간적인 면 부각',
+    '유머/웃긴영상': '반말 사용 필수, 썰 풀듯이 구어체로 자연스럽게, 과장된 표현과 리액션 적극 활용("진짜 미쳤다", "이게 말이 돼?", "완전 개웃김"), 상황을 생생하게 묘사해서 독자가 상상하며 웃을 수 있게, 예상치 못한 반전으로 마무리, 절대 인간관계 교훈이나 진지한 결말 금지',
+    '영화/드라마/애니': '영화/드라마 팬처럼 열정적이고 생생한 말투, 핵심 장면 묘사 중심, 스포 없이 궁금증 유발, 왜 봐야 하는지 감정적으로 어필',
+    '쇼핑/제품리뷰': '솔직하고 직접적인 말투, 장단점 명확히, 실제 사용 경험처럼 생생하게, 가격 대비 가치 강조, 살지 말지 결론 명확하게',
   };
 
   useEffect(() => {
     if (!selectedCategory) return;
+    // 활성 프로필이 있으면 카테고리 기본 지침이 덮어쓰지 않음
+    if (activeProfileId) return;
     const saved = localStorage.getItem(`${CONFIG.STORAGE_KEYS.CATEGORY_GUIDE_PREFIX}${selectedCategory}`);
     setWritingGuide(saved !== null ? saved : (CATEGORY_DEFAULT_GUIDES[selectedCategory] || ''));
-    setShowWritingGuide(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
@@ -223,29 +337,52 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualScript, aspectRatio, activeTab]);
 
-  // 순차 생성: step이 COMPLETED로 바뀔 때 다음 주제 자동 실행
+  // 순차 생성 헬퍼: 다음 주제 실행
+  const triggerNextTopic = useCallback(() => {
+    const idx = sequentialIndexRef.current;
+    const queue = sequentialQueueRef.current;
+    if (idx < queue.length) {
+      sequentialIndexRef.current = idx + 1;
+      setTimeout(() => {
+        const nextTopic = queue[idx];
+        setTopic(nextTopic);
+        const durSq = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+        const tMinSq = durSq > 0 ? durSq : undefined;
+        onGenerate(nextTopic, { character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount || (tMinSq ? tMinSq * 7 : 0), true, true, refVideoAnalysis || undefined, selectedCategory || undefined, tMinSq, scriptBlueprint || undefined);
+      }, 2000);
+    } else {
+      setIsSequentialRunning(false);
+      sequentialQueueRef.current = [];
+      sequentialIndexRef.current = 0;
+      pendingNextTopicRef.current = false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneCount, characterRefImages, styleRefImages, characterStrength, styleStrength, characterDescription, refVideoAnalysis]);
+
+  // 순차 생성: step이 COMPLETED로 바뀔 때
   useEffect(() => {
     const prev = prevStepRef.current;
     prevStepRef.current = step;
     if (!isSequentialRunning) return;
     if (prev !== GenerationStep.COMPLETED && step === GenerationStep.COMPLETED) {
-      const idx = sequentialIndexRef.current;
-      const queue = sequentialQueueRef.current;
-      if (idx < queue.length) {
-        sequentialIndexRef.current = idx + 1;
-        setTimeout(() => {
-          const nextTopic = queue[idx];
-          setTopic(nextTopic);
-          onGenerate(nextTopic, { characterImages: characterRefImages, styleImages: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount, false, false, true);
-        }, 2500);
+      if (isVideoGenerating) {
+        pendingNextTopicRef.current = true; // 영상 렌더링 끝나면 실행
       } else {
-        setIsSequentialRunning(false);
-        sequentialQueueRef.current = [];
-        sequentialIndexRef.current = 0;
+        triggerNextTopic();
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // 순차 생성: 영상 렌더링 완료 후 대기 중인 다음 주제 실행
+  useEffect(() => {
+    if (!isSequentialRunning || !pendingNextTopicRef.current) return;
+    if (!isVideoGenerating) {
+      pendingNextTopicRef.current = false;
+      triggerNextTopic();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVideoGenerating]);
 
   const loadVoices = useCallback(async (apiKey?: string) => {
     const key = apiKey || elApiKey;
@@ -261,6 +398,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   }, []);
 
   const PREVIEW_TEXT = "안녕하세요. 테스트 목소리입니다.";
+  // 세션 단위 TTS 미리듣기 캐시 — 같은 음성을 여러 번 클릭해도 API 1회만 소모
+  const geminiPreviewCacheRef = useRef<Record<string, string>>({});
 
   const playElevenLabsPreview = async (voiceId: string, voiceName: string) => {
     if (!elApiKey || elApiKey.length < 10) { alert('ElevenLabs API Key가 없습니다.'); return; }
@@ -285,7 +424,12 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
     if (playingGeminiVoiceId === voiceId) { audioRef.current?.pause(); audioRef.current = null; setPlayingGeminiVoiceId(null); return; }
     audioRef.current?.pause(); setPlayingGeminiVoiceId(voiceId);
     try {
-      const base64 = await generateGeminiTtsPreview(PREVIEW_TEXT, voiceId);
+      // 캐시에 있으면 API 호출 없이 재사용
+      let base64 = geminiPreviewCacheRef.current[voiceId];
+      if (!base64) {
+        base64 = await generateGeminiTtsPreview(PREVIEW_TEXT, voiceId) ?? '';
+        if (base64) geminiPreviewCacheRef.current[voiceId] = base64;
+      }
       if (!base64) throw new Error('no audio');
       const url = pcmBase64ToWavUrl(base64);
       const audio = new Audio(url);
@@ -333,26 +477,56 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
 
   const buildRefImages = useCallback((): ReferenceImages => ({ character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }), [characterRefImages, styleRefImages, characterStrength, styleStrength, characterDescription]);
 
+  // 채널 URL 엔터 또는 분석 트리거
+  const runChannelAnalysis = useCallback(async (url: string) => {
+    if (!url.trim() || isAnalyzingChannel) return;
+    setRefVideoAnalysis('');
+    setIsAnalyzingChannel(true);
+    try {
+      const analysis = await analyzeReferenceChannel(url.trim());
+      setRefVideoAnalysis(analysis);
+    } catch (e: any) {
+      console.warn('[ChannelAnalysis]', e);
+    } finally {
+      setIsAnalyzingChannel(false);
+    }
+  }, [isAnalyzingChannel]);
+
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault(); if (isProcessing) return;
     const refImages = buildRefImages();
-    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, sceneCount, false, false, autoRunMode); }
-    else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, sceneCount); }
-  }, [isProcessing, activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual, autoRunMode]);
+    const rvCtx = refVideoAnalysis || undefined;
+    const dur = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+    const tMin = dur > 0 ? dur : undefined;
+    // sceneCount=0이면 분 수 기반 자동 계산 (7씬/분)
+    const effCount = sceneCount || (tMin ? tMin * 7 : 0);
+    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, effCount, autoRunMode, false, rvCtx, selectedCategory || undefined, tMin, scriptBlueprint || undefined); }
+    else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, effCount, false, false, rvCtx); }
+  }, [isProcessing, activeTab, topic, manualScript, sceneCount, longformDuration, shortformDuration, aspectRatio, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual, autoRunMode, refVideoAnalysis, selectedCategory]);
 
-  const handleImagesOnly = useCallback(() => {
-    if (isProcessing) return;
+  const handleFullAuto = useCallback(() => {
+    console.log('[FullAuto] clicked, tab:', activeTab, 'topic:', topic, 'manual:', manualScript?.slice(0, 20));
     const refImages = buildRefImages();
-    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, sceneCount, true, false); }
-    else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, sceneCount, true, false); }
-  }, [isProcessing, activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual]);
+    const rvCtx = refVideoAnalysis || undefined;
+    if (activeTab === 'auto') {
+      if (!topic.trim() && !rvCtx) {
+        alert('주제를 입력하거나 레퍼런스 채널을 분석해주세요.');
+        return;
+      }
+      const effectiveTopic = topic.trim() || '레퍼런스 채널 스타일로 자동 생성';
+      const dur2 = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+      const tMin2 = dur2 > 0 ? dur2 : undefined;
+      const effCount2 = sceneCount || (tMin2 ? tMin2 * 7 : 0);
+      onGenerate(effectiveTopic, refImages, null, effCount2, true, true, rvCtx, selectedCategory || undefined, tMin2, scriptBlueprint || undefined);
+    } else {
+      if (!manualScript.trim()) {
+        alert('대본을 먼저 입력해주세요.');
+        return;
+      }
+      onGenerate("Manual Script Input", refImages, manualScript, sceneCount, false, true, rvCtx);
+    }
+  }, [activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, refVideoAnalysis, selectedCategory]);
 
-  const handleAudioOnly = useCallback(() => {
-    if (isProcessing) return;
-    const refImages = buildRefImages();
-    if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, sceneCount, false, true); }
-    else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, sceneCount, false, true); }
-  }, [isProcessing, activeTab, topic, manualScript, sceneCount, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual]);
 
   const handleCharacterImageChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files; if (!files) return;
@@ -549,19 +723,106 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
 
               {/* 탭 */}
               <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/[0.07]">
-                <button type="button" onClick={() => onTabChange('auto')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'auto' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                <button type="button" onClick={() => handleLocalTabChange('auto')}
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${localTab === 'auto' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   주제 자동생성
                 </button>
-                <button type="button" onClick={() => onTabChange('manual')}
-                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${activeTab === 'manual' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                <button type="button" onClick={() => handleLocalTabChange('manual')}
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${localTab === 'manual' ? 'bg-blue-600/20 border border-blue-500/50 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
                   수동 대본
+                </button>
+                <button type="button" onClick={() => handleLocalTabChange('audio-first')}
+                  className={`flex-1 py-3 rounded-lg text-base font-bold transition-all ${localTab === 'audio-first' ? 'bg-purple-600/20 border border-purple-500/50 text-purple-200 shadow-[0_0_10px_rgba(168,85,247,0.35)]' : 'text-white/40 hover:text-white/70 border border-transparent'}`}>
+                  음성으로 시작
                 </button>
               </div>
 
               {/* 입력 영역 */}
               <form onSubmit={handleSubmit} className="flex flex-col gap-5 flex-1">
-                {activeTab === 'auto' ? (
+                {/* 오디오-퍼스트 탭 콘텐츠 */}
+                {localTab === 'audio-first' && (
+                  <div className="flex flex-col gap-4">
+                    {/* 파일 선택 영역 */}
+                    {!pendingAudioFile ? (
+                      <div
+                        onClick={() => audioFileInputRef.current?.click()}
+                        onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.currentTarget.setAttribute('data-drag', 'true'); }}
+                        onDragLeave={(e: React.DragEvent<HTMLDivElement>) => { e.currentTarget.removeAttribute('data-drag'); }}
+                        onDrop={(e: React.DragEvent<HTMLDivElement>) => {
+                          e.preventDefault();
+                          e.currentTarget.removeAttribute('data-drag');
+                          const file = e.dataTransfer.files?.[0];
+                          if (file && file.type.startsWith('audio/')) setPendingAudioFile(file);
+                        }}
+                        className="flex flex-col items-center justify-center gap-4 p-10 rounded-2xl border-2 border-dashed border-purple-500/40 bg-purple-900/10 cursor-pointer hover:border-purple-400/70 hover:bg-purple-900/20 transition-all [&[data-drag]]:border-purple-400 [&[data-drag]]:bg-purple-900/30"
+                      >
+                        <svg className="w-12 h-12 text-purple-400/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                        </svg>
+                        <div className="text-center">
+                          <p className="text-white/80 font-bold text-lg">음성 파일 업로드</p>
+                          <p className="text-white/40 text-sm mt-1">클릭하거나 파일을 여기에 드래그하세요</p>
+                          <p className="text-white/30 text-xs mt-1">MP3, WAV, M4A, AAC 지원</p>
+                        </div>
+                      </div>
+                    ) : (
+                      /* 파일 선택됨 → 세팅 후 시작 */
+                      <div className="flex flex-col gap-3 p-5 rounded-2xl border border-purple-500/40 bg-purple-900/10">
+                        {/* 선택된 파일 */}
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.05]">
+                          <svg className="w-5 h-5 text-purple-400 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                          </svg>
+                          <span className="text-white/80 text-sm font-bold truncate flex-1">{pendingAudioFile.name}</span>
+                          <button type="button" onClick={() => setPendingAudioFile(null)} className="text-white/30 hover:text-white/70 text-xs">✕</button>
+                        </div>
+                        {/* 대본 입력 (선택) — 롱폼 JSON 안정성 대폭 향상 */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-purple-300/70 font-bold">대본 입력 <span className="text-white/30 font-normal">(선택 — 입력 시 롱폼 안정성 향상)</span></label>
+                          <textarea
+                            value={audioScriptText}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAudioScriptText(e.target.value)}
+                            placeholder="대본이 있으면 여기에 붙여넣으세요. AI가 타임스탬프만 정렬하므로 JSON 파싱 오류가 사라집니다."
+                            rows={5}
+                            className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-sm text-white/80 placeholder-white/20 focus:outline-none focus:border-purple-400/60 resize-none"
+                          />
+                        </div>
+                        <p className="text-white/30 text-xs text-center">세팅을 완료한 후 아래 버튼을 누르세요</p>
+                        {/* 시작 버튼 */}
+                        <button
+                          type="button"
+                          disabled={isProcessing}
+                          onClick={() => {
+                            if (onAudioFirstGenerate) {
+                              // sceneCount=0이면 longformDuration 기반 자동 계산 (8씬/분)
+                              const SCENES_PER_MIN = 8;
+                              const dur = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+                              const effectiveCount = sceneCount || dur * SCENES_PER_MIN;
+                              onAudioFirstGenerate(pendingAudioFile, buildRefImages(), effectiveCount, audioScriptText.trim() || undefined);
+                              setPendingAudioFile(null);
+                              setAudioScriptText('');
+                            }
+                          }}
+                          className="w-full py-4 rounded-xl bg-purple-600/40 hover:bg-purple-600/60 disabled:opacity-50 text-white font-black text-lg transition-all border border-purple-400/50 shadow-[0_0_20px_rgba(168,85,247,0.35)]"
+                        >
+                          {isProcessing ? '분석 중...' : '분석 시작'}
+                        </button>
+                      </div>
+                    )}
+                    <input
+                      ref={audioFileInputRef}
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const file = e.target.files?.[0];
+                        if (file) setPendingAudioFile(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+                )}
+                {localTab === 'auto' ? (
                   <div className="flex flex-col gap-3">
                     {/* 직접 입력 */}
                     <div className="bg-black/50 border border-blue-500/25 rounded-2xl overflow-hidden">
@@ -583,6 +844,9 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         { id: '심리/정신건강', label: '심리', sub: 'PSYCHOLOGY' },
                         { id: '연예/문화', label: '연예', sub: 'ENTERTAIN' },
                         { id: '스포츠', label: '스포츠', sub: 'SPORTS' },
+                        { id: '유머/웃긴영상', label: '유머', sub: 'HUMOR' },
+                        { id: '영화/드라마/애니', label: '영화/드라마', sub: 'MOVIE' },
+                        { id: '쇼핑/제품리뷰', label: '쇼핑/리뷰', sub: 'SHOPPING' },
                       ];
                       const allSelected = suggestedTopics.length > 0 && selectedTopics.size === suggestedTopics.length;
                       return (
@@ -592,7 +856,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                             {CATEGORIES.map(cat => (
                               <button key={cat.id} type="button"
                                 onClick={() => {
-                                  setSelectedCategory(cat.id);
+                                  setSelectedCategory(prev => prev === cat.id ? '' : cat.id);
                                   setSuggestedTopics([]);
                                   setSelectedTopics(new Set());
                                 }}
@@ -711,18 +975,19 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                                       if (queue.length === 0) return;
                                       sequentialQueueRef.current = queue.slice(1);
                                       sequentialIndexRef.current = 0;
+                                      pendingNextTopicRef.current = false;
                                       setIsSequentialRunning(true);
                                       const first = queue[0];
                                       setTopic(first);
-                                      onGenerate(first, { characterImages: characterRefImages, styleImages: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount, false, false, true);
+                                      onGenerate(first, { character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount, true, true, refVideoAnalysis || undefined, selectedCategory || undefined);
                                     }}
                                     className="px-3 py-1 rounded-lg bg-green-500/20 border border-green-500/40 text-green-300 text-[10px] font-bold hover:bg-green-500/30 transition-all">
-                                    {selectedTopics.size}개 순차 생성
+                                    🚀 {selectedTopics.size}개 전체 자동 생성
                                   </button>
                                 )}
                                 {isSequentialRunning && (
                                   <span className="text-[10px] text-green-400 animate-pulse font-bold">
-                                    순차 생성 중... ({sequentialQueueRef.current.length - sequentialIndexRef.current + 1}개 남음)
+                                    {isVideoGenerating ? '🎬 렌더링 중...' : `⚙️ ${sequentialQueueRef.current.length - sequentialIndexRef.current + 1}개 남음`}
                                   </span>
                                 )}
                               </div>
@@ -755,13 +1020,18 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                       );
                     })()}
 
-                    {/* 글쓰기 지침 + 자동실행 토글 */}
+                    {/* 글쓰기 프로필 + 자동실행 토글 */}
                     <div className="flex items-center gap-2">
                       <button type="button"
-                        onClick={() => setShowWritingGuide((v: boolean) => !v)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/50 hover:text-white/80 text-xs font-bold transition-colors">
-                        ✍️ 글쓰기 지침 {showWritingGuide ? '▲' : '▼'}
+                        onClick={() => { setShowProfilePanel((v: boolean) => !v); setEditingProfile(null); setIsCreatingProfile(false); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${activeProfile ? 'bg-violet-600/20 border-violet-500/50 text-violet-300' : 'bg-white/[0.04] border-white/[0.08] text-white/50 hover:text-white/80'}`}>
+                        <span>{activeProfile ? `${activeProfile.emoji} ${activeProfile.name}` : '✍️ 글쓰기 프로필'}</span>
+                        <span className="text-white/30">{showProfilePanel ? '▲' : '▼'}</span>
                       </button>
+                      {activeProfile && (
+                        <button type="button" onClick={() => selectProfile(null)}
+                          className="text-xs text-white/30 hover:text-white/60 transition-colors px-1">✕</button>
+                      )}
                       <label className="flex items-center gap-2 ml-auto cursor-pointer select-none">
                         <span className="text-xs text-white/50 font-bold">전체 자동 실행</span>
                         <div onClick={() => setAutoRunMode((v: boolean) => !v)}
@@ -770,22 +1040,130 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         </div>
                       </label>
                     </div>
-                    {showWritingGuide && (
-                      <textarea
-                        value={writingGuide}
-                        onChange={(e) => {
-                          setWritingGuide(e.target.value);
-                          localStorage.setItem('heaven_writing_guide', e.target.value);
-                          if (selectedCategory) localStorage.setItem(`${CONFIG.STORAGE_KEYS.CATEGORY_GUIDE_PREFIX}${selectedCategory}`, e.target.value);
-                        }}
-                        placeholder={"AI 글쓰기 지침 (예: 반말 사용, 호기심을 자극하는 문체, 각 씬은 2문장 이내)"}
-                        className="w-full bg-black/50 border border-violet-500/30 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-violet-400"
-                        rows={3}
-                      />
+
+                    {/* 프로필 패널 */}
+                    {showProfilePanel && (
+                      <div className="bg-black/60 border border-violet-500/20 rounded-2xl p-3 space-y-2">
+                        {/* 편집/생성 모드 */}
+                        {editingProfile ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <input value={editingProfile.emoji}
+                                onChange={e => setEditingProfile({ ...editingProfile, emoji: e.target.value })}
+                                className="w-12 bg-black/50 border border-violet-500/30 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-violet-400"
+                                placeholder="😊" maxLength={2} />
+                              <input value={editingProfile.name}
+                                onChange={e => setEditingProfile({ ...editingProfile, name: e.target.value })}
+                                className="flex-1 bg-black/50 border border-violet-500/30 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-400"
+                                placeholder="프로필 이름 (예: 역사 스토리텔러)" />
+                            </div>
+                            <input value={editingProfile.description}
+                              onChange={e => setEditingProfile({ ...editingProfile, description: e.target.value })}
+                              className="w-full bg-black/50 border border-violet-500/30 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-violet-400"
+                              placeholder="한 줄 설명 (예: 소름 돋는 반전, 몰입감 있는 공포 문체)" />
+                            <textarea value={editingProfile.prompt}
+                              onChange={e => setEditingProfile({ ...editingProfile, prompt: e.target.value })}
+                              className="w-full bg-black/50 border border-violet-500/30 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 resize-none focus:outline-none focus:border-violet-400"
+                              rows={5}
+                              placeholder={"AI에게 전달할 글쓰기 지침을 상세하게 작성하세요.\n예: 반말 사용 필수. 공포스럽고 몰입감 있는 문체. 각 씬은 짧고 임팩트 있게. 마지막은 소름 돋는 반전으로 마무리..."} />
+                            <div className="flex gap-2 justify-end">
+                              <button type="button" onClick={() => { setEditingProfile(null); setIsCreatingProfile(false); }}
+                                className="px-3 py-1.5 text-xs text-white/40 hover:text-white/70 border border-white/10 rounded-lg transition-colors">취소</button>
+                              <button type="button" onClick={saveEditingProfile}
+                                disabled={!editingProfile.name.trim() || !editingProfile.prompt.trim()}
+                                className="px-4 py-1.5 text-xs font-bold text-white bg-violet-600/50 hover:bg-violet-600/70 border border-violet-500/40 rounded-lg transition-colors disabled:opacity-30">저장</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {/* 프로필 카드 목록 */}
+                            <div className="grid grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-0.5">
+                              {writingProfiles.map(profile => (
+                                <div key={profile.id}
+                                  onClick={() => { selectProfile(activeProfileId === profile.id ? null : profile); }}
+                                  className={`relative group cursor-pointer rounded-xl border px-3 py-2 transition-all ${activeProfileId === profile.id ? 'bg-violet-600/25 border-violet-400/60' : 'bg-white/[0.03] border-white/[0.07] hover:border-violet-500/30 hover:bg-violet-600/10'}`}>
+                                  <div className="flex items-start gap-1.5">
+                                    <span className="text-base leading-none mt-0.5">{profile.emoji}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-xs font-bold truncate ${activeProfileId === profile.id ? 'text-violet-200' : 'text-white/80'}`}>{profile.name}</div>
+                                      <div className="text-[10px] text-white/35 leading-tight mt-0.5 line-clamp-2">{profile.description}</div>
+                                    </div>
+                                  </div>
+                                  {/* 수정/삭제 버튼 */}
+                                  <div className="absolute top-1 right-1 hidden group-hover:flex gap-0.5">
+                                    <button type="button" onClick={e => { e.stopPropagation(); setEditingProfile(profile); setIsCreatingProfile(false); }}
+                                      className="w-5 h-5 flex items-center justify-center text-white/40 hover:text-blue-300 bg-black/60 rounded text-[10px] transition-colors">✎</button>
+                                    <button type="button" onClick={e => { e.stopPropagation(); deleteProfile(profile.id); }}
+                                      className="w-5 h-5 flex items-center justify-center text-white/40 hover:text-red-400 bg-black/60 rounded text-[10px] transition-colors">✕</button>
+                                  </div>
+                                  {activeProfileId === profile.id && (
+                                    <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-violet-400" />
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            {/* 새 프로필 추가 버튼 */}
+                            <button type="button"
+                              onClick={() => { setEditingProfile({ id: `custom_${Date.now()}`, name: '', emoji: '✨', description: '', prompt: '' }); setIsCreatingProfile(true); }}
+                              className="w-full py-1.5 text-xs text-white/40 hover:text-violet-300 border border-dashed border-white/10 hover:border-violet-500/40 rounded-xl transition-all flex items-center justify-center gap-1.5">
+                              + 새 프로필 만들기
+                            </button>
+                            {/* 활성 프로필 프롬프트 미리보기 */}
+                            {activeProfile && (
+                              <div className="bg-violet-900/10 border border-violet-500/15 rounded-xl px-3 py-2">
+                                <div className="text-[10px] text-violet-400/70 font-bold mb-1">적용 중인 지침</div>
+                                <div className="text-[11px] text-white/40 leading-relaxed line-clamp-3">{activeProfile.prompt}</div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
+
                     {autoRunMode && (
                       <div className="text-xs text-green-400/70 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
                         ✅ 전체 자동 실행: 대본 생성 후 이미지+오디오까지 자동으로 진행됩니다
+                      </div>
+                    )}
+
+                    {/* 대본 구조 설계 (블루프린트) */}
+                    <div>
+                      <button type="button"
+                        onClick={() => setShowBlueprint(v => !v)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${scriptBlueprint.trim() ? 'bg-amber-600/15 border-amber-500/40 text-amber-300' : 'bg-white/[0.04] border-white/[0.08] text-white/50 hover:text-white/80'}`}>
+                        📋 대본 구조 설계 {scriptBlueprint.trim() ? '(설정됨)' : ''} {showBlueprint ? '▲' : '▼'}
+                      </button>
+                    </div>
+                    {showBlueprint && (
+                      <div className="bg-black/50 border border-amber-500/20 rounded-2xl p-3 space-y-2">
+                        <p className="text-[11px] text-amber-400/60 leading-relaxed">
+                          각 섹션의 이름, 분량, 내용 지침을 작성하세요. 15분 초과 시 섹션별 분리 생성됩니다.<br/>
+                          형식: <span className="text-white/40">섹션명 (N분): 내용 설명</span>
+                        </p>
+                        {/* 프리셋 버튼 */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {BLUEPRINT_PRESETS.map(p => (
+                            <button key={p.label} type="button"
+                              onClick={() => { setScriptBlueprint(p.value); localStorage.setItem('heaven_script_blueprint', p.value); }}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-600/15 border border-amber-500/30 text-amber-300/80 hover:bg-amber-600/25 hover:text-amber-200 transition-colors">
+                              {p.label}
+                            </button>
+                          ))}
+                          {scriptBlueprint.trim() && (
+                            <button type="button"
+                              onClick={() => { setScriptBlueprint(''); localStorage.removeItem('heaven_script_blueprint'); }}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white/[0.04] border border-white/10 text-white/30 hover:text-red-400 transition-colors">
+                              초기화
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          value={scriptBlueprint}
+                          onChange={e => { setScriptBlueprint(e.target.value); localStorage.setItem('heaven_script_blueprint', e.target.value); }}
+                          rows={6}
+                          placeholder={"예:\n초반 후킹 (1분): 충격적인 사건으로 시작, 인사말 없이 바로\n발단 (3분): 주인공과 배경 소개\n전개 (10분): 갈등 심화, 감정선 집중\n절정 (5분): 반전과 진실\n결말 (1분): 여운 있는 마무리"}
+                          className="w-full bg-black/60 border border-amber-500/20 rounded-xl px-3 py-2.5 text-sm text-white/80 placeholder-white/20 resize-none focus:outline-none focus:border-amber-400/40"
+                        />
                       </div>
                     )}
                   </div>
@@ -853,11 +1231,14 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                       </button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="number" min={1} max={60}
+                      <input type="number" min={1} max={aspectRatio === '16:9' ? 180 : 300}
                         value={aspectRatio === '16:9' ? longformDuration : shortformDuration}
                         onChange={(e) => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) { aspectRatio === '16:9' ? changeLongformDuration(v) : changeShortformDuration(v); }}}
                         className="w-16 bg-black/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:border-red-500 focus:outline-none" />
                       <span className="text-sm text-white/40">{aspectRatio === '16:9' ? '분' : '초'}</span>
+                      {aspectRatio === '16:9' && longformDuration > 15 && (
+                        <span className="text-xs text-amber-400/70 font-bold">블루프린트 권장</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -865,8 +1246,10 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                 {/* 참조 이미지 (캐릭터 + 화풍) */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* 캐릭터 */}
-                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
-                    <p className="text-base font-bold text-slate-200 mb-1">캐릭터 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e: React.DragEvent) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files).filter((f: File) => f.type.startsWith('image/')); if (files.length) handleCharacterImageChange({ target: { files } } as any); }}>
+                    <p className="text-base font-bold text-slate-200 mb-1">캐릭터 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 · 클릭/드래그</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {characterRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-violet-500/50">
@@ -876,7 +1259,10 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         </div>
                       ))}
                       {characterRefImages.length < 5 && (
-                        <button type="button" onClick={() => characterFileInputRef.current?.click()}
+                        <button type="button"
+                          onClick={() => characterFileInputRef.current?.click()}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e: React.DragEvent) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files).filter((f: File) => f.type.startsWith('image/')); if (files.length) handleCharacterImageChange({ target: { files } } as any); }}
                           className="w-12 h-10 border-2 border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500 hover:border-violet-500 hover:text-violet-400 text-xl">+</button>
                       )}
                       <input type="file" ref={characterFileInputRef} onChange={handleCharacterImageChange} accept="image/*" className="hidden" multiple />
@@ -890,8 +1276,10 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                   </div>
 
                   {/* 화풍 */}
-                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]">
-                    <p className="text-base font-bold text-slate-200 mb-1">화풍 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 가능</span></p>
+                  <div className="bg-white/[0.02] border border-blue-500/20 rounded-xl p-4 shadow-[0_0_8px_rgba(59,130,246,0.06)]"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e: React.DragEvent) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files).filter((f: File) => f.type.startsWith('image/')); if (files.length) handleStyleImageChange({ target: { files } } as any); }}>
+                    <p className="text-base font-bold text-slate-200 mb-1">화풍 참조 <span className="text-xs text-slate-500 font-normal">최대 5개 · 클릭/드래그</span></p>
                     <div className="flex flex-wrap gap-2 items-center">
                       {styleRefImages.map((img, i) => (
                         <div key={i} className="relative group w-12 h-10 rounded overflow-hidden border border-fuchsia-500/50">
@@ -901,7 +1289,10 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                         </div>
                       ))}
                       {styleRefImages.length < 5 && (
-                        <button type="button" onClick={() => styleFileInputRef.current?.click()}
+                        <button type="button"
+                          onClick={() => styleFileInputRef.current?.click()}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e: React.DragEvent) => { e.preventDefault(); const files = Array.from(e.dataTransfer.files).filter((f: File) => f.type.startsWith('image/')); if (files.length) handleStyleImageChange({ target: { files } } as any); }}
                           className="w-12 h-10 border-2 border-dashed border-slate-600 rounded flex items-center justify-center text-slate-500 hover:border-fuchsia-500 hover:text-fuchsia-400 text-xl">+</button>
                       )}
                       <input type="file" ref={styleFileInputRef} onChange={handleStyleImageChange} accept="image/*" className="hidden" multiple />
@@ -915,20 +1306,59 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                   </div>
                 </div>
 
-                {/* 생성 버튼 */}
+                {/* 레퍼런스 채널 */}
+                <div className="bg-white/[0.02] border border-orange-500/25 rounded-xl p-4 shadow-[0_0_8px_rgba(249,115,22,0.06)]">
+                  <p className="text-base font-bold text-slate-200 mb-1">레퍼런스 채널 <span className="text-xs text-slate-500 font-normal">스타일 복제할 YouTube 채널</span></p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={refChannelUrl}
+                      onChange={(e) => { setRefChannelUrl(e.target.value); localStorage.setItem('heaven_ref_channel', e.target.value); setRefVideoAnalysis(''); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runChannelAnalysis(refChannelUrl); } }}
+                      placeholder="https://youtube.com/@채널명 — 엔터로 분석"
+                      disabled={isProcessing || isAnalyzingChannel}
+                      className="flex-1 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500/50 disabled:opacity-50"
+                    />
+                    {isAnalyzingChannel && <span className="w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
+                    {refVideoAnalysis && !isAnalyzingChannel && (
+                      <button type="button" onClick={() => setRefVideoAnalysis('')}
+                        className="text-xs text-slate-500 hover:text-red-400 transition-colors px-1 flex-shrink-0">✕</button>
+                    )}
+                  </div>
+                  {refVideoAnalysis && !isAnalyzingChannel && (
+                    <div className="mt-2 text-[11px] text-orange-200/70 bg-black/30 rounded-lg p-2 max-h-24 overflow-y-auto leading-relaxed whitespace-pre-wrap">
+                      {refVideoAnalysis}
+                    </div>
+                  )}
+                </div>
+
+                {/* 생성 버튼 (audio-first 탭에서는 숨김) */}
+                {localTab !== 'audio-first' && (<>
                 <div className="relative">
                   {/* 네온 바 */}
                   <div className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-red-500 to-transparent opacity-80" />
-                  <button type="submit" disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
+                  <button type="submit" disabled={isProcessing || (localTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
                     className="w-full relative bg-red-500/60 hover:bg-red-500/75 disabled:opacity-60 text-white font-black py-6 rounded-2xl transition-all text-2xl tracking-wide border border-red-300/60 hover:border-red-200/80 shadow-[0_0_35px_rgba(239,68,68,0.5)] hover:shadow-[0_0_55px_rgba(239,68,68,0.7)] disabled:shadow-none">
-                    {isProcessing ? '생성 중...' : activeTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
+                    {isProcessing ? '생성 중...' : localTab === 'auto' ? '대본 생성 시작' : '스토리보드 생성'}
                   </button>
                   {/* 하단 네온 바 */}
                   <div className="absolute -bottom-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-rose-400 to-transparent opacity-60" />
                 </div>
 
+                {/* 전체 자동 생성 버튼 */}
+                <button type="button" onClick={handleFullAuto}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl bg-green-500/20 hover:bg-green-500/35 text-white text-lg font-black transition-all border border-green-400/60 hover:border-green-300/80 shadow-[0_0_25px_rgba(34,197,94,0.35)] hover:shadow-[0_0_40px_rgba(34,197,94,0.55)]">
+                  {isProcessing ? (
+                    <><span className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />처리 중...</>
+                  ) : (localTab === 'auto' && !canSubmitAuto) ? (
+                    <>🚀 전체 자동 생성 + 렌더링 <span className="text-xs font-normal opacity-60">(주제 입력 필요)</span></>
+                  ) : (
+                    <>🚀 전체 자동 생성 + 렌더링</>
+                  )}
+                </button>
+
                 {/* 캐릭터 분석 버튼 (수동 대본 탭에서만) */}
-                {activeTab === 'manual' && onCharacterAnalyze && (
+                {localTab === 'manual' && onCharacterAnalyze && (
                   <button type="button"
                     onClick={() => onCharacterAnalyze("Manual Script Input", buildRefImages(), manualScript, sceneCount)}
                     disabled={isProcessing || isAnalyzingCharacters || !canSubmitManual}
@@ -947,16 +1377,7 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                   </button>
                 )}
 
-                <button type="button" onClick={handleImagesOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-blue-500/50 hover:border-blue-400/70 shadow-[0_0_18px_rgba(59,130,246,0.25)] hover:shadow-[0_0_28px_rgba(59,130,246,0.4)] disabled:shadow-none">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={2}/><circle cx="8.5" cy="8.5" r="1.5" strokeWidth={2}/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15l-5-5L5 21"/></svg>
-                  이미지만 생성
-                </button>
-                <button type="button" onClick={handleAudioOnly} disabled={isProcessing || (activeTab === 'auto' ? !canSubmitAuto : !canSubmitManual)}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 disabled:opacity-60 text-white text-base font-bold transition-all border border-purple-500/50 hover:border-purple-400/70 shadow-[0_0_18px_rgba(168,85,247,0.25)] hover:shadow-[0_0_28px_rgba(168,85,247,0.4)] disabled:shadow-none">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-                  오디오만 생성
-                </button>
+                </>)}
               </form>
             </div>
 
@@ -1042,8 +1463,15 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
 
                       {/* 오른쪽: 영상 모델 */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">영상 모델</p>
-                        <div className="space-y-1.5">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">영상 모델</p>
+                          <button type="button"
+                            onClick={() => { const v = !videoEnabled; setVideoEnabled(v); localStorage.setItem('heaven_video_enabled', String(v)); }}
+                            className={`relative w-9 h-5 rounded-full transition-colors overflow-hidden ${videoEnabled ? 'bg-orange-500' : 'bg-slate-600'}`}>
+                            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${videoEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                        <div className={`space-y-1.5 transition-opacity ${videoEnabled ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
                           {VIDEO_MODELS.map(m => (
                             <button key={m.id} type="button"
                               onClick={() => { setVideoModelId(m.id); localStorage.setItem('heaven_video_model', m.id); }}
@@ -1065,8 +1493,8 @@ const saveElSettings = () => { if (elVoiceId) setVoiceSetting(CONFIG.STORAGE_KEY
                     {/* 이미지 글씨 */}
                     <div className="p-3 rounded-xl border border-blue-500/60 shadow-[0_0_14px_rgba(59,130,246,0.3)]">
                       <p className="text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">이미지 글씨</p>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {([{ id: 'none', label: '없음' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {([{ id: 'none', label: '없음' }, { id: 'korean', label: '한글' }, { id: 'english', label: '영어' }, { id: 'numbers', label: '숫자' }, { id: 'auto', label: '자동' }] as const).map(({ id, label }) => (
                           <button key={id} type="button" onClick={() => selectImageTextMode(id)}
                             className={`py-2 rounded-xl text-sm font-bold transition-colors border ${imageTextMode === id ? 'bg-blue-600/20 text-blue-200 border-blue-500/60 shadow-[0_0_10px_rgba(59,130,246,0.4)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border-blue-500/30'}`}>
                             {label}

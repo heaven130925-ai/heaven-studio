@@ -68,17 +68,9 @@ export interface SubtitleWord {
   end: number;    // 끝 시간 (초)
 }
 
-// AI가 분리한 의미 단위 청크 (타이밍 매핑용)
-export interface MeaningChunk {
-  text: string;       // 청크 텍스트
-  startTime: number;  // 시작 시간 (초)
-  endTime: number;    // 끝 시간 (초)
-}
-
 export interface SubtitleData {
-  words: SubtitleWord[];
+  words: SubtitleWord[];  // ElevenLabs 단어별 타임스탬프 (있으면 정확한 싱크)
   fullText: string;
-  meaningChunks?: MeaningChunk[];  // AI가 분리한 의미 단위 청크 (타이밍 포함)
 }
 
 // 자막 설정 옵션
@@ -145,13 +137,13 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
 
 export interface GeneratedAsset extends ScriptScene {
   imageData: string | null;
-  audioData: string | null;
-  audioDuration: number | null;  // 실제 오디오 길이 (초) - SRT 싱크용
-  subtitleData: SubtitleData | null;  // 자막 타임스탬프 데이터
-  videoData: string | null;      // 애니메이션 영상 URL (앞 N개 씬만)
-  videoDuration: number | null;  // 영상 길이 (초) - 보통 4~5초 고정
+  audioData: string | null;           // per-scene 오디오 (base64)
+  audioDuration: number | null;       // 실제 오디오 길이 (초) - SRT 싱크용
+  subtitleData: SubtitleData | null;  // 자막 타임스탬프 데이터 (ElevenLabs)
+  videoData: string | null;           // 애니메이션 영상 URL
+  videoDuration: number | null;       // 영상 길이 (초)
   status: 'pending' | 'generating' | 'completed' | 'error';
-  zoomEffect?: ZoomEffect | null;  // null = 전역 설정 사용
+  zoomEffect?: ZoomEffect | null;     // null = 전역 설정 사용
 }
 
 export enum GenerationStep {

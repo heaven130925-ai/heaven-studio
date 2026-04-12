@@ -33,17 +33,12 @@ const ProjectGallery: React.FC<ProjectGalleryProps> = ({
   };
 
   const handleDelete = (id: string) => {
-    if (confirmDelete === id) {
-      onDelete(id);
-      setConfirmDelete(null);
-      if (selectedProject?.id === id) {
-        setSelectedProject(null);
-      }
-      onRefresh();
-    } else {
-      setConfirmDelete(id);
-      setTimeout(() => setConfirmDelete(null), 3000);
+    onDelete(id);
+    setConfirmDelete(null);
+    if (selectedProject?.id === id) {
+      setSelectedProject(null);
     }
+    onRefresh();
   };
 
   // 프로젝트 상세 보기
