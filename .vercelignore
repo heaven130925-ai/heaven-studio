@@ -1,2 +1,3 @@
 .agent
 node_modules
+.vercel/output
