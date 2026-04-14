@@ -19,12 +19,16 @@ import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
 import { getVoiceSetting } from './utils/voiceStorage';
+import { isYoutubeConnected, getChannelProfiles, isProfileValid, handleYoutubeOAuthCallback } from './services/youtubeService';
+import YouTubeUploadModal from './components/YouTubeUploadModal';
+import YouTubeAutoPanel from './components/YouTubeAutoPanel';
+import ImageBatchPanel from './components/ImageBatchPanel';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-type ViewMode = 'main' | 'gallery';
+type ViewMode = 'main' | 'gallery' | 'imagebatch';
 
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/heaven130925-ai/7094a8ac89c8438b922d5ad79da79a6b/raw';
 
@@ -74,6 +78,10 @@ const App: React.FC = () => {
   const [draftProject, setDraftProject] = useState<import('./types').SavedProject | null>(null);
   const [thumbnailEditorKey, setThumbnailEditorKey] = useState(0);
   const [showApiModal, setShowApiModal] = useState(false);
+  const [youtubeConnected, setYoutubeConnected] = useState(() => isYoutubeConnected());
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
+  const [showYoutubeAutoPanel, setShowYoutubeAutoPanel] = useState(false);
+  const lastVideoBlobRef = useRef<Blob | null>(null);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
   );
@@ -1397,6 +1405,7 @@ const App: React.FC = () => {
       if (result) {
         const filename = `heaven_ai_${suffix}_${timestamp}.mp4`;
         await saveFileToDir(result.videoBlob, filename);
+        lastVideoBlobRef.current = result.videoBlob;
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
       }
     } catch (error: any) {
@@ -1406,6 +1415,32 @@ const App: React.FC = () => {
     } finally {
       setIsVideoGenerating(false);
     }
+  };
+
+  // ── YouTube OAuth 콜백 처리 (앱 마운트 시 ?code= 파라미터 감지) ──────────
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('code')) {
+      handleYoutubeOAuthCallback().then(profile => {
+        if (profile) {
+          setYoutubeConnected(true);
+          setShowYoutubeAutoPanel(true); // 인증 완료 후 설정 패널 자동 열기
+        }
+      });
+    }
+  }, []);
+
+  // ── YouTube 핸들러 ────────────────────────────────────────────────────────
+  const handleYoutubeUpload = () => {
+    if (!lastVideoBlobRef.current) {
+      alert('먼저 영상을 렌더링해주세요.');
+      return;
+    }
+    if (!isYoutubeConnected()) {
+      setShowYoutubeAutoPanel(true);
+      return;
+    }
+    setShowYoutubeModal(true);
   };
 
   // 전체 자동화: 생성 완료 후 자동 렌더링
@@ -1528,6 +1563,17 @@ const App: React.FC = () => {
             )}
           </button>
           <button
+            onClick={() => setViewMode('imagebatch')}
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
+              viewMode === 'imagebatch'
+                ? 'text-purple-200 bg-purple-600/20 border-purple-400/70 shadow-[0_0_18px_rgba(168,85,247,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            이미지 배치
+          </button>
+          <button
             onClick={() => { setStoryboardTab('subtitle'); setShowStoryboard(true); }}
             className="px-5 py-2.5 text-base font-black rounded-xl transition-all border text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10 flex items-center gap-2"
           >
@@ -1540,6 +1586,35 @@ const App: React.FC = () => {
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
               {saveDirSet ? '저장 폴더 설정됨' : '저장 폴더'}
             </button>
+
+            {/* YouTube (숏폼 전용) */}
+            {aspectRatio === '9:16' && (
+              <div className="flex items-center gap-1">
+                {/* 설정 버튼 */}
+                <button
+                  onClick={() => setShowYoutubeAutoPanel(true)}
+                  title="YouTube 자동화 설정"
+                  className={`px-3 py-2 text-xs font-bold rounded-lg transition-all border flex items-center gap-1.5 ${
+                    youtubeConnected
+                      ? 'bg-red-600/20 border-red-500/40 text-red-400 hover:bg-red-600/30'
+                      : 'text-white/50 hover:text-red-300 bg-white/[0.05] hover:bg-red-600/10 border-white/[0.08] hover:border-red-500/30'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                  {youtubeConnected ? `${getChannelProfiles().filter(isProfileValid).length}채널 연결됨` : 'YouTube 설정'}
+                </button>
+                {/* 업로드 버튼 */}
+                {youtubeConnected && (
+                  <button
+                    onClick={handleYoutubeUpload}
+                    className="px-3 py-2 text-xs font-bold rounded-lg transition-all border bg-red-600/30 border-red-500/50 text-red-300 hover:bg-red-600/50 flex items-center gap-1.5"
+                  >
+                    업로드
+                  </button>
+                )}
+              </div>
+            )}
+
             <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               API 키
@@ -1554,6 +1629,9 @@ const App: React.FC = () => {
           <button onClick={handleOpenKeySelector} className="px-3 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg hover:bg-amber-400 transition-colors uppercase">API 키 설정</button>
         </div>
       )}
+
+      {/* 이미지 배치 뷰 */}
+      {viewMode === 'imagebatch' && <ImageBatchPanel />}
 
       {/* 갤러리 뷰 */}
       {viewMode === 'gallery' && (
@@ -1865,6 +1943,37 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* YouTube 자동화 설정 패널 */}
+      {showYoutubeAutoPanel && (
+        <YouTubeAutoPanel
+          onClose={() => {
+            setShowYoutubeAutoPanel(false);
+            setYoutubeConnected(isYoutubeConnected());
+          }}
+        />
+      )}
+
+      {/* YouTube 업로드 모달 */}
+      {showYoutubeModal && lastVideoBlobRef.current && (
+        <YouTubeUploadModal
+          videoBlob={lastVideoBlobRef.current}
+          defaultTitle={currentTopic || 'Heaven AI 생성 영상'}
+          onClose={() => setShowYoutubeModal(false)}
+          onDone={(url, scheduledAt) => {
+            setShowYoutubeModal(false);
+            if (scheduledAt) {
+              const d = new Date(scheduledAt);
+              const label = `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+              setProgressMessage(`⏰ YouTube 예약 완료! ${label} 공개 예정`);
+              alert(`예약 업로드 완료!\n${label}에 자동 공개됩니다.\n${url}`);
+            } else {
+              setProgressMessage(`🎉 YouTube 업로드 완료! ${url}`);
+              alert(`업로드 완료!\n${url}`);
+            }
+          }}
+        />
+      )}
+
       {/* API 키 설정 모달 */}
       {showApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
@@ -1878,16 +1987,20 @@ const App: React.FC = () => {
               { label: 'Claude API 키 (대본생성)', key: 'heaven_anthropic_key', placeholder: 'sk-ant-...', link: 'https://console.anthropic.com', hint: '대본 생성에 Claude Sonnet 4.6 사용 (없으면 Gemini)' },
               { label: 'ElevenLabs API 키', key: 'heaven_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
               { label: 'FAL API 키', key: 'heaven_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
+              { label: 'YouTube OAuth Client ID', key: 'heaven_youtube_client_id', placeholder: '1234-xxx.apps.googleusercontent.com', link: 'https://console.cloud.google.com', hint: 'Google Cloud Console → OAuth 2.0 클라이언트 ID (웹 앱)' },
+              { label: 'YouTube OAuth Client Secret', key: 'heaven_youtube_client_secret', placeholder: 'GOCSPX-xxxxxxxxxxxx', link: 'https://console.cloud.google.com', hint: 'Google Cloud Console → OAuth 2.0 클라이언트 보안 비밀 (웹 앱)' },
             ].map(({ label, key, placeholder, link, hint }) => (
               <div key={key} className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</label>
                 <input
                   type="password"
+                  autoComplete="off"
                   defaultValue={localStorage.getItem(key) || ''}
                   placeholder={placeholder}
-                  onBlur={(e) => {
+                  onChange={(e) => {
                     const v = e.target.value.trim();
                     if (v) localStorage.setItem(key, v);
+                    else localStorage.removeItem(key);
                   }}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-brand-500 focus:outline-none"
                 />
