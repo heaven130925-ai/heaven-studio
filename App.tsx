@@ -1977,7 +1977,7 @@ const App: React.FC = () => {
       {/* API 키 설정 모달 */}
       {showApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-white">API 키 설정</h2>
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
