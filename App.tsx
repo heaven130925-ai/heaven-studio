@@ -5,7 +5,7 @@ import InputSection from './components/InputSection';
 import PasswordGate from './components/PasswordGate';
 import ResultTable from './components/ResultTable';
 import { GeneratedAsset, GenerationStep, ScriptScene, CostBreakdown, ReferenceImages, DEFAULT_REFERENCE_IMAGES, DEFAULT_SUBTITLE_CONFIG, SubtitleConfig } from './types';
-import { generateScript, generateScriptChunked, findTrendingTopics, generateAudioForScene, generateMotionPrompt, editImageWithGemini, enrichImagePrompts, extractCharactersFromScript, CharacterInfo } from './services/geminiService';
+import { generateScript, generateScriptChunked, generateScriptLongform, reviewScript, generateTitleSuggestions, findTrendingTopics, generateAudioForScene, generateMotionPrompt, editImageWithGemini, enrichImagePrompts, extractCharactersFromScript, CharacterInfo, pickBestThumbnailScene, generateThumbnailV2, analyzeVisualDNA, transcribeAudioToScenes } from './services/geminiService';
 import CharacterSetup from './components/CharacterSetup';
 import { generateImage, getSelectedImageModel } from './services/imageService';
 import { generateAudioWithElevenLabs } from './services/elevenLabsService';
@@ -18,14 +18,17 @@ import { CONFIG, PRICING, formatKRW } from './config';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
-import { downloadMergedAudio } from './utils/csvHelper';
 import { getVoiceSetting } from './utils/voiceStorage';
+import { isYoutubeConnected, getChannelProfiles, isProfileValid, handleYoutubeOAuthCallback } from './services/youtubeService';
+import YouTubeUploadModal from './components/YouTubeUploadModal';
+import YouTubeAutoPanel from './components/YouTubeAutoPanel';
+import ImageBatchPanel from './components/ImageBatchPanel';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-type ViewMode = 'main' | 'gallery';
+type ViewMode = 'main' | 'gallery' | 'imagebatch';
 
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/heaven130925-ai/7094a8ac89c8438b922d5ad79da79a6b/raw';
 
@@ -56,6 +59,8 @@ const App: React.FC = () => {
 
   const [step, setStep] = useState<GenerationStep>(GenerationStep.IDLE);
   const [generatedData, setGeneratedData] = useState<GeneratedAsset[]>([]);
+  const [titleSuggestions, setTitleSuggestions] = useState<{ titles: Array<{title:string;reason:string}>; thumbnails: Array<{keywords:string;image:string;emotion:string}> } | null>(null);
+  const [scriptReview, setScriptReview] = useState<{ score: number; summary: string; issues: Array<{type:string;scenes:number[];problem:string;fix:string}> } | null>(null);
   const [progressMessage, setProgressMessage] = useState('');
   const [inputActiveTab, setInputActiveTab] = useState<'auto' | 'manual'>('auto');
   const [inputManualScript, setInputManualScript] = useState<string>(
@@ -63,6 +68,7 @@ const App: React.FC = () => {
   );
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
   const currentProjectIdRef = useRef<string | null>(null); // 현재 열린 프로젝트 ID (자동저장용)
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 참조 이미지 상태 (강도 포함)
   const [currentReferenceImages, setCurrentReferenceImages] = useState<ReferenceImages>(DEFAULT_REFERENCE_IMAGES);
   const [needsKey, setNeedsKey] = useState(false);
@@ -72,13 +78,17 @@ const App: React.FC = () => {
   const [draftProject, setDraftProject] = useState<import('./types').SavedProject | null>(null);
   const [thumbnailEditorKey, setThumbnailEditorKey] = useState(0);
   const [showApiModal, setShowApiModal] = useState(false);
+  const [youtubeConnected, setYoutubeConnected] = useState(() => isYoutubeConnected());
+  const [showYoutubeModal, setShowYoutubeModal] = useState(false);
+  const [showYoutubeAutoPanel, setShowYoutubeAutoPanel] = useState(false);
+  const lastVideoBlobRef = useRef<Blob | null>(null);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
   );
 
   // 스토리보드 뷰 (생성 시 별도 화면으로 전환)
   const [showStoryboard, setShowStoryboard] = useState(false);
-  const [storyboardTab, setStoryboardTab] = useState<'result' | 'subtitle' | 'thumbnail'>('result');
+  const [storyboardTab, setStoryboardTab] = useState<'result' | 'subtitle' | 'thumbnail' | 'chat'>('result');
 
   // 자막 설정 (SubtitleEditor와 영상 렌더링 공유)
   const [subConfig, setSubConfig] = useState<SubtitleConfig>(() => {
@@ -88,6 +98,8 @@ const App: React.FC = () => {
     } catch {}
     return DEFAULT_SUBTITLE_CONFIG;
   });
+  const subConfigRef = useRef<SubtitleConfig>(subConfig);
+  subConfigRef.current = subConfig; // 렌더마다 최신값 유지 — handleSubConfigChange에서 별도 동기화 불필요
   const handleSubConfigChange = useCallback((cfg: SubtitleConfig) => {
     setSubConfig(cfg);
     try { localStorage.setItem(CONFIG.STORAGE_KEYS.SUBTITLE_CONFIG, JSON.stringify(cfg)); } catch {}
@@ -105,6 +117,10 @@ const App: React.FC = () => {
     images: 0, tts: 0, videos: 0, total: 0,
     imageCount: 0, ttsCharacters: 0, videoCount: 0
   });
+
+  const [autoRenderPending, setAutoRenderPending] = useState(false);
+  const [saveDirSet, setSaveDirSet] = useState(false);
+  const saveDirHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
 
   const usedTopicsRef = useRef<string[]>([]);
   const assetsRef = useRef<GeneratedAsset[]>([]);
@@ -124,8 +140,9 @@ const App: React.FC = () => {
     try { localStorage.setItem(CHAR_PROFILES_KEY, JSON.stringify(profiles)); } catch {}
   };
 
-  const characterProfilesRef = useRef<CharacterInfo[]>(loadSavedCharacterProfiles());
   const [charactersList, setCharactersList] = useState<CharacterInfo[]>(loadSavedCharacterProfiles());
+  const characterProfilesRef = useRef<CharacterInfo[]>(charactersList);
+  characterProfilesRef.current = charactersList; // 렌더마다 최신값 유지
   const [showCharacterSetup, setShowCharacterSetup] = useState(false);
   const [inputResetKey, setInputResetKey] = useState(0);
   const [isAnalyzingCharacters, setIsAnalyzingCharacters] = useState(false);
@@ -151,9 +168,17 @@ const App: React.FC = () => {
       await migrateFromLocalStorage(); // 기존 데이터 이전
       const projects = await getSavedProjects();
       setSavedProjects(projects);
-      // 임시저장(draft) 감지 → 복구 배너 표시
+      // 임시저장(draft) 감지 → 자동 복원
       const draft = await loadDraft();
-      if (draft && draft.assets.length > 0) setDraftProject(draft);
+      if (draft && draft.assets.length > 0) {
+        assetsRef.current = draft.assets;
+        setGeneratedData([...draft.assets]);
+        setCurrentTopic(draft.topic || '');
+        setStep(GenerationStep.COMPLETED);
+        // 새로고침 시 메인에서 시작 — 스토리보드 자동 이동 제거
+        setDraftProject(draft);
+        console.log(`[Draft] 복원 대기: ${draft.assets.length}개 씬 (수동으로 열어야 함)`);
+      }
     })();
     return () => { isAbortedRef.current = true; };
   }, [checkApiKeyStatus]);
@@ -173,13 +198,16 @@ const App: React.FC = () => {
     }
   };
 
-  const audioOnlyRef = useRef(false);
-
   const updateAssetAt = (index: number, updates: Partial<GeneratedAsset>) => {
     if (isAbortedRef.current) return;
     if (assetsRef.current[index]) {
       assetsRef.current[index] = { ...assetsRef.current[index], ...updates };
-      if (!audioOnlyRef.current) setGeneratedData([...assetsRef.current]);
+      setGeneratedData([...assetsRef.current]);
+      // 씬 업데이트마다 디바운스 자동저장 (뻑 대비)
+      if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = setTimeout(() => {
+        saveDraft(currentTopic || '', assetsRef.current).catch(() => {});
+      }, 1500);
     }
   };
 
@@ -226,8 +254,10 @@ const App: React.FC = () => {
   const handleCharactersDone = useCallback(async (updatedChars: CharacterInfo[]) => {
     // 이미지가 있는 캐릭터만 저장
     if (updatedChars.length > 0) {
-      characterProfilesRef.current = updatedChars.filter(c => c.imageData);
-      saveCharacterProfiles(characterProfilesRef.current);
+      const filtered = updatedChars.filter(c => c.imageData);
+      setCharactersList(filtered);
+      characterProfilesRef.current = filtered; // 아래 async 코드가 즉시 읽으므로 명시적 갱신
+      saveCharacterProfiles(filtered);
     }
     setShowCharacterSetup(false);
 
@@ -377,6 +407,157 @@ const App: React.FC = () => {
       });
   }, []); // eslint-disable-line
 
+  // ── 오디오-퍼스트: 음성 업로드 → AI 씬 분리 → 이미지 생성 ──────────────────
+  const handleAudioFirstGeneration = useCallback(async (audioFile: File, passedRefImgs?: ReferenceImages, sceneCount: number = 0, scriptText?: string) => {
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
+    isAbortedRef.current = false;
+
+    setGeneratedData([]);
+    assetsRef.current = [];
+    setShowStoryboard(true);
+    setStep(GenerationStep.ASSETS);
+    setProgressMessage('오디오 읽는 중...');
+    resetCost();
+
+    try {
+      // 1) 오디오 파일 → base64
+      const arrayBuffer = await audioFile.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < uint8.length; i += 65536) binary += String.fromCharCode(...uint8.subarray(i, i + 65536));
+      const audioBase64 = btoa(binary);
+      const mimeType = audioFile.type || 'audio/mpeg';
+
+      // 2) Gemini가 오디오 분석 → 씬 분리 + 타임스탬프 + 자막 청크
+      setProgressMessage('Gemini AI가 오디오를 분석하고 씬을 분리하는 중...');
+      const charDesc = (passedRefImgs ?? currentReferenceImages)?.characterDescription?.trim() || undefined;
+      const audioScenes = await transcribeAudioToScenes(audioBase64, mimeType, setProgressMessage, sceneCount, scriptText, charDesc);
+      if (isAbortedRef.current) return;
+
+      if (audioScenes.length === 0) throw new Error('씬 분리 결과가 없습니다. 오디오 파일을 확인해주세요.');
+
+      // 3) FFmpeg로 씬별 오디오 분리 (per-scene audioData 저장)
+      setProgressMessage(`${audioScenes.length}개 씬 오디오 분리 중...`);
+      const perSceneAudio: (string | null)[] = Array(audioScenes.length).fill(null);
+      try {
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+        const { fetchFile } = await import('@ffmpeg/util');
+        const ffmpeg = new FFmpeg();
+        await ffmpeg.load();
+        await ffmpeg.writeFile('input_audio', await fetchFile(audioFile));
+        for (let i = 0; i < audioScenes.length; i++) {
+          if (isAbortedRef.current) break;
+          const s = audioScenes[i];
+          const clipStart = Math.max(0, s.startSec - 0.05);
+          const clipEnd = s.endSec + 0.1;
+          const fadeDur = 0.02;
+          const clipDur = clipEnd - clipStart;
+          const fadeOutSt = Math.max(0, clipDur - fadeDur);
+          setProgressMessage(`씬 ${i + 1}/${audioScenes.length} 오디오 분리 중...`);
+          await ffmpeg.exec([
+            '-ss', String(clipStart), '-to', String(clipEnd), '-i', 'input_audio',
+            '-af', `afade=t=in:st=0:d=${fadeDur},afade=t=out:st=${fadeOutSt}:d=${fadeDur}`,
+            '-acodec', 'pcm_s16le', '-ar', '24000', '-ac', '1', `out${i}.wav`,
+          ]);
+          const data = await ffmpeg.readFile(`out${i}.wav`);
+          const buf = data instanceof Uint8Array ? data : new TextEncoder().encode(data as string);
+          let b = '';
+          for (let j = 0; j < buf.length; j += 65536) b += String.fromCharCode(...buf.subarray(j, j + 65536));
+          perSceneAudio[i] = btoa(b);
+        }
+      } catch (e: any) {
+        console.warn('[AudioFirst] FFmpeg 분리 실패 — audioData 없이 진행:', e.message);
+      }
+
+      setProgressMessage(`${audioScenes.length}개 씬 감지됨 — 이미지 생성 시작...`);
+
+      // 4) 초기 에셋 생성 (per-scene audioData)
+      const initialAssets: GeneratedAsset[] = audioScenes.map((s, i) => ({
+        sceneNumber: i + 1,
+        narration: s.narration,
+        visualPrompt: s.description,
+        imageData: null,
+        audioData: perSceneAudio[i],
+        audioDuration: Math.max(0.1, s.endSec - s.startSec),
+        // subtitleChunks → SubtitleWord[] 변환 (씬 시작 기준 상대 시간)
+        subtitleData: s.subtitleChunks.length > 0 ? {
+          words: s.subtitleChunks.map(c => ({
+            word: c.text,
+            start: Math.max(0, c.startSec - s.startSec),
+            end: Math.max(0, c.endSec - s.startSec),
+          })),
+          fullText: s.narration,
+        } : null,
+        videoData: null,
+        videoDuration: null,
+        status: 'pending' as const,
+      }));
+
+      assetsRef.current = initialAssets;
+      setGeneratedData([...initialAssets]);
+      setCurrentTopic(audioFile.name.replace(/\.[^.]+$/, ''));
+
+      // 4) 씬별 이미지 생성 (캐릭터 프로필 매칭 포함)
+      const refImgs = passedRefImgs ?? currentReferenceImages;
+      const getSceneRefImgs = (narration: string): ReferenceImages => {
+        const profiles = characterProfilesRef.current;
+        if (!profiles.length) return refImgs;
+        const matched = profiles
+          .filter((c: CharacterInfo) => c.imageData && narration.includes(c.name))
+          .map((c: CharacterInfo) => c.imageData as string)
+          .slice(0, 2);
+        return matched.length ? { ...refImgs, character: matched } : refImgs;
+      };
+
+      const imageModel = getSelectedImageModel();
+      const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
+      for (let i = 0; i < initialAssets.length; i++) {
+        if (isAbortedRef.current) break;
+        updateAssetAt(i, { status: 'generating' });
+        setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 이미지 생성 중...`);
+        let success = false;
+        for (let attempt = 0; attempt <= 2 && !success; attempt++) {
+          if (isAbortedRef.current) break;
+          try {
+            if (attempt > 0) await wait(2000);
+            const img = await generateImage(assetsRef.current[i], getSceneRefImgs(assetsRef.current[i].narration));
+            if (img && !isAbortedRef.current) {
+              updateAssetAt(i, { imageData: img, status: 'completed' });
+              addCost('image', imagePrice, 1);
+              success = true;
+            }
+          } catch (e: any) {
+            console.error(`[AudioFirst] 씬 ${i + 1} 이미지 실패:`, e.message);
+          }
+        }
+        if (!success && !isAbortedRef.current) updateAssetAt(i, { status: 'error' });
+        if (i < initialAssets.length - 1 && !isAbortedRef.current) await wait(1200);
+      }
+
+      if (isAbortedRef.current) return;
+      setStep(GenerationStep.COMPLETED);
+      const cost = costRef.current;
+      const costMsg = `이미지 ${cost.imageCount}장 ${formatKRW(cost.images)}`;
+      setProgressMessage(`오디오-퍼스트 완료! ${initialAssets.length}개 씬 | ${costMsg}`);
+
+      try {
+        const saved = await saveProject(audioFile.name.replace(/\.[^.]+$/, ''), assetsRef.current, undefined, costRef.current);
+        currentProjectIdRef.current = saved.id;
+        clearDraft();
+        setDraftProject(null);
+        refreshProjects();
+      } catch (e) { console.error('프로젝트 저장 실패:', e); }
+    } catch (error: any) {
+      if (!isAbortedRef.current) {
+        setStep(GenerationStep.ERROR);
+        setProgressMessage(`오류: ${error.message}`);
+      }
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [currentReferenceImages]); // eslint-disable-line
+
   // 미완성 씬 이어서 생성 (이미지 없는 씬만)
   const handleResume = useCallback(async () => {
     if (isProcessingRef.current) return;
@@ -408,7 +589,8 @@ const App: React.FC = () => {
   const handleAbort = () => {
     isAbortedRef.current = true;
     isProcessingRef.current = false;
-    setProgressMessage("🛑 작업 중단됨.");
+    setIsVideoGenerating(false);
+    setProgressMessage("🛑 취소됨.");
     setStep(GenerationStep.COMPLETED);
   };
 
@@ -423,7 +605,6 @@ const App: React.FC = () => {
     setInputActiveTab('auto');
     setShowStoryboard(false);
     setShowCharacterSetup(false);
-    characterProfilesRef.current = [];
     setCharactersList([]);
     setStep(GenerationStep.IDLE);
     setProgressMessage('');
@@ -437,34 +618,35 @@ const App: React.FC = () => {
     refImgs: ReferenceImages,
     sourceText: string | null,
     sceneCount: number = 0,
-    imageOnly: boolean = false,
-    audioOnly: boolean = false,
-    autoRun: boolean = false
+    autoRun: boolean = false,
+    autoRender: boolean = false,
+    referenceVideoContext?: string,
+    category?: string,
+    targetMinutes?: number,
+    blueprint?: string
   ) => {
-    console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}, imageOnly=${imageOnly}`);
+    console.log(`[handleGenerate] topic="${topic}", sourceText=${sourceText === null ? 'null' : `"${sourceText?.slice(0,20)}..."`}`);
     if (isProcessingRef.current) { console.log('[handleGenerate] blocked: isProcessing'); return; }
     isProcessingRef.current = true;
     isAbortedRef.current = false;
-    audioOnlyRef.current = audioOnly;
-    if (audioOnly) setShowStoryboard(false);
+    // 새 생성 시작 시 이전 캐릭터 데이터 초기화
+    setCharactersList([]);
+    localStorage.removeItem(CHAR_PROFILES_KEY);
 
-    // 자동 주제 모드 또는 오디오만 생성은 스토리보드 열지 않음
-    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input' && !imageOnly && !audioOnly;
-    if (!isAutoTopicMode && !audioOnly) setShowStoryboard(true);
+    // 자동 주제 모드(대본확인 단계)만 스토리보드 열지 않음, autoRun/autoRender 시에는 즉시 열기
+    const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input';
+    if (!isAutoTopicMode || autoRun || autoRender) setShowStoryboard(true);
     setStep(GenerationStep.SCRIPTING);
     setProgressMessage('V9.2 Ultra 엔진 부팅 중...');
+
+    setGeneratedData([]);
+    assetsRef.current = [];
 
     try {
       const hasKey = await checkApiKeyStatus();
       if (!hasKey && (window as any).aistudio) {
         await (window as any).aistudio.openSelectKey();
       }
-
-      // audioOnly + 기존 씬 있으면 스크립트 생성 없이 오디오만 재생성
-      const preexistingNarrations = audioOnly ? assetsRef.current.filter(a => a.narration?.trim()) : [];
-
-      setGeneratedData([]);
-      assetsRef.current = [];
       setCurrentReferenceImages(refImgs);
       setCurrentTopic(topic);
       resetCost();
@@ -476,28 +658,8 @@ const App: React.FC = () => {
       let initialAssets: GeneratedAsset[];
       let targetTopic = topic;
 
-      if (audioOnly && preexistingNarrations.length > 0) {
-        // ── 케이스 1: 기존 씬 오디오 재생성 (AI 대본 생성 없이) ──
-        setProgressMessage(`기존 ${preexistingNarrations.length}개 씬 오디오 재생성 중...`);
-        initialAssets = preexistingNarrations.map(a => ({
-          ...a, audioData: null, subtitleData: null, audioDuration: null
-        }));
-        assetsRef.current = initialAssets;
-      } else if (audioOnly && sourceText) {
-        // ── 케이스 2: 수동 대본 → AI 없이 문단별 씬 분리 후 오디오 생성 ──
-        setProgressMessage('대본 파싱 중...');
-        const lines = sourceText.split(/\n{2,}|\n(?=\d+[.)]\s)/).map(l => l.trim()).filter(l => l.length > 5);
-        initialAssets = (lines.length > 0 ? lines : [sourceText]).map((line, i) => ({
-          sceneNumber: i + 1,
-          narration: line.replace(/^\d+[.)]\s*/, '').trim(),
-          visualPrompt: '',
-          imageData: null, audioData: null, audioDuration: null,
-          subtitleData: null, videoData: null, videoDuration: null,
-          status: 'pending' as const
-        }));
-        assetsRef.current = initialAssets;
-      } else {
-        // ── 스크립트 생성 (기존 로직) ──
+      {
+        // ── 스크립트 생성 ──
         if (topic === "Manual Script Input" && sourceText) {
           setProgressMessage('대본 분석 및 시각화 설계 중...');
         } else if (sourceText) {
@@ -507,28 +669,73 @@ const App: React.FC = () => {
           targetTopic = topic;
         }
         setProgressMessage(`대본 생성 중...`);
+        setTitleSuggestions(null);
+        setScriptReview(null);
 
         const inputLength = sourceText?.length || 0;
         const CHUNK_THRESHOLD = 3000;
+        const isAutoMode = !sourceText && topic !== 'Manual Script Input';
+        const useLongform = isAutoMode && (targetMinutes ?? 0) > 15;
 
         let scriptScenes: ScriptScene[];
         if (inputLength > CHUNK_THRESHOLD) {
           console.log(`[App] 긴 대본 감지: ${inputLength.toLocaleString()}자 → 청크 분할 처리`);
           setProgressMessage(`긴 대본(${inputLength.toLocaleString()}자) 청크 분할 처리 중...`);
           scriptScenes = await generateScriptChunked(
-            targetTopic, hasRefImages, sourceText!, 2500, setProgressMessage, sceneCount || undefined
+            targetTopic, hasRefImages, sourceText!, 2500, setProgressMessage, sceneCount || undefined, category
+          );
+        } else if (useLongform && blueprint?.trim()) {
+          // 롱폼 자동 모드: 블루프린트 기반 청크 생성
+          console.log(`[App] 롱폼 자동 생성: ${targetMinutes}분, 블루프린트 있음`);
+          scriptScenes = await generateScriptLongform(
+            targetTopic, hasRefImages, targetMinutes!, blueprint!, category, referenceVideoContext, setProgressMessage
           );
         } else {
-          scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined);
+          scriptScenes = await generateScript(targetTopic, hasRefImages, sourceText, sceneCount || undefined, referenceVideoContext, category, targetMinutes, blueprint);
         }
         if (isAbortedRef.current) return;
 
-        // ── 이미지 프롬프트 재작성 (전체 대본 맥락 기반) ──
-        // 씬이 3개 이상일 때만 실행 (맥락 파악이 의미 있는 분량)
+        // ── 대본 검수 (자동 주제 모드만) ──────────────────────────────────────
+        if (isAutoMode && scriptScenes.length >= 3) {
+          setProgressMessage('대본 검수 중... (중복/반복/순서 오류 검사)');
+          try {
+            const reviewResult = await reviewScript(scriptScenes, targetTopic);
+            if (reviewResult.issues.length > 0) {
+              console.log(`[App] 검수 완료: ${reviewResult.issues.length}개 이슈 (점수 ${reviewResult.score}/10)`);
+              scriptScenes = reviewResult.fixedScenes;
+            }
+            setScriptReview({ score: reviewResult.score, summary: reviewResult.summary, issues: reviewResult.issues });
+          } catch (e: any) { console.warn('[App] 대본 검수 실패:', e.message); }
+          if (isAbortedRef.current) return;
+        }
+
+        // ── 제목/썸네일 제안 ──────────────────────────────────────────────────
+        if (isAutoMode && scriptScenes.length >= 3) {
+          setProgressMessage('바이럴 제목 분석 중...');
+          try {
+            const titleResult = await generateTitleSuggestions(scriptScenes, targetTopic);
+            if (titleResult.titles.length > 0) setTitleSuggestions(titleResult);
+          } catch (e: any) { console.warn('[App] 제목 생성 실패:', e.message); }
+          if (isAbortedRef.current) return;
+        }
+
+        // ── 비주얼 DNA 분석 (분위기/색감/톤 자동 감지) ──
+        let visualDNA = '';
+        if (scriptScenes.length >= 3) {
+          setProgressMessage('🎨 비주얼 톤 분석 중...');
+          try {
+            const scriptSummary = scriptScenes.map(s => `[${s.sceneNumber}] ${s.narration}`).join('\n');
+            visualDNA = await analyzeVisualDNA(targetTopic, scriptSummary);
+          } catch (e: any) {
+            console.warn('[App] 비주얼 DNA 분석 실패:', e.message);
+          }
+        }
+
+        // ── 이미지 프롬프트 재작성 (전체 대본 맥락 + 비주얼 DNA 반영) ──
         if (scriptScenes.length >= 3) {
           setProgressMessage(`대본 분석 중... 이미지 프롬프트 최적화 (${scriptScenes.length}개 씬)`);
           try {
-            scriptScenes = await enrichImagePrompts(scriptScenes, hasCharacterRef);
+            scriptScenes = await enrichImagePrompts(scriptScenes, hasCharacterRef, visualDNA);
             console.log(`[App] 이미지 프롬프트 재작성 완료 (${scriptScenes.length}개 씬)`);
           } catch (e: any) {
             console.warn('[App] 이미지 프롬프트 재작성 실패 (기존 프롬프트 유지):', e.message);
@@ -537,9 +744,9 @@ const App: React.FC = () => {
         if (isAbortedRef.current) return;
 
         const isAutoTopic = !sourceText && topic !== 'Manual Script Input';
-        console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, imageOnly=${imageOnly}, autoRun=${autoRun}, scenes=${scriptScenes.length}`);
+        console.log(`[handleGenerate] isAutoTopic=${isAutoTopic}, autoRun=${autoRun}, scenes=${scriptScenes.length}`);
         // autoRun=true이면 대본 확인 단계 없이 바로 이미지+오디오 생성
-        if (isAutoTopic && !imageOnly && !audioOnly && !autoRun) {
+        if (isAutoTopic && !autoRun) {
           const scriptText = scriptScenes.map(s => s.narration).join('\n');
           setInputManualScript(scriptText);
           setInputActiveTab('manual');
@@ -556,13 +763,40 @@ const App: React.FC = () => {
           const scriptText = scriptScenes.map(s => s.narration).join('\n');
           setInputManualScript(scriptText);
           setShowStoryboard(true);
+
+          // 캐릭터 분석: 이미지 생성 전에 대본에서 캐릭터 추출 및 프로파일 업데이트
+          try {
+            setProgressMessage('캐릭터 분석 중...');
+            const fullText = scriptScenes.map(s => s.narration).join('\n');
+            const extracted = await extractCharactersFromScript(fullText);
+            if (extracted && extracted.length > 0) {
+              // 기존 프로파일과 병합: 이름이 같으면 업데이트, 새 캐릭터면 추가
+              const existing = characterProfilesRef.current;
+              const merged = [...existing];
+              for (const ext of extracted) {
+                const idx = merged.findIndex(e => e.name === ext.name);
+                if (idx >= 0) {
+                  // 기존에 이미지가 없는 필드만 업데이트
+                  merged[idx] = { ...ext, imageData: merged[idx].imageData || ext.imageData };
+                } else {
+                  merged.push(ext);
+                }
+              }
+              characterProfilesRef.current = merged; // 아래 async 루프가 즉시 읽으므로 명시적 갱신
+              setCharactersList(merged);
+              saveCharacterProfiles(merged);
+              setProgressMessage(`캐릭터 분석 완료 (${merged.length}명) — 이미지 생성 시작...`);
+            }
+          } catch (e) {
+            console.warn('[autoRun] 캐릭터 분석 실패, 계속 진행:', e);
+          }
         }
 
         initialAssets = scriptScenes.map(scene => ({
           ...scene, imageData: null, audioData: null, audioDuration: null, subtitleData: null, videoData: null, videoDuration: null, status: 'pending' as const
         }));
         assetsRef.current = initialAssets;
-        if (!audioOnly) setGeneratedData(initialAssets);
+        setGeneratedData(initialAssets);
 
       }
 
@@ -768,6 +1002,10 @@ const App: React.FC = () => {
 
       // 앞 N개 씬을 애니메이션으로 변환하는 함수
       const runAnimations = async () => {
+        if (localStorage.getItem('heaven_video_enabled') === 'false') {
+          console.log('[Animation] 영상 생성 비활성화, 건너뜀');
+          return;
+        }
         const falApiKey = getFalApiKey();
         if (!falApiKey) {
           console.log('[Animation] FAL API 키 없음, 애니메이션 변환 건너뜀');
@@ -817,23 +1055,16 @@ const App: React.FC = () => {
       };
 
       const noAudio = (getVoiceSetting(CONFIG.STORAGE_KEYS.TTS_PROVIDER) || 'elevenlabs') === 'none';
-      setProgressMessage(imageOnly ? '이미지 생성 중...' : audioOnly ? '오디오 생성 중...' : noAudio ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
-      if (imageOnly || noAudio) await runImages();
-      else if (audioOnly) await runAudio();
+      setProgressMessage(noAudio ? '이미지 생성 중...' : '시각 에셋 및 오디오 합성 중...');
+      if (noAudio) await runImages();
       else await Promise.all([runAudio(), runImages()]);
 
       if (isAbortedRef.current) return;
 
-      // 오디오만 생성: ZIP 다운로드 후 종료 (스토리보드 미표시)
-      if (audioOnly) {
-        audioOnlyRef.current = false;
-        setProgressMessage('오디오 통합 WAV 생성 중...');
-        await downloadMergedAudio(assetsRef.current);
-        setProgressMessage('오디오 다운로드 완료!');
-        assetsRef.current = [];
-        setGeneratedData([]);
-        setStep(GenerationStep.IDLE);
-        return;
+      // 전체 자동화: 이미지+음성 완료 후 영상 변환
+      if (autoRender) {
+        await runAnimations();
+        if (isAbortedRef.current) return;
       }
 
       setStep(GenerationStep.COMPLETED);
@@ -855,16 +1086,70 @@ const App: React.FC = () => {
         console.error('프로젝트 자동 저장 실패:', e);
       }
 
+      // 전체 자동화: 썸네일 자동 생성 (씬 이미지에 텍스트 오버레이)
+      if (autoRender) {
+        try {
+          setProgressMessage('썸네일 생성 중...');
+          const thumbCount = aspectRatio === '9:16' ? 1 : 3;
+          const bestIndices = await pickBestThumbnailScene(targetTopic, assetsRef.current, thumbCount);
+
+          // 나노바나나2(gemini-3.1-flash-image-preview)로 썸네일 생성 — 한국어 텍스트 직접 렌더링
+          const thumbModel = getSelectedImageModel().startsWith('gemini-3') ? getSelectedImageModel() : 'gemini-3.1-flash-image-preview';
+          const ts = Date.now();
+          for (let t = 0; t < bestIndices.length; t++) {
+            const sceneIdx = bestIndices[t];
+            const sceneAsset = assetsRef.current[sceneIdx];
+            const imgData = sceneAsset?.imageData;
+            const thumbBase64 = await generateThumbnailV2({
+              topic: targetTopic,
+              mainText: targetTopic,
+              subText: '',
+              imagePrompt: sceneAsset?.imagePrompt || targetTopic,
+              borderStyle: 'none',
+              thumbnailRatio: aspectRatio as '16:9' | '9:16',
+              characterEnabled: false,
+              characterType: '',
+              characterDetails: '',
+              targetAudience: 'general',
+              showChannelName: false,
+              channelName: '',
+              model: thumbModel,
+              inputImage: imgData || undefined,
+            });
+            if (!thumbBase64) continue;
+            const filename = `thumbnail_${ts}_${t + 1}.jpg`;
+            // 첫 번째 썸네일을 에디터 탭에 표시
+            if (t === 0) {
+              setStoryThumbnailImage(thumbBase64);
+              setThumbnailEditorKey((k: number) => k + 1);
+            }
+            const byteChars = atob(thumbBase64);
+            const byteArr = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+            const blob = new Blob([byteArr], { type: 'image/jpeg' });
+            await saveFileToDir(blob, filename);
+          }
+          setProgressMessage(`✅ 썸네일 ${bestIndices.length}개 생성 완료`);
+        } catch (e) {
+          console.error('[AutoRender] 썸네일 자동 생성 실패:', e);
+        }
+        const readyAssets = assetsRef.current.filter(a => a.imageData);
+        if (readyAssets.length > 0) {
+          setAutoRenderPending(true);
+        } else {
+          setProgressMessage('⚠️ 이미지 생성 실패 — 렌더링을 건너뜁니다.');
+        }
+      }
+
     } catch (error: any) {
       if (!isAbortedRef.current) {
         setStep(GenerationStep.ERROR);
         setProgressMessage(`오류: ${error.message}`);
       }
     } finally {
-      audioOnlyRef.current = false;
       isProcessingRef.current = false;
     }
-  }, [checkApiKeyStatus, refreshProjects]);
+  }, [checkApiKeyStatus, refreshProjects, aspectRatio]);
 
   // 이미지 재생성 핸들러 (useCallback으로 메모이제이션)
   const handleRegenerateImage = useCallback(async (idx: number) => {
@@ -975,59 +1260,78 @@ const App: React.FC = () => {
   }, [handleRegenerateImage]);
 
   // 애니메이션 생성 핸들러 (useCallback으로 메모이제이션)
-  const handleGenerateAnimation = useCallback(async (idx: number) => {
-    const falKey = getFalApiKey();
-    if (!falKey) {
-      alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
-      return;
-    }
-    if (animatingIndices.has(idx)) return; // 이 씬은 이미 변환 중
+  const handleGenerateAnimation = useCallback(async (idx: number, userMotionPrompt?: string) => {
+    if (animatingIndices.has(idx)) return;
     if (!assetsRef.current[idx]?.imageData) {
       alert('이미지가 먼저 생성되어야 합니다.');
       return;
     }
 
+    const videoModelId = localStorage.getItem('heaven_video_model') || 'pixverse-v5.5';
+    const isVeo = videoModelId.startsWith('veo-');
+
+    if (!isVeo) {
+      const falKey = getFalApiKey();
+      if (!falKey) {
+        alert('FAL API 키를 먼저 등록해주세요.\n설정 패널에서 "FAL.ai 애니메이션 엔진"을 열어 키를 입력하세요.');
+        return;
+      }
+    }
+
     try {
-      // Set에 현재 인덱스 추가
       setAnimatingIndices(prev => new Set(prev).add(idx));
       setProgressMessage(`씬 ${idx + 1} 움직임 분석 중...`);
 
-      // AI가 대본과 이미지를 분석해서 움직임 프롬프트 생성
-      const motionPrompt = await generateMotionPrompt(
+      const motionPrompt = userMotionPrompt || await generateMotionPrompt(
         assetsRef.current[idx].narration,
         assetsRef.current[idx].visualPrompt
       );
 
-      setProgressMessage(`씬 ${idx + 1} 영상 변환 중...`);
-      const videoUrl = await generateVideoFromImage(
-        assetsRef.current[idx].imageData!,
-        motionPrompt,
-        falKey
-      );
+      setProgressMessage(`씬 ${idx + 1} 영상 변환 중${isVeo ? ' (2~5분 소요)' : ''}...`);
+
+      let videoUrl: string | null = null;
+
+      if (isVeo) {
+        const { generateVeoVideoFromImage } = await import('./services/veoService');
+        videoUrl = await generateVeoVideoFromImage(
+          assetsRef.current[idx].imageData!,
+          motionPrompt,
+          videoModelId,
+          aspectRatio,
+          5,
+          (msg) => setProgressMessage(`씬 ${idx + 1} — ${msg}`)
+        );
+      } else {
+        videoUrl = await generateVideoFromImage(
+          assetsRef.current[idx].imageData!,
+          motionPrompt,
+          getFalApiKey()!
+        );
+      }
 
       if (videoUrl) {
         updateAssetAt(idx, {
           videoData: videoUrl,
           videoDuration: CONFIG.ANIMATION.VIDEO_DURATION
         });
-        // 영상 비용 추가
         addCost('video', PRICING.VIDEO.perVideo, 1);
-        setProgressMessage(`씬 ${idx + 1} 영상 변환 완료! (+${formatKRW(PRICING.VIDEO.perVideo)})`);
+        setProgressMessage(`씬 ${idx + 1} 영상 변환 완료!`);
       } else {
         setProgressMessage(`씬 ${idx + 1} 영상 변환 실패`);
       }
     } catch (e: any) {
       console.error('영상 변환 실패:', e);
-      setProgressMessage(`씬 ${idx + 1} 오류: ${e.message}`);
+      const msg = e?.message || String(e);
+      setProgressMessage(`씬 ${idx + 1} 영상 변환 실패: ${msg}`);
+      alert(`영상 변환 실패\n\n${msg}`);
     } finally {
-      // Set에서 현재 인덱스 제거
       setAnimatingIndices(prev => {
         const next = new Set(prev);
         next.delete(idx);
         return next;
       });
     }
-  }, [animatingIndices]);
+  }, [animatingIndices, aspectRatio]);
 
 
   const handleSelectThumbnail = useCallback((imageBase64: string) => {
@@ -1041,34 +1345,118 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // 파일을 지정 폴더 또는 기본 다운로드로 저장
+  const saveFileToDir = async (blob: Blob, filename: string) => {
+    if (saveDirHandleRef.current) {
+      try {
+        const fileHandle = await saveDirHandleRef.current.getFileHandle(filename, { create: true });
+        const writable = await (fileHandle as any).createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        console.warn('[SaveDir] 폴더 저장 실패, 일반 다운로드로 대체:', e);
+      }
+    }
+    saveAs(blob, filename);
+  };
+
+  // 저장 폴더 선택
+  const handleSelectSaveDir = async () => {
+    try {
+      const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+      saveDirHandleRef.current = handle;
+      setSaveDirSet(true);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error('폴더 선택 실패:', e);
+    }
+  };
+
   const triggerVideoExport = async (enableSubtitles: boolean = true) => {
     if (isVideoGenerating) return;
+    const readyCount = assetsRef.current.filter(a => a.imageData).length;
+    if (readyCount === 0) {
+      alert('이미지가 생성된 씬이 없습니다. 먼저 이미지를 생성해주세요.');
+      return;
+    }
     try {
       setIsVideoGenerating(true);
       const suffix = enableSubtitles ? 'sub' : 'nosub';
       const timestamp = Date.now();
 
-      // subConfig 상태 사용 (SubtitleEditor에서 수정된 값)
-      const subtitleConfig: Partial<SubtitleConfig> = subConfig;
+      // subConfigRef 사용 (stale closure 방지)
+      // 9:16 숏폼은 자막 상단으로 자동 고정
+      const latestSubConfig = subConfigRef.current;
+      const subtitleConfig: Partial<SubtitleConfig> = aspectRatio === '9:16'
+        ? { ...latestSubConfig, position: 'top', bottomMargin: 80 }
+        : latestSubConfig;
 
       const result = await generateVideo(
         assetsRef.current,
         (msg) => setProgressMessage(`[Render] ${msg}`),
         isAbortedRef,
-        { enableSubtitles, subtitleConfig }
+        {
+          enableSubtitles,
+          subtitleConfig,
+          aspectRatio,
+        }
       );
 
       if (result) {
-        // 영상 저장 (자막은 영상에 하드코딩됨)
-        saveAs(result.videoBlob, `heaven_ai_${suffix}_${timestamp}.mp4`);
+        const filename = `heaven_ai_${suffix}_${timestamp}.mp4`;
+        await saveFileToDir(result.videoBlob, filename);
+        lastVideoBlobRef.current = result.videoBlob;
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
       }
     } catch (error: any) {
-      setProgressMessage(`렌더링 실패: ${error.message}`);
+      const msg = `렌더링 실패: ${error.message}`;
+      setProgressMessage(msg);
+      alert(msg);
     } finally {
       setIsVideoGenerating(false);
     }
   };
+
+  // ── YouTube OAuth 콜백 처리 (앱 마운트 시 ?code= 파라미터 감지) ──────────
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('code')) {
+      handleYoutubeOAuthCallback().then(profile => {
+        if (profile) {
+          setYoutubeConnected(true);
+          setShowYoutubeAutoPanel(true); // 인증 완료 후 설정 패널 자동 열기
+        }
+      });
+    }
+  }, []);
+
+  // ── YouTube 핸들러 ────────────────────────────────────────────────────────
+  const handleYoutubeUpload = () => {
+    if (!lastVideoBlobRef.current) {
+      alert('먼저 영상을 렌더링해주세요.');
+      return;
+    }
+    if (!isYoutubeConnected()) {
+      setShowYoutubeAutoPanel(true);
+      return;
+    }
+    setShowYoutubeModal(true);
+  };
+
+  // 전체 자동화: 생성 완료 후 자동 렌더링
+  useEffect(() => {
+    if (autoRenderPending && !isVideoGenerating) {
+      setAutoRenderPending(false);
+      triggerVideoExport(true);
+    }
+  }, [autoRenderPending, isVideoGenerating]);
+
+  // step이 비처리 상태로 돌아오면 isProcessingRef 강제 리셋 (stuck 방지)
+  useEffect(() => {
+    if (step === GenerationStep.IDLE || step === GenerationStep.COMPLETED || step === GenerationStep.ERROR || step === GenerationStep.SCRIPT_READY) {
+      isProcessingRef.current = false;
+    }
+  }, [step]);
 
   // 프로젝트 삭제 핸들러
   const handleDeleteProject = async (id: string) => {
@@ -1175,13 +1563,58 @@ const App: React.FC = () => {
             )}
           </button>
           <button
+            onClick={() => setViewMode('imagebatch')}
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
+              viewMode === 'imagebatch'
+                ? 'text-purple-200 bg-purple-600/20 border-purple-400/70 shadow-[0_0_18px_rgba(168,85,247,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            이미지 배치
+          </button>
+          <button
             onClick={() => { setStoryboardTab('subtitle'); setShowStoryboard(true); }}
             className="px-5 py-2.5 text-base font-black rounded-xl transition-all border text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10 flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
             자막 편집
           </button>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={handleSelectSaveDir}
+              className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all border flex items-center gap-2 ${saveDirSet ? 'text-green-400 bg-green-500/10 border-green-500/30 hover:bg-green-500/20' : 'text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border-white/[0.08]'}`}>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+              {saveDirSet ? '저장 폴더 설정됨' : '저장 폴더'}
+            </button>
+
+            {/* YouTube (숏폼 전용) */}
+            {aspectRatio === '9:16' && (
+              <div className="flex items-center gap-1">
+                {/* 설정 버튼 */}
+                <button
+                  onClick={() => setShowYoutubeAutoPanel(true)}
+                  title="YouTube 자동화 설정"
+                  className={`px-3 py-2 text-xs font-bold rounded-lg transition-all border flex items-center gap-1.5 ${
+                    youtubeConnected
+                      ? 'bg-red-600/20 border-red-500/40 text-red-400 hover:bg-red-600/30'
+                      : 'text-white/50 hover:text-red-300 bg-white/[0.05] hover:bg-red-600/10 border-white/[0.08] hover:border-red-500/30'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                  {youtubeConnected ? `${getChannelProfiles().filter(isProfileValid).length}채널 연결됨` : 'YouTube 설정'}
+                </button>
+                {/* 업로드 버튼 */}
+                {youtubeConnected && (
+                  <button
+                    onClick={handleYoutubeUpload}
+                    className="px-3 py-2 text-xs font-bold rounded-lg transition-all border bg-red-600/30 border-red-500/50 text-red-300 hover:bg-red-600/50 flex items-center gap-1.5"
+                  >
+                    업로드
+                  </button>
+                )}
+              </div>
+            )}
+
             <button onClick={handleOpenKeySelector} className="px-4 py-2 text-xs font-semibold text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] rounded-lg transition-all border border-white/[0.08] flex items-center gap-2">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
               API 키
@@ -1196,6 +1629,9 @@ const App: React.FC = () => {
           <button onClick={handleOpenKeySelector} className="px-3 py-1 bg-amber-500 text-slate-950 text-[10px] font-black rounded-lg hover:bg-amber-400 transition-colors uppercase">API 키 설정</button>
         </div>
       )}
+
+      {/* 이미지 배치 뷰 */}
+      {viewMode === 'imagebatch' && <ImageBatchPanel />}
 
       {/* 갤러리 뷰 */}
       {viewMode === 'gallery' && (
@@ -1234,42 +1670,12 @@ const App: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 shrink-0 ml-3">
                 <button onClick={() => setShowStoryboard(true)} className="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-300 text-xs font-bold border border-yellow-500/40 hover:bg-yellow-500/30 transition-colors">보기</button>
-                {!isVideoGenerating && <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-bold border border-red-500/30 hover:bg-red-600/30 transition-colors">중단</button>}
+                <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-400 text-xs font-bold border border-red-500/30 hover:bg-red-600/30 transition-colors">⏹ 취소</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* 임시저장 복구 배너 */}
-        {draftProject && generatedData.length === 0 && (
-          <div className="max-w-7xl mx-auto px-4 mb-4">
-            <div className="flex items-center justify-between px-5 py-3 rounded-xl bg-orange-600/20 border border-orange-500/40">
-              <div className="flex items-center gap-3">
-                <span className="text-orange-400 text-lg">⚠️</span>
-                <span className="text-sm font-bold text-orange-300">
-                  저장되지 않은 작업이 있습니다 — {draftProject.name} ({draftProject.assets.length}개 씬)
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    assetsRef.current = draftProject.assets;
-                    setGeneratedData([...draftProject.assets]);
-                    setCurrentTopic(draftProject.topic);
-                    setStep(GenerationStep.COMPLETED);
-                    setShowStoryboard(true);
-                    setDraftProject(null);
-                  }}
-                  className="px-3 py-1 rounded-lg bg-orange-500/30 hover:bg-orange-500/50 text-orange-200 text-xs font-bold border border-orange-500/40 transition-colors"
-                >복구하기</button>
-                <button
-                  onClick={() => { clearDraft(); setDraftProject(null); }}
-                  className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-xs font-bold border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors"
-                >무시</button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* 스토리보드로 돌아가기 배너 */}
         {generatedData.length > 0 && !showStoryboard && step === GenerationStep.COMPLETED && !isVideoGenerating && (
@@ -1302,6 +1708,8 @@ const App: React.FC = () => {
           thumbnailTopic={currentTopic}
           onOpenGallery={() => setViewMode('gallery')}
           resetKey={inputResetKey}
+          isVideoGenerating={isVideoGenerating}
+          onAudioFirstGenerate={handleAudioFirstGeneration}
         />
 
         
@@ -1360,18 +1768,18 @@ const App: React.FC = () => {
             </div>
             {/* 상태 표시 */}
             <div className="flex items-center gap-3">
-              {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS) && (
+              {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS || isVideoGenerating) && (
                 <>
                   <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
                   <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
-                  <button onClick={handleAbort} className="px-3 py-1 rounded-lg bg-red-600/20 text-red-500 text-[10px] font-black border border-red-500/30">Stop</button>
+                  <button onClick={handleAbort} className="px-3 py-1.5 rounded-lg bg-red-600/30 text-red-300 text-xs font-black border border-red-500/50 hover:bg-red-600/50 transition-colors">⏹ 취소</button>
                 </>
               )}
               {step === GenerationStep.COMPLETED && (
                 <>
                   <div className="w-2 h-2 rounded-full bg-green-500"></div>
                   <span className="text-sm font-bold text-slate-300 hidden sm:block">{progressMessage}</span>
-                  {assetsRef.current.some(a => !a.imageData) && (
+                  {generatedData.some(a => !a.imageData) && (
                     <button onClick={handleResume} className="px-3 py-1 rounded-lg bg-blue-600/30 text-blue-300 text-[10px] font-black border border-blue-500/40 hover:bg-blue-600/50 transition-colors">▶ 이어서 생성</button>
                   )}
                   <button onClick={handleReset} className="px-3 py-1 rounded-lg bg-slate-700/50 text-slate-400 text-[10px] font-black border border-slate-600/50 hover:bg-red-600/20 hover:text-red-400 transition-colors">전체 리셋</button>
@@ -1387,12 +1795,77 @@ const App: React.FC = () => {
             </div>
           </div>
 
+          {/* 제목 제안 + 검수 결과 배너 */}
+          {(titleSuggestions || scriptReview) && (
+            <div className="shrink-0 border-b border-slate-700/40 bg-slate-900/60 px-5 py-3 space-y-2 max-h-72 overflow-y-auto">
+              {/* 검수 결과 */}
+              {scriptReview && (
+                <div className={`rounded-xl border px-4 py-2.5 ${scriptReview.score >= 7 ? 'bg-green-500/8 border-green-500/25' : scriptReview.score >= 5 ? 'bg-yellow-500/8 border-yellow-500/25' : 'bg-red-500/8 border-red-500/25'}`}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-black text-white/60">검수 결과</span>
+                    <span className={`text-xs font-black px-2 py-0.5 rounded-full ${scriptReview.score >= 7 ? 'bg-green-500/20 text-green-300' : scriptReview.score >= 5 ? 'bg-yellow-500/20 text-yellow-300' : 'bg-red-500/20 text-red-300'}`}>
+                      {scriptReview.score}/10
+                    </span>
+                    <span className="text-xs text-white/40 flex-1">{scriptReview.summary}</span>
+                    {scriptReview.issues.length === 0 && <span className="text-xs text-green-400">✓ 이슈 없음</span>}
+                  </div>
+                  {scriptReview.issues.length > 0 && (
+                    <div className="space-y-1">
+                      {scriptReview.issues.map((issue, i) => (
+                        <div key={i} className="flex gap-2 text-xs">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            issue.type === 'duplicate' ? 'bg-orange-500/20 text-orange-300' :
+                            issue.type === 'weak_hook' ? 'bg-red-500/20 text-red-300' :
+                            issue.type === 'boring' ? 'bg-yellow-500/20 text-yellow-300' :
+                            'bg-slate-500/20 text-slate-300'
+                          }`}>{
+                            issue.type === 'duplicate' ? '중복' :
+                            issue.type === 'weak_hook' ? '훅약함' :
+                            issue.type === 'boring' ? '지루함' :
+                            issue.type === 'sequence' ? '순서오류' :
+                            issue.type === 'weak_ending' ? '결말약함' : '흐름'
+                          }</span>
+                          <span className="text-white/50">씬 {issue.scenes?.join(', ')}</span>
+                          <span className="text-white/40 flex-1 truncate">{issue.problem}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* 제목 제안 */}
+              {titleSuggestions && titleSuggestions.titles.length > 0 && (
+                <div className="rounded-xl border border-violet-500/25 bg-violet-500/8 px-4 py-2.5">
+                  <div className="text-xs font-black text-white/60 mb-2">바이럴 제목 제안 (클릭하면 복사)</div>
+                  <div className="space-y-1">
+                    {titleSuggestions.titles.map((t, i) => (
+                      <button key={i} type="button"
+                        onClick={() => { navigator.clipboard.writeText(t.title).catch(() => {}); }}
+                        className="w-full text-left flex items-start gap-2 group hover:bg-violet-500/10 rounded-lg px-2 py-1 transition-colors">
+                        <span className="text-[10px] text-violet-400/60 shrink-0 mt-0.5 font-bold">{i+1}</span>
+                        <span className="text-sm font-bold text-violet-200 group-hover:text-white transition-colors flex-1">{t.title}</span>
+                        <span className="text-[10px] text-white/25 shrink-0 hidden group-hover:block">복사</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 컨텐츠 */}
           <div className="flex-1 overflow-hidden">
             {generatedData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
-                <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent animate-spin rounded-full"></div>
-                <p className="text-sm">{progressMessage || '생성 준비 중...'}</p>
+                {(step === GenerationStep.SCRIPTING || step === GenerationStep.ASSETS || isVideoGenerating) ? (
+                  <>
+                    <div className="w-10 h-10 border-2 border-brand-500 border-t-transparent animate-spin rounded-full" />
+                    <p className="text-sm">{progressMessage || '생성 중...'}</p>
+                    <button onClick={handleAbort} className="px-4 py-2 rounded-xl bg-red-600/30 text-red-300 text-sm font-black border border-red-500/50 hover:bg-red-600/50 transition-colors">⏹ 취소</button>
+                  </>
+                ) : step === GenerationStep.SCRIPT_READY ? (
+                  <><div className="w-10 h-10 border-2 border-yellow-500 border-t-transparent animate-spin rounded-full" /><p className="text-sm text-yellow-400">대본 생성 완료 — 스토리보드 생성을 눌러주세요</p></>
+                ) : null}
               </div>
             ) : storyboardTab === 'thumbnail' ? (
               <ThumbnailEditor
@@ -1413,7 +1886,17 @@ const App: React.FC = () => {
                 onGenerateAudio={handleGenerateSceneAudio}
                 onDeleteScene={handleDeleteScene}
                 onSceneZoomChange={handleSceneZoomChange}
+                onGenerateAnimation={handleGenerateAnimation}
+                animatingIndices={animatingIndices}
                 aspectRatio={aspectRatio}
+                onVoiceUpload={(audioDataPerScene) => {
+                  audioDataPerScene.forEach((audioData, idx) => {
+                    if (audioData !== null) {
+                      updateAssetAt(idx, { audioData });
+                    }
+                  });
+                  autoSaveProject();
+                }}
                 onImageEditCommand={async (idx, command) => {
                   const current = assetsRef.current[idx];
                   if (!current) return;
@@ -1438,6 +1921,8 @@ const App: React.FC = () => {
                     console.error('[ImageEdit]', e);
                   }
                 }}
+                onChatSetSubtitleChars={(maxChars) => handleSubConfigChange({ maxCharsPerChunk: maxChars })}
+                onChatGenerateVideo={(indices) => indices.forEach(i => handleGenerateAnimation(i))}
               />
             ) : (
               <div className="h-full overflow-y-auto py-6">
@@ -1458,10 +1943,41 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* YouTube 자동화 설정 패널 */}
+      {showYoutubeAutoPanel && (
+        <YouTubeAutoPanel
+          onClose={() => {
+            setShowYoutubeAutoPanel(false);
+            setYoutubeConnected(isYoutubeConnected());
+          }}
+        />
+      )}
+
+      {/* YouTube 업로드 모달 */}
+      {showYoutubeModal && lastVideoBlobRef.current && (
+        <YouTubeUploadModal
+          videoBlob={lastVideoBlobRef.current}
+          defaultTitle={currentTopic || 'Heaven AI 생성 영상'}
+          onClose={() => setShowYoutubeModal(false)}
+          onDone={(url, scheduledAt) => {
+            setShowYoutubeModal(false);
+            if (scheduledAt) {
+              const d = new Date(scheduledAt);
+              const label = `${d.getMonth()+1}/${d.getDate()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+              setProgressMessage(`⏰ YouTube 예약 완료! ${label} 공개 예정`);
+              alert(`예약 업로드 완료!\n${label}에 자동 공개됩니다.\n${url}`);
+            } else {
+              setProgressMessage(`🎉 YouTube 업로드 완료! ${url}`);
+              alert(`업로드 완료!\n${url}`);
+            }
+          }}
+        />
+      )}
+
       {/* API 키 설정 모달 */}
       {showApiModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setShowApiModal(false)}>
-          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-white">API 키 설정</h2>
               <button onClick={() => setShowApiModal(false)} className="text-slate-500 hover:text-white transition-colors text-xl">✕</button>
@@ -1471,16 +1987,20 @@ const App: React.FC = () => {
               { label: 'Claude API 키 (대본생성)', key: 'heaven_anthropic_key', placeholder: 'sk-ant-...', link: 'https://console.anthropic.com', hint: '대본 생성에 Claude Sonnet 4.6 사용 (없으면 Gemini)' },
               { label: 'ElevenLabs API 키', key: 'heaven_el_key', placeholder: 'TTS용 키...', link: 'https://elevenlabs.io', hint: 'TTS 음성 생성용' },
               { label: 'FAL API 키', key: 'heaven_fal_key', placeholder: 'fal.ai 키...', link: 'https://fal.ai', hint: '이미지→영상 변환용' },
+              { label: 'YouTube OAuth Client ID', key: 'heaven_youtube_client_id', placeholder: '1234-xxx.apps.googleusercontent.com', link: 'https://console.cloud.google.com', hint: 'Google Cloud Console → OAuth 2.0 클라이언트 ID (웹 앱)' },
+              { label: 'YouTube OAuth Client Secret', key: 'heaven_youtube_client_secret', placeholder: 'GOCSPX-xxxxxxxxxxxx', link: 'https://console.cloud.google.com', hint: 'Google Cloud Console → OAuth 2.0 클라이언트 보안 비밀 (웹 앱)' },
             ].map(({ label, key, placeholder, link, hint }) => (
               <div key={key} className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">{label}</label>
                 <input
                   type="password"
+                  autoComplete="off"
                   defaultValue={localStorage.getItem(key) || ''}
                   placeholder={placeholder}
-                  onBlur={(e) => {
+                  onChange={(e) => {
                     const v = e.target.value.trim();
                     if (v) localStorage.setItem(key, v);
+                    else localStorage.removeItem(key);
                   }}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:border-brand-500 focus:outline-none"
                 />

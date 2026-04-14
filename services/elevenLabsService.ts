@@ -1,7 +1,6 @@
 
 import { CONFIG, ElevenLabsModelId } from "../config";
-import { SubtitleData, SubtitleWord, MeaningChunk } from "../types";
-import { splitSubtitleByMeaning } from "./geminiService";
+import { SubtitleData, SubtitleWord } from "../types";
 import { getVoiceSetting, setVoiceSetting } from "../utils/voiceStorage";
 
 /**
@@ -86,81 +85,6 @@ function convertToWords(
  * - 분리된 청크와 ElevenLabs 단어 타이밍을 매핑
  * - 각 청크의 시작/끝 시간 계산
  */
-function charBasedSplit(text: string, maxChars: number): string[] {
-  const chunks: string[] = [];
-  let i = 0;
-  while (i < text.length) {
-    let end = Math.min(i + maxChars, text.length);
-    // Try to break at a space or punctuation
-    if (end < text.length) {
-      const breakAt = text.lastIndexOf(' ', end);
-      if (breakAt > i) end = breakAt + 1;
-    }
-    chunks.push(text.slice(i, end).trim());
-    i = end;
-  }
-  return chunks.filter(c => c.length > 0);
-}
-
-async function createMeaningChunks(
-  fullText: string,
-  words: SubtitleWord[]
-): Promise<MeaningChunk[]> {
-  if (words.length === 0) return [];
-
-  // AI 기반 의미 단위 분리 (실패 시 글자수 기반 폴백)
-  let textChunks: string[];
-  try {
-    textChunks = await splitSubtitleByMeaning(fullText, 20);
-  } catch (e) {
-    console.warn('[MeaningChunks] AI 분리 실패, 글자수 기반 폴백 사용:', e);
-    textChunks = charBasedSplit(fullText, 18);
-  }
-
-  if (textChunks.length === 0) {
-    textChunks = charBasedSplit(fullText, 18);
-  }
-  if (textChunks.length === 0) return [];
-
-  const meaningChunks: MeaningChunk[] = [];
-  let wordIndex = 0;
-
-  for (const chunkText of textChunks) {
-    // 청크에 포함된 단어 수 계산 (공백 제거 후 비교)
-    const chunkWords = chunkText.split(/\s+/).filter(w => w.length > 0);
-    const chunkWordCount = chunkWords.length;
-
-    if (chunkWordCount === 0) continue;
-
-    // 시작 인덱스 저장
-    const startWordIndex = wordIndex;
-
-    // 청크에 해당하는 단어들 찾기
-    let matchedWords = 0;
-    while (wordIndex < words.length && matchedWords < chunkWordCount) {
-      matchedWords++;
-      wordIndex++;
-    }
-
-    // 매칭된 단어가 있으면 청크 생성
-    if (startWordIndex < words.length) {
-      const endWordIndex = Math.min(wordIndex - 1, words.length - 1);
-
-      meaningChunks.push({
-        text: chunkText,
-        startTime: words[startWordIndex].start,
-        endTime: words[endWordIndex].end
-      });
-    }
-  }
-
-  // 청크 간 간격 제거: endTime을 다음 청크의 startTime까지 연장
-  for (let i = 0; i < meaningChunks.length - 1; i++) {
-    meaningChunks[i].endTime = meaningChunks[i + 1].startTime;
-  }
-
-  return meaningChunks;
-}
 
 export const generateAudioWithElevenLabs = async (
   text: string,
@@ -244,16 +168,6 @@ export const generateAudioWithElevenLabs = async (
 
       console.log(`[ElevenLabs] 모델: ${finalModelId}, 자막 데이터 생성 완료: ${words.length}개 단어, 추정 길이: ${estimatedDuration?.toFixed(2)}초`);
 
-      // AI 의미 단위 분리 및 타이밍 매핑
-      try {
-        const meaningChunks = await createMeaningChunks(text, words);
-        if (meaningChunks.length > 0) {
-          subtitleData.meaningChunks = meaningChunks;
-          console.log(`[ElevenLabs] AI 의미 단위 분리 완료: ${meaningChunks.length}개 청크`);
-        }
-      } catch (e) {
-        console.warn('[ElevenLabs] AI 자막 분리 실패, 단어 기반 방식 사용:', e);
-      }
     }
 
     return {

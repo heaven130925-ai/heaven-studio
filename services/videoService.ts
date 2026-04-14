@@ -56,7 +56,8 @@ function drawImageWithZoom(
 ): void {
   if (img.width === 0 || img.height === 0) return;
 
-  const ratio = Math.min(W / img.width, H / img.height);
+  // cover: 캔버스를 완전히 채움 (검정 여백 없음, 비율 유지하며 필요시 잘림)
+  const ratio = Math.max(W / img.width, H / img.height);
   const baseW = img.width * ratio;
   const baseH = img.height * ratio;
   const factor = zoom.intensity / 100;
@@ -148,17 +149,7 @@ function createSubtitleChunks(
     return [];
   }
 
-  // AI 의미 단위 청크가 있으면 우선 사용
-  if (subtitleData.meaningChunks && subtitleData.meaningChunks.length > 0) {
-    console.log(`[Video] AI 의미 단위 자막 사용: ${subtitleData.meaningChunks.length}개 청크`);
-    return subtitleData.meaningChunks.map(chunk => ({
-      text: chunk.text,
-      startTime: chunk.startTime,
-      endTime: chunk.endTime
-    }));
-  }
-
-  // 폴백: 단어 수 기반 분리 (maxCharsPerChunk 기준으로 동적 조정)
+  // 단어 수 기반 분리 (maxCharsPerChunk 기준으로 동적 조정)
   console.log('[Video] 기본 단어 수 기반 자막 사용');
   const chunks: SubtitleChunk[] = [];
   const words = subtitleData.words;
@@ -263,9 +254,10 @@ function renderSubtitle(
   const safeMargin = 10;
   const align = config.textAlign ?? 'center';
 
-  ctx.font = `${config.fontWeight ?? 700} ${config.fontSize}px ${config.fontFamily}`;
-  ctx.textAlign = 'center';  // 항상 가운데
-  ctx.textBaseline = 'middle';
+  // 한국어 폰트 fallback: Impact/Arial Black 등 영문 폰트 선택 시 중국어 폰트 대체 방지
+  ctx.font = `${config.fontWeight ?? 700} ${config.fontSize}px '${config.fontFamily}', 'Noto Sans KR', '맑은 고딕', '나눔고딕', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
 
   // 전체 자막 영역 크기 계산
   const maxLineWidth = Math.max(...lines.map(line => ctx.measureText(line).width));
@@ -325,6 +317,7 @@ function renderSubtitle(
 export interface VideoExportOptions {
   enableSubtitles?: boolean;  // 자막 활성화 여부 (기본: true)
   subtitleConfig?: Partial<SubtitleConfig>;
+  aspectRatio?: '16:9' | '9:16';
 }
 
 // 실제 렌더링된 자막 타이밍 기록용 인터페이스
@@ -344,7 +337,7 @@ export interface VideoGenerationResult {
 // ─── FFmpeg 헬퍼 ────────────────────────────────────────────────────────────
 
 /** Canvas → JPEG Uint8Array (동기, toDataURL 기반) */
-function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.95): Uint8Array {
+function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.85): Uint8Array {
   const b64 = canvas.toDataURL('image/jpeg', quality).split(',')[1];
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -352,17 +345,60 @@ function canvasToJpegBytes(canvas: HTMLCanvasElement, quality = 0.95): Uint8Arra
   return out;
 }
 
-/** PreparedScene 배열의 오디오를 하나의 WAV Uint8Array로 병합 */
+// AAC 인코더 딜레이 보정용 앞 무음 패딩 (samples)
+// AAC LC 인코더는 ~1024 samples의 lookahead delay가 있음
+const AAC_ENCODER_DELAY_SAMPLES = 2048; // 넉넉하게 2048 (44100Hz 기준 ~46ms, 24000Hz 기준 ~85ms)
+const AUDIO_END_PAD_SEC = 0.1;         // WAV 끝 최소 여유 (apad 필터가 FFmpeg에서 추가로 2초 보정)
+
+/** AudioBuffer의 특정 구간을 WAV Uint8Array로 변환 (오디오-퍼스트 렌더링용)
+ *  앞에 AAC_ENCODER_DELAY_SAMPLES 무음 + 뒤에 AUDIO_END_PAD_SEC 무음 추가 */
+function audioBufferRangeToWav(buffer: AudioBuffer, startSec: number, endSec: number): Uint8Array {
+  const sr = buffer.sampleRate;
+  const src = buffer.getChannelData(0);
+  const audioStartSample = Math.floor(startSec * sr);
+  const audioEndSample = Math.ceil(endSec * sr);
+  const clipLength = Math.max(0, Math.min(audioEndSample - audioStartSample, src.length - audioStartSample));
+  const endPadSamples = Math.round(AUDIO_END_PAD_SEC * sr);
+  const totalSamples = AAC_ENCODER_DELAY_SAMPLES + clipLength + endPadSamples;
+  const merged = new Float32Array(totalSamples); // 기본값 0 (무음)
+  for (let i = 0; i < clipLength; i++) {
+    const srcIdx = audioStartSample + i;
+    if (srcIdx < src.length) merged[AAC_ENCODER_DELAY_SAMPLES + i] = src[srcIdx];
+  }
+  const dataSize = totalSamples * 2;
+  const buf = new ArrayBuffer(44 + dataSize);
+  const v = new DataView(buf);
+  const ws = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); v.setUint32(4, 36 + dataSize, true); ws(8, 'WAVE');
+  ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, dataSize, true);
+  let off = 44;
+  for (let i = 0; i < totalSamples; i++) {
+    const s = Math.max(-1, Math.min(1, merged[i]));
+    v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    off += 2;
+  }
+  return new Uint8Array(buf);
+}
+
+/** PreparedScene 배열의 오디오를 하나의 WAV Uint8Array로 병합
+ *  앞에 AAC_ENCODER_DELAY_SAMPLES 무음 + 뒤에 AUDIO_END_PAD_SEC 무음 추가 */
 function mergeSceneAudioToWav(scenes: PreparedScene[], sampleRate: number): Uint8Array {
   const totalDuration = scenes[scenes.length - 1].endTime;
-  const totalSamples = Math.ceil(totalDuration * sampleRate);
-  const merged = new Float32Array(totalSamples);
+  const endPadSamples = Math.round(AUDIO_END_PAD_SEC * sampleRate);
+  const totalSamples = AAC_ENCODER_DELAY_SAMPLES + Math.ceil(totalDuration * sampleRate) + endPadSamples;
+  const merged = new Float32Array(totalSamples); // 기본값 0 (무음)
 
   for (const sc of scenes) {
     if (!sc.audioBuffer) continue;
-    const start = Math.floor(sc.startTime * sampleRate);
+    // 앞 패딩만큼 offset 이동
+    const start = AAC_ENCODER_DELAY_SAMPLES + Math.floor(sc.startTime * sampleRate);
     const src = sc.audioBuffer.numberOfChannels > 0 ? sc.audioBuffer.getChannelData(0) : new Float32Array(0);
-    const len = Math.min(src.length, totalSamples - start);
+    // 각 씬의 오디오가 다음 씬 영역을 침범하지 않도록 duration으로 상한 제한
+    const maxDurationSamples = Math.ceil(sc.duration * sampleRate);
+    const len = Math.min(src.length, maxDurationSamples, totalSamples - start);
     for (let i = 0; i < len; i++) merged[start + i] = src[i];
   }
 
@@ -384,20 +420,27 @@ function mergeSceneAudioToWav(scenes: PreparedScene[], sampleRate: number): Uint
   return new Uint8Array(buf);
 }
 
+// 씬 수가 많을 때 청크 단위로 분할 렌더링
+const FFMPEG_CHUNK_SIZE = 20;
+
 /**
- * FFmpeg.wasm 기반 고속 렌더링
- * - requestAnimationFrame 실시간 제한 없음 → 3~5배 빠름
- * - 15fps로 프레임 렌더링 후 FFmpeg이 MP4로 인코딩
+ * FFmpeg.wasm 단일 청크 렌더링 (내부용)
+ * - preparedScenes는 startTime=0 기준으로 re-base된 상태여야 함
+ * - fullAudioBuffer: 오디오-퍼스트 모드에서 전체 오디오 버퍼 (per-scene 오디오 대체)
+ * - fullAudioOffsetSec: 이 청크가 전체 오디오에서 시작하는 절대 시간
  */
-async function generateVideoFFmpeg(
+async function renderFFmpegSingleChunk(
   preparedScenes: PreparedScene[],
   config: SubtitleConfig,
   enableSubtitles: boolean,
   onProgress: (msg: string) => void,
-  abortRef?: { current: boolean }
+  abortRef?: { current: boolean },
+  aspectRatio: '16:9' | '9:16' = '16:9',
+  subtitleIndexOffset: number = 0
 ): Promise<VideoGenerationResult | null> {
   const FPS = 30;
-  const W = 1920, H = 1080;
+  const W = aspectRatio === '9:16' ? 1080 : 1920;
+  const H = aspectRatio === '9:16' ? 1920 : 1080;
 
   onProgress('FFmpeg 초기화 중...');
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
@@ -414,16 +457,32 @@ async function generateVideoFFmpeg(
   if (!ctx) throw new Error('Canvas 초기화 실패');
 
   const recordedSubtitles: RecordedSubtitleEntry[] = [];
-  let subtitleIndex = 0;
+  let subtitleIndex = subtitleIndexOffset;
   let lastSubText: string | null = null;
   let lastSubStart = 0;
 
+  // WAV 앞 무음 패딩과 싱크 맞추기 위한 선행 빈 프레임 수
+  const sampleRate = preparedScenes.find(s => s.audioBuffer)?.audioBuffer?.sampleRate ?? 24000;
+  const leadingFrames = Math.round((AAC_ENCODER_DELAY_SAMPLES / sampleRate) * FPS);
+
   let frameIndex = 0;
-  const totalFrames = Math.ceil(preparedScenes[preparedScenes.length - 1].endTime * FPS);
+  const totalFrames = leadingFrames + Math.ceil(preparedScenes[preparedScenes.length - 1].endTime * FPS);
+
+  // ── 1-0. AAC 딜레이 보정용 선행 검정 프레임 렌더링 ─────────
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  const blackFrame = canvasToJpegBytes(canvas);
+  for (let b = 0; b < leadingFrames; b++) {
+    await ffmpeg.writeFile(`f${String(frameIndex).padStart(6, '0')}.jpg`, blackFrame);
+    frameIndex++;
+  }
 
   // ── 1. 프레임 렌더링 ──────────────────────────────────────
+  // 절대시간 기준 프레임 계산: ceil로 오디오보다 절대 짧아지지 않도록
   for (const scene of preparedScenes) {
-    const sceneFrames = Math.ceil(scene.duration * FPS);
+    const startFrame = Math.round(scene.startTime * FPS);
+    const endFrame = Math.ceil(scene.endTime * FPS);   // round → ceil: 씬 끝 잘림 방지
+    const sceneFrames = endFrame - startFrame;
     for (let f = 0; f < sceneFrames; f++) {
       if (abortRef?.current) { await ffmpeg.terminate(); return null; }
 
@@ -470,9 +529,15 @@ async function generateVideoFFmpeg(
     recordedSubtitles.push({ index: subtitleIndex, startTime: lastSubStart, endTime: preparedScenes[preparedScenes.length - 1].endTime, text: lastSubText });
   }
 
+  // ── 1-2. 오디오 끝 패딩만큼 후행 검정 프레임 추가 ────────────
+  const trailingFrames = Math.round(AUDIO_END_PAD_SEC * FPS);
+  for (let t = 0; t < trailingFrames; t++) {
+    await ffmpeg.writeFile(`f${String(frameIndex).padStart(6, '0')}.jpg`, blackFrame);
+    frameIndex++;
+  }
+
   // ── 2. 오디오 WAV 합성 ────────────────────────────────────
   onProgress('오디오 합성 중: 70%');
-  const sampleRate = preparedScenes.find(s => s.audioBuffer)?.audioBuffer?.sampleRate ?? 44100;
   const wavBytes = mergeSceneAudioToWav(preparedScenes, sampleRate);
   const hasAudio = preparedScenes.some(s => s.audioBuffer);
   if (hasAudio) await ffmpeg.writeFile('audio.wav', wavBytes);
@@ -482,7 +547,10 @@ async function generateVideoFFmpeg(
   const ffArgs = hasAudio
     ? ['-r', String(FPS), '-i', 'f%06d.jpg', '-i', 'audio.wav',
        '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
-       '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', 'output.mp4']
+       '-c:a', 'aac', '-b:a', '192k',
+       '-af', 'apad=pad_dur=2',  // 오디오 끝에 2초 무음 추가 → AAC 플러시 보장
+       '-shortest',               // 비디오 끝나면 인코딩 중단 (오디오가 더 길어도 OK)
+       '-movflags', '+faststart', 'output.mp4']
     : ['-r', String(FPS), '-i', 'f%06d.jpg',
        '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p',
        '-movflags', '+faststart', 'output.mp4'];
@@ -501,6 +569,102 @@ async function generateVideoFFmpeg(
   };
 }
 
+/**
+ * FFmpeg.wasm 기반 고속 렌더링 (청크 자동 분할)
+ * - 씬이 FFMPEG_CHUNK_SIZE 이하면 단일 렌더링
+ * - 씬이 많으면 청크별로 나눠서 렌더링 후 concat으로 합침
+ */
+async function generateVideoFFmpeg(
+  preparedScenes: PreparedScene[],
+  config: SubtitleConfig,
+  enableSubtitles: boolean,
+  onProgress: (msg: string) => void,
+  abortRef?: { current: boolean },
+  aspectRatio: '16:9' | '9:16' = '16:9'
+): Promise<VideoGenerationResult | null> {
+  // 씬이 적으면 단일 청크로 처리
+  if (preparedScenes.length <= FFMPEG_CHUNK_SIZE) {
+    return renderFFmpegSingleChunk(preparedScenes, config, enableSubtitles, onProgress, abortRef, aspectRatio, 0);
+  }
+
+  // 청크 분할 처리
+  const totalChunks = Math.ceil(preparedScenes.length / FFMPEG_CHUNK_SIZE);
+  console.log(`[FFmpeg] 씬 ${preparedScenes.length}개 → ${totalChunks}개 청크로 분할 렌더링`);
+
+  const chunkVideos: Uint8Array[] = [];
+  const allSubtitles: RecordedSubtitleEntry[] = [];
+  let subtitleIndexOffset = 0;
+
+  for (let ci = 0; ci < totalChunks; ci++) {
+    if (abortRef?.current) return null;
+
+    const chunkScenes = preparedScenes.slice(ci * FFMPEG_CHUNK_SIZE, (ci + 1) * FFMPEG_CHUNK_SIZE);
+    const chunkStartTime = chunkScenes[0].startTime;
+
+    // 청크 내 타이밍을 0 기준으로 재조정
+    const adjustedScenes = chunkScenes.map(s => ({
+      ...s,
+      startTime: s.startTime - chunkStartTime,
+      endTime: s.endTime - chunkStartTime,
+    }));
+
+    onProgress(`청크 렌더링 중 (${ci + 1}/${totalChunks})...`);
+    const result = await renderFFmpegSingleChunk(
+      adjustedScenes, config, enableSubtitles,
+      (msg) => onProgress(`[${ci + 1}/${totalChunks}] ${msg}`),
+      abortRef, aspectRatio, subtitleIndexOffset
+    );
+    if (!result) return null;
+
+    const chunkData = new Uint8Array(await result.videoBlob.arrayBuffer());
+    chunkVideos.push(chunkData);
+
+    // 자막 타이밍을 절대 시간으로 복원
+    result.recordedSubtitles.forEach(sub => {
+      allSubtitles.push({
+        ...sub,
+        startTime: sub.startTime + chunkStartTime,
+        endTime: sub.endTime + chunkStartTime,
+      });
+    });
+    subtitleIndexOffset += result.recordedSubtitles.length;
+  }
+
+  if (chunkVideos.length === 1) {
+    return {
+      videoBlob: new Blob([chunkVideos[0]], { type: 'video/mp4' }),
+      recordedSubtitles: allSubtitles,
+    };
+  }
+
+  // 모든 청크 MP4를 하나로 합치기
+  onProgress('청크 영상 합치는 중...');
+  const { FFmpeg } = await import('@ffmpeg/ffmpeg');
+  const ffmpeg = new FFmpeg();
+  await ffmpeg.load({
+    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js',
+    wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm',
+  });
+
+  let concatList = '';
+  for (let i = 0; i < chunkVideos.length; i++) {
+    await ffmpeg.writeFile(`chunk${i}.mp4`, chunkVideos[i]);
+    concatList += `file 'chunk${i}.mp4'\n`;
+  }
+
+  await ffmpeg.writeFile('concat.txt', new TextEncoder().encode(concatList));
+  await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'final.mp4']);
+
+  const raw = await ffmpeg.readFile('final.mp4');
+  const finalData = new Uint8Array(raw instanceof Uint8Array ? raw.buffer.slice(0) : (raw as any));
+  await ffmpeg.terminate();
+
+  return {
+    videoBlob: new Blob([finalData], { type: 'video/mp4' }),
+    recordedSubtitles: allSubtitles,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const generateVideo = async (
@@ -511,7 +675,9 @@ export const generateVideo = async (
 ): Promise<VideoGenerationResult | null> => {
   // 옵션 기본값
   const enableSubtitles = options?.enableSubtitles ?? true;
-  const config: SubtitleConfig = { ...DEFAULT_SUBTITLE_CONFIG, ...options?.subtitleConfig };
+  const rawConfig: SubtitleConfig = { ...DEFAULT_SUBTITLE_CONFIG, ...options?.subtitleConfig };
+  // 프리뷰 캔버스(1280×720 or 720×1280) → 실제 렌더 캔버스(1920×1080 or 1080×1920): 1.5배 스케일
+  const config: SubtitleConfig = { ...rawConfig, fontSize: Math.round(rawConfig.fontSize * 1.5) };
 
   // 이미지가 있는 모든 씬 포함 (오디오 없으면 기본 3초)
   const validAssets = assets.filter(a => a.imageData);
@@ -609,7 +775,6 @@ export const generateVideo = async (
     let audioBuffer: AudioBuffer | null = null;
     let duration = DEFAULT_DURATION;
 
-    // 오디오가 있으면 디코딩, 없으면 기본 시간 사용
     if (asset.audioData) {
       try {
         audioBuffer = await decodeAudio(asset.audioData, audioCtx);
@@ -627,11 +792,11 @@ export const generateVideo = async (
       if (asset.subtitleData && asset.subtitleData.words.length > 0) {
         // ElevenLabs: 타임스탬프 기반 청크
         subtitleChunks = createSubtitleChunks(asset.subtitleData, config);
-      } else if (asset.narration && audioBuffer && audioBuffer.duration > 0) {
-        // Google TTS: 타임스탬프 없음 → 글자 수 비례 추정
+      } else if (asset.narration && duration > 0) {
+        // Google/Gemini TTS: 타임스탬프 없음 → 씬 duration 기반 글자 수 비례 추정
         const maxChars = config.maxCharsPerChunk ?? 15;
-        subtitleChunks = createTimingEstimatedChunks(asset.narration, audioBuffer.duration, maxChars);
-        console.log(`[Video] 씬 ${i + 1}: Google TTS 추정 자막 ${subtitleChunks.length}개 청크 (최대 ${maxChars}자)`);
+        subtitleChunks = createTimingEstimatedChunks(asset.narration, duration, maxChars);
+        console.log(`[Video] 씬 ${i + 1}: 추정 자막 ${subtitleChunks.length}개 청크 (최대 ${maxChars}자, 시간 ${duration.toFixed(1)}s)`);
       }
     }
     if (subtitleChunks.length > 0) {
@@ -666,7 +831,7 @@ export const generateVideo = async (
   if (!hasAnimated) {
     try {
       onProgress('FFmpeg 고속 렌더링 시작...');
-      const result = await generateVideoFFmpeg(preparedScenes, config, enableSubtitles, onProgress, abortRef);
+      const result = await generateVideoFFmpeg(preparedScenes, config, enableSubtitles, onProgress, abortRef, options?.aspectRatio ?? '16:9');
       await audioCtx.close();
       return result;
     } catch (e) {
@@ -677,8 +842,9 @@ export const generateVideo = async (
 
   // 2. 캔버스 및 미디어 레코더 설정 (폴백)
   const canvas = document.createElement('canvas');
-  canvas.width = 1920;
-  canvas.height = 1080;
+  const fbAspect = options?.aspectRatio ?? '16:9';
+  canvas.width = fbAspect === '9:16' ? 1080 : 1920;
+  canvas.height = fbAspect === '9:16' ? 1920 : 1080;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error("캔버스 초기화 실패");
 

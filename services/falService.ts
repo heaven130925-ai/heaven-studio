@@ -17,7 +17,11 @@ interface PixVerseVideoResponse {
  * FAL API 키 가져오기 (환경변수 우선)
  */
 export function getFalApiKey(): string | null {
-  return process.env.FAL_API_KEY || localStorage.getItem(CONFIG.STORAGE_KEYS.FAL_API_KEY);
+  const raw = process.env.FAL_API_KEY || localStorage.getItem(CONFIG.STORAGE_KEYS.FAL_API_KEY);
+  if (!raw) return null;
+  // HTTP 헤더에 허용되는 ASCII 문자만 남기기 (비ASCII 제거)
+  const sanitized = raw.replace(/[^\x20-\x7E]/g, '').trim();
+  return sanitized || null;
 }
 
 /**
@@ -103,7 +107,7 @@ export async function generateVideoFromImage(
 
   } catch (error: any) {
     console.error('[FAL] 영상 생성 실패:', error.message);
-    return null;
+    throw error;
   }
 }
 

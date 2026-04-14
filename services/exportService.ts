@@ -73,7 +73,7 @@ export async function exportAssetsToZip(
       scene: asset.sceneNumber || i + 1,
       narration: asset.narration || '',
       image: '', // 이미지는 별도로 삽입
-      sentiment: asset.analysis?.sentiment || '',
+      sentiment: (asset.analysis as any)?.sentiment || '',
       composition: asset.analysis?.composition_type || ''
     });
 
@@ -105,9 +105,9 @@ export async function exportAssetsToZip(
 
     // 감정에 따른 색상
     const sentimentCell = row.getCell('sentiment');
-    if (asset.analysis?.sentiment === 'POSITIVE') {
+    if ((asset.analysis as any)?.sentiment === 'POSITIVE') {
       sentimentCell.font = { color: { argb: 'FF008000' } }; // 녹색
-    } else if (asset.analysis?.sentiment === 'NEGATIVE') {
+    } else if ((asset.analysis as any)?.sentiment === 'NEGATIVE') {
       sentimentCell.font = { color: { argb: 'FFFF0000' } }; // 빨강
     }
 

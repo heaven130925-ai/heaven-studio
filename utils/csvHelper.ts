@@ -200,48 +200,6 @@ function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
   return new Blob([wav], { type: 'audio/wav' });
 }
 
-/** 모든 씬 오디오를 하나로 합쳐서 WAV 1개로 다운로드 */
-export const downloadMergedAudio = async (data: GeneratedAsset[]) => {
-  const items = data.filter(item => item.audioData);
-  if (items.length === 0) { alert("다운로드할 오디오가 없습니다."); return; }
-
-  const ctx = new AudioContext();
-  const buffers: AudioBuffer[] = [];
-
-  for (const item of items) {
-    const raw = stripDataPrefix(item.audioData!);
-    const bytes = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-    try {
-      buffers.push(await ctx.decodeAudioData(bytes.buffer.slice(0)));
-    } catch {
-      // PCM16 fallback (Gemini TTS)
-      const pcm = new Int16Array(bytes.buffer);
-      const buf = ctx.createBuffer(1, pcm.length, 24000);
-      const ch = buf.getChannelData(0);
-      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
-      buffers.push(buf);
-    }
-  }
-
-  if (buffers.length === 0) { alert("오디오 디코딩 실패"); ctx.close(); return; }
-
-  const sampleRate = buffers[0].sampleRate;
-  const numChannels = Math.max(...buffers.map(b => b.numberOfChannels));
-  const totalLen = buffers.reduce((s, b) => s + b.length, 0);
-  const merged = ctx.createBuffer(numChannels, totalLen, sampleRate);
-
-  let offset = 0;
-  for (const buf of buffers) {
-    for (let ch = 0; ch < numChannels; ch++) {
-      const src = buf.getChannelData(Math.min(ch, buf.numberOfChannels - 1));
-      merged.getChannelData(ch).set(src, offset);
-    }
-    offset += buf.length;
-  }
-
-  ctx.close();
-  saveAs(audioBufferToWavBlob(merged), `heaven_audio_merged_${Date.now()}.wav`);
-};
 
 export const downloadProjectZip = async (data: GeneratedAsset[]) => {
   const zip = new JSZip();
