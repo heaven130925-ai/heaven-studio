@@ -126,7 +126,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   const characterFileInputRef = useRef<HTMLInputElement>(null);
   const styleFileInputRef = useRef<HTMLInputElement>(null);
   // 레퍼런스 채널
-  const [refChannelUrl, setRefChannelUrl] = useState<string>(localStorage.getItem('heaven_ref_channel') || '');
+  const [refChannelUrl, setRefChannelUrl] = useState<string>('');
   const [refVideoAnalysis, setRefVideoAnalysis] = useState<string>('');
   const [isAnalyzingChannel, setIsAnalyzingChannel] = useState(false);
 
@@ -165,9 +165,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
       setTimeout(() => {
         const nextTopic = queue[idx];
         setTopic(nextTopic);
-        const durSq = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+        const durSq = aspectRatio === '16:9' ? longformDuration : shortformDuration / 60;
         const tMinSq = durSq > 0 ? durSq : undefined;
-        onGenerate(nextTopic, { character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount || (tMinSq ? tMinSq * 7 : 0), true, true, refVideoAnalysis || undefined, selectedCategory || undefined, tMinSq, scriptBlueprint || undefined);
+        onGenerate(nextTopic, { character: characterRefImages, style: styleRefImages, characterStrength, styleStrength, characterDescription }, null, sceneCount || (tMinSq ? Math.max(1, Math.round(tMinSq * 7)) : 0), true, true, refVideoAnalysis || undefined, selectedCategory || undefined, tMinSq, scriptBlueprint || undefined);
       }, 2000);
     } else {
       setIsSequentialRunning(false);
@@ -253,10 +253,10 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
     e.preventDefault(); if (isProcessing) return;
     const refImages = buildRefImages();
     const rvCtx = refVideoAnalysis || undefined;
-    const dur = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+    const dur = aspectRatio === '16:9' ? longformDuration : shortformDuration / 60;
     const tMin = dur > 0 ? dur : undefined;
     // sceneCount=0이면 분 수 기반 자동 계산 (7씬/분)
-    const effCount = sceneCount || (tMin ? tMin * 7 : 0);
+    const effCount = sceneCount || (tMin ? Math.max(1, Math.round(tMin * 7)) : 0);
     if (activeTab === 'auto') { if (canSubmitAuto) onGenerate(topic, refImages, null, effCount, autoRunMode, false, rvCtx, selectedCategory || undefined, tMin, scriptBlueprint || undefined); }
     else { if (canSubmitManual) onGenerate("Manual Script Input", refImages, manualScript, effCount, false, false, rvCtx); }
   }, [isProcessing, activeTab, topic, manualScript, sceneCount, longformDuration, shortformDuration, aspectRatio, onGenerate, buildRefImages, canSubmitAuto, canSubmitManual, autoRunMode, refVideoAnalysis, selectedCategory]);
@@ -271,9 +271,9 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
         return;
       }
       const effectiveTopic = topic.trim() || '레퍼런스 채널 스타일로 자동 생성';
-      const dur2 = aspectRatio === '16:9' ? longformDuration : shortformDuration;
+      const dur2 = aspectRatio === '16:9' ? longformDuration : shortformDuration / 60;
       const tMin2 = dur2 > 0 ? dur2 : undefined;
-      const effCount2 = sceneCount || (tMin2 ? tMin2 * 7 : 0);
+      const effCount2 = sceneCount || (tMin2 ? Math.max(1, Math.round(tMin2 * 7)) : 0);
       onGenerate(effectiveTopic, refImages, null, effCount2, true, true, rvCtx, selectedCategory || undefined, tMin2, scriptBlueprint || undefined);
     } else {
       if (!manualScript.trim()) {
@@ -573,7 +573,8 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
                                 setSelectedTopics(new Set());
                                 setIsLoadingTopics(true);
                                 try {
-                                  const result = await findTrendingTopics(selectedCategory, []);
+                                  const usedTopics = suggestedTopics.map(t => t.topic);
+                                  const result = await findTrendingTopics(selectedCategory, usedTopics);
                                   if (Array.isArray(result)) setSuggestedTopics(result);
                                 } catch (e: any) { alert(`주제 추천 실패: ${e?.message || e}`); }
                                 finally { setIsLoadingTopics(false); }
@@ -630,12 +631,22 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
                                       : 'bg-white/[0.03] border-transparent hover:bg-white/[0.06] hover:border-white/10 text-white/80'
                                   }`}
                                   onClick={() => {
+                                    const isNowSelected = !selectedTopics.has(t.rank);
                                     setSelectedTopics(prev => {
                                       const next = new Set(prev);
                                       if (next.has(t.rank)) next.delete(t.rank); else next.add(t.rank);
                                       return next;
                                     });
                                     setTopic(t.topic);
+                                    // 전체 자동 실행 모드: 주제 선택 시 바로 생성 시작 (대본+이미지+오디오+렌더링 전부)
+                                    if (autoRunMode && isNowSelected && !isProcessing) {
+                                      const refImages = buildRefImages();
+                                      const rvCtx = refVideoAnalysis || undefined;
+                                      const dur = aspectRatio === '16:9' ? longformDuration : shortformDuration / 60;
+                                      const tMin = dur > 0 ? dur : undefined;
+                                      const effCount = sceneCount || (tMin ? Math.max(1, Math.round(tMin * 7)) : 0);
+                                      onGenerate(t.topic, refImages, null, effCount, true, true, rvCtx, selectedCategory || undefined, tMin, scriptBlueprint || undefined);
+                                    }
                                   }}>
                                   <div className={`mt-0.5 w-3.5 h-3.5 rounded border flex-shrink-0 flex items-center justify-center transition-all ${
                                     selectedTopics.has(t.rank) ? 'bg-amber-500 border-amber-400' : 'border-white/30'
@@ -665,7 +676,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
 
                     {autoRunMode && (
                       <div className="text-xs text-green-400/70 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-                        ✅ 전체 자동 실행: 대본 생성 후 이미지+오디오까지 자동으로 진행됩니다
+                        ✅ 전체 자동 실행 ON: 주제 클릭 즉시 대본+이미지+오디오 자동 생성 시작
                       </div>
                     )}
 
@@ -856,7 +867,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
                     <input
                       type="text"
                       value={refChannelUrl}
-                      onChange={(e) => { setRefChannelUrl(e.target.value); localStorage.setItem('heaven_ref_channel', e.target.value); setRefVideoAnalysis(''); }}
+                      onChange={(e) => { setRefChannelUrl(e.target.value); setRefVideoAnalysis(''); }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runChannelAnalysis(refChannelUrl); } }}
                       placeholder="https://youtube.com/@채널명 — 엔터로 분석"
                       disabled={isProcessing || isAnalyzingChannel}

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>YouTube 인증 완료</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: #e2e8f0;
+           display: flex; align-items: center; justify-content: center;
+           min-height: 100vh; margin: 0; text-align: center; }
+    .card { background: #1e293b; border: 1px solid #334155;
+            border-radius: 1rem; padding: 2rem; max-width: 400px; }
+    .icon { font-size: 3rem; margin-bottom: 1rem; }
+    h2 { margin: 0 0 .5rem; font-size: 1.25rem; }
+    p  { margin: 0; color: #94a3b8; font-size: .875rem; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon" id="ico">⏳</div>
+    <h2 id="msg">인증 처리 중...</h2>
+    <p id="sub"></p>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code  = params.get('code');
+    const error = params.get('error');
+
+    function setUI(icon, msg, sub) {
+      document.getElementById('ico').textContent = icon;
+      document.getElementById('msg').textContent = msg;
+      document.getElementById('sub').textContent = sub;
+    }
+
+    if (error) {
+      setUI('❌', '인증 취소', error);
+    } else if (code) {
+      // 방법 1: window.opener.postMessage
+      let sent = false;
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'youtube_oauth_code', code }, window.location.origin);
+          sent = true;
+        }
+      } catch(e) {}
+
+      // 방법 2: localStorage (다른 탭 수신용)
+      try {
+        localStorage.setItem('heaven_yt_oauth_code', JSON.stringify({ code, ts: Date.now() }));
+      } catch(e) {}
+
+      // 방법 3: sessionStorage (같은 파티션)
+      try {
+        sessionStorage.setItem('heaven_yt_oauth_code', JSON.stringify({ code, ts: Date.now() }));
+      } catch(e) {}
+
+      setUI('✅', 'YouTube 연결 완료!',
+        `opener: ${window.opener ? '있음' : '없음(새탭)'} | postMessage: ${sent ? '전송됨' : '실패'} | localStorage: 저장됨`
+      );
+
+      setTimeout(() => window.close(), 4000);
+    } else {
+      setUI('❓', '알 수 없는 응답', JSON.stringify(Object.fromEntries(params)));
+    }
+  </script>
+</body>
+</html>

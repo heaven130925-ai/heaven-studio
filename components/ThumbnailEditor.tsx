@@ -51,9 +51,6 @@ const FONT_OPTIONS: { id: FontStyle; label: string; desc: string; family: string
   { id: 'myeongjo',       label: '명조체',     desc: '우아하고 세련', family: '"Nanum Myeongjo","Noto Serif KR",serif' },
 ];
 
-const MAIN_COLORS = ['#FFFFFF', '#FFE600', '#FF4444', '#FF8800', '#44CCFF', '#AAFFAA', '#000000'];
-const SUB_COLORS  = ['#FFE600', '#FFFFFF', '#FF4444', '#FF8800', '#44CCFF', '#FFAAFF', '#CCCCCC'];
-const RICH_COLORS = ['#FFFFFF', '#FFE600', '#FF4444', '#FF8800', '#44CCFF', '#AAFFAA', '#FF88FF', '#88FFFF', '#000000'];
 
 const FONT_WEIGHT: Record<FontStyle, { main: string; sub: string }> = {
   'gothic-bold':    { main: '400', sub: '900' },
@@ -209,201 +206,11 @@ async function applySegmentOverlay(
   });
 }
 
-// ── 리치 텍스트 에디터 ──────────────────────────────────────────────────────
-
-interface RichTextEditorProps {
-  initialText: string;
-  onChange: (segments: TextSegment[]) => void;
-  globalFontStyle: FontStyle;
-  placeholder: string;
-  label: string;
-}
-
-const RichTextEditor: React.FC<RichTextEditorProps> = ({
-  initialText, onChange, globalFontStyle, placeholder, label,
-}) => {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [hasSelection, setHasSelection] = useState(false);
-  const [toolbarTop, setToolbarTop] = useState(0);
-  const [toolbarLeft, setToolbarLeft] = useState(0);
-  const [selSizePct, setSelSizePct] = useState(8);
-
-  // 초기 텍스트 세팅 (마운트 시 1회)
-  useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.textContent = initialText;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // DOM → segments 파싱
-  const parseSegments = (): TextSegment[] => {
-    if (!editorRef.current) return [{ text: '' }];
-    const segs: TextSegment[] = [];
-    const walk = (node: Node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const t = node.textContent || '';
-        if (t) segs.push({ text: t });
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement;
-        const color = el.dataset.color || undefined;
-        const fontStyle = el.dataset.font as FontStyle | undefined;
-        const sizePct = el.dataset.size != null ? Number(el.dataset.size) : undefined;
-        if (color || fontStyle || sizePct != null) {
-          segs.push({ text: el.textContent || '', color, fontStyle, sizePct });
-        } else {
-          el.childNodes.forEach(walk);
-        }
-      }
-    };
-    editorRef.current.childNodes.forEach(walk);
-    return segs.length ? segs : [{ text: '' }];
-  };
-
-  // 선택 영역 감지
-  useEffect(() => {
-    const checkSel = () => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || !editorRef.current?.contains(sel.anchorNode)) {
-        setHasSelection(false);
-        return;
-      }
-      const range = sel.getRangeAt(0);
-      const edRect = editorRef.current!.getBoundingClientRect();
-      const rRect  = range.getBoundingClientRect();
-      setToolbarTop(rRect.top - edRect.top - 48);
-      setToolbarLeft(Math.max(0, Math.min(rRect.left - edRect.left, edRect.width - 320)));
-      setHasSelection(true);
-    };
-    document.addEventListener('selectionchange', checkSel);
-    return () => document.removeEventListener('selectionchange', checkSel);
-  }, []);
-
-  // 선택 텍스트에 스타일 적용
-  const applyStyle = (style: Partial<TextSegment>) => {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    if (!editorRef.current?.contains(range.commonAncestorContainer) || range.collapsed) return;
-
-    const span = document.createElement('span');
-    const styles: string[] = [];
-    if (style.color)     { span.dataset.color = style.color; styles.push(`color:${style.color}`); }
-    if (style.fontStyle) { span.dataset.font = style.fontStyle; styles.push(`font-family:${getFontFamily(style.fontStyle)};font-weight:${style.fontStyle === 'myeongjo' ? 800 : 400}`); }
-    if (style.sizePct != null) { span.dataset.size = String(style.sizePct); styles.push(`font-size:${style.sizePct * 0.5}px`); }
-    span.style.cssText = styles.join(';');
-
-    try {
-      range.surroundContents(span);
-    } catch {
-      const frag = range.extractContents();
-      span.appendChild(frag);
-      range.insertNode(span);
-    }
-
-    sel.removeAllRanges();
-    setHasSelection(false);
-    onChange(parseSegments());
-  };
-
-  // 선택 스타일 초기화
-  const clearStyle = () => {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    if (range.collapsed) return;
-    const text = range.toString();
-    range.deleteContents();
-    range.insertNode(document.createTextNode(text));
-    sel.removeAllRanges();
-    setHasSelection(false);
-    onChange(parseSegments());
-  };
-
-  return (
-    <div className="relative">
-      <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider block mb-1">{label}</label>
-
-      {/* 플로팅 툴바 — 텍스트 선택 시 표시 */}
-      {hasSelection && (
-        <div
-          className="absolute z-50 bg-slate-900 border border-slate-600 rounded-xl p-2 flex flex-wrap items-center gap-1.5 shadow-2xl"
-          style={{ top: toolbarTop, left: toolbarLeft, minWidth: 300 }}
-          onMouseDown={e => e.preventDefault()}
-        >
-          {/* 폰트 */}
-          {FONT_OPTIONS.map(f => (
-            <button key={f.id} onClick={() => applyStyle({ fontStyle: f.id })}
-              className="px-1.5 py-0.5 text-[9px] rounded-lg bg-slate-800 hover:bg-blue-600/50 border border-slate-600 text-slate-200 transition-colors"
-              style={{ fontFamily: f.family }}>
-              {f.label}
-            </button>
-          ))}
-          <div className="w-px h-4 bg-slate-600" />
-
-          {/* 색상 */}
-          {RICH_COLORS.map(c => (
-            <button key={c} onClick={() => applyStyle({ color: c })}
-              className="w-4 h-4 rounded-full border border-slate-500 hover:scale-125 transition-transform shrink-0"
-              style={{ background: c }} />
-          ))}
-          <input type="color" defaultValue="#FFFFFF"
-            onChange={e => applyStyle({ color: e.target.value })}
-            className="w-5 h-5 rounded cursor-pointer bg-transparent border-0 p-0" />
-          <div className="w-px h-4 bg-slate-600" />
-
-          {/* 크기 */}
-          <div className="flex items-center gap-1">
-            <span className="text-[9px] text-slate-400">크기</span>
-            <input type="range" min={3} max={14} step={0.5} value={selSizePct}
-              onChange={e => setSelSizePct(Number(e.target.value))}
-              className="w-16 accent-blue-500" />
-            <span className="text-[9px] text-slate-300 w-5">{selSizePct}</span>
-            <button onClick={() => applyStyle({ sizePct: selSizePct })}
-              className="px-1.5 py-0.5 text-[9px] rounded-lg bg-blue-700/40 hover:bg-blue-600/60 border border-blue-600/50 text-blue-200">
-              적용
-            </button>
-          </div>
-          <div className="w-px h-4 bg-slate-600" />
-
-          {/* 스타일 초기화 */}
-          <button onClick={clearStyle}
-            className="px-1.5 py-0.5 text-[9px] rounded-lg bg-red-900/40 hover:bg-red-600/50 border border-red-700/50 text-red-300">
-            초기화
-          </button>
-        </div>
-      )}
-
-      {/* contenteditable 에디터 */}
-      <div
-        ref={editorRef}
-        contentEditable
-        suppressContentEditableWarning
-        onInput={() => onChange(parseSegments())}
-        onDragStart={e => e.preventDefault()}
-        onDrop={e => e.preventDefault()}
-        data-placeholder={placeholder}
-        className="w-full min-h-[38px] bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500 text-center empty:before:content-[attr(data-placeholder)] empty:before:text-slate-500"
-        style={{
-          fontFamily: getFontFamily(globalFontStyle),
-          lineHeight: 1.4,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-all',
-        }}
-      />
-      <p className="text-[9px] text-slate-600 mt-0.5">💡 텍스트를 드래그해서 선택 → 폰트/색상/크기 변경</p>
-    </div>
-  );
-};
-
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, selectedImage, onImageGenerated }) => {
   const [step, setStep] = useState<Step>(1);
   const [fromExternal, setFromExternal] = useState(false);
-
-  // 리치텍스트 에디터 리셋용 키
-  const [editorKey, setEditorKey] = useState(0);
 
   useEffect(() => {
     if (selectedImage) {
@@ -446,18 +253,14 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   const [showChannelName, setShowChannelName] = useState(false);
   const [channelName, setChannelName] = useState('');
 
-  // 텍스트 세그먼트 (리치텍스트)
-  const [mainSegments, setMainSegments] = useState<TextSegment[]>([{ text: '' }]);
-  const [subSegments,  setSubSegments]  = useState<TextSegment[]>([{ text: '' }]);
-
-  // 전역 텍스트 스타일
-  const [fontStyle, setFontStyle]       = useState<FontStyle>('gothic-bold');
-  const [mainColor, setMainColor]       = useState('#FFFFFF');
-  const [subColor, setSubColor]         = useState('#FFE600');
-  const [mainSizePct, setMainSizePct]   = useState(8.8);
-  const [subSizePct, setSubSizePct]     = useState(5.0);
-  const [mainPos, setMainPos]           = useState<TextPos>({ x: 50, y: 4 });
-  const [subPos,  setSubPos]            = useState<TextPos>({ x: 50, y: 17 });
+  // 다운로드 시 텍스트 오버레이 스타일 (기본값 고정)
+  const fontStyle: FontStyle = 'gothic-bold';
+  const mainColor = '#FFFFFF';
+  const subColor  = '#FFE600';
+  const mainSizePct = 8.8;
+  const subSizePct  = 5.0;
+  const mainPos: TextPos = { x: 50, y: 4 };
+  const subPos:  TextPos = { x: 50, y: 17 };
 
   // Step 6 상태
   const [isGenerating, setIsGenerating] = useState(false);
@@ -473,10 +276,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   // onImageGenerated → selectedImage 피드백 루프 방지용 플래그
   const skipNextSelectedImageRef = useRef(false);
 
-  // 텍스트 plain string 추출
-  const mainText = mainSegments.map(s => s.text).join('');
-  const subText  = subSegments.map(s => s.text).join('');
-
   // ── 헬퍼 ──────────────────────────────────────────────────────────────────
   const getCharacterDetails = () => {
     if (!charEnabled) return '';
@@ -486,11 +285,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
   };
 
   const getTargetLabel = (t: TargetAudience) => TARGET_OPTIONS.find(o => o.id === t)?.label || '전연령';
-
-  const currentOverlayOpts = useCallback(() => ({
-    mainSegments, subSegments, fontStyle, mainColor, subColor,
-    mainPos, subPos, mainSizePct, subSizePct,
-  }), [mainSegments, subSegments, fontStyle, mainColor, subColor, mainPos, subPos, mainSizePct, subSizePct]);
 
   // ── 파일 업로드 ────────────────────────────────────────────────────────────
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -667,11 +461,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setStrategies([]); setThumbnails([]); setThumbnailMeta([]); setSelectedThumbIdx(0);
     setEditRequest(''); setBorderStyle('none'); setShowChannelName(false);
     setUploadedBgImage(null); setFromExternal(false);
-    setMainPos({ x: 50, y: 4 }); setSubPos({ x: 50, y: 17 });
-    setFontStyle('gothic-bold'); setMainColor('#FFFFFF'); setSubColor('#FFE600');
-    setMainSizePct(8.8); setSubSizePct(5.0);
-    setMainSegments([{ text: '' }]); setSubSegments([{ text: '' }]);
-    setEditorKey(k => k + 1);
   };
 
   // step 6 진입 시 컨테이너 스크롤 탑
@@ -714,37 +503,6 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
       ← 이전
     </button>
   );
-
-  const ColorPicker = ({ colors, value, onChange, label }: {
-    colors: string[]; value: string; onChange: (c: string) => void; label: string;
-  }) => (
-    <div>
-      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">{label}</label>
-      <div className="flex gap-1.5 flex-wrap">
-        {colors.map(c => (
-          <button key={c} onClick={() => onChange(c)}
-            style={{ background: c, border: value === c ? '2px solid #fff' : '2px solid #475569' }}
-            className="w-6 h-6 rounded-full transition-all hover:scale-110" title={c} />
-        ))}
-        <input type="color" value={value} onChange={e => onChange(e.target.value)}
-          className="w-6 h-6 rounded-full cursor-pointer bg-transparent border-0 p-0" title="직접 선택" />
-      </div>
-    </div>
-  );
-
-  // ── 프리뷰 텍스트 렌더 (세그먼트별 스타일) ──────────────────────────────
-  const renderSegmentsHTML = (segs: TextSegment[], defaultColor: string, defaultSizePct: number) =>
-    segs.map((seg, i) => (
-      <span key={i} style={{
-        fontFamily:  seg.fontStyle ? getFontFamily(seg.fontStyle) : getFontFamily(fontStyle),
-        fontSize:    `${(seg.sizePct ?? defaultSizePct) * 0.85}cqw`,
-        fontWeight:  (seg.fontStyle ?? fontStyle) === 'myeongjo' ? 800 : 400,
-        color:       seg.color ?? defaultColor,
-        textShadow:  '-2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 0 8px #000',
-      }}>
-        {seg.text}
-      </span>
-    ));
 
   // ── 렌더 ──────────────────────────────────────────────────────────────────
   return (

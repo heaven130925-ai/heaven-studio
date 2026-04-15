@@ -213,11 +213,14 @@ export const findTrendingTopics = async (category: string, usedTopics: string[])
     const ai = getAI();
     const prompt = getTrendSearchPrompt(category, usedTopics.join(", "));
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS.TREND_RESEARCHER,
         responseMimeType: "application/json",
+        temperature: 1.5,
+        topP: 0.95,
+        topK: 64,
       },
     });
     return JSON.parse(cleanJsonResponse(response.text || ''));

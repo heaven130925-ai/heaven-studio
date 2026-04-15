@@ -23,12 +23,13 @@ import { isYoutubeConnected, getChannelProfiles, isProfileValid, handleYoutubeOA
 import YouTubeUploadModal from './components/YouTubeUploadModal';
 import YouTubeAutoPanel from './components/YouTubeAutoPanel';
 import ImageBatchPanel from './components/ImageBatchPanel';
+import GrokBatchPanel from './components/GrokBatchPanel';
 import * as FileSaver from 'file-saver';
 
 const saveAs = (FileSaver as any).saveAs || (FileSaver as any).default || FileSaver;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-type ViewMode = 'main' | 'gallery' | 'imagebatch';
+type ViewMode = 'main' | 'gallery' | 'imagebatch' | 'grokbatch';
 
 const GIST_RAW_URL = 'https://gist.githubusercontent.com/heaven130925-ai/7094a8ac89c8438b922d5ad79da79a6b/raw';
 
@@ -82,6 +83,7 @@ const App: React.FC = () => {
   const [showYoutubeModal, setShowYoutubeModal] = useState(false);
   const [showYoutubeAutoPanel, setShowYoutubeAutoPanel] = useState(false);
   const lastVideoBlobRef = useRef<Blob | null>(null);
+  const autoYoutubeAfterRenderRef = useRef(false); // 전체 자동 실행 시 렌더 완료 후 YouTube 모달 자동 오픈
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(
     (localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) as '16:9' | '9:16') || '16:9'
   );
@@ -632,6 +634,9 @@ const App: React.FC = () => {
     // 새 생성 시작 시 이전 캐릭터 데이터 초기화
     setCharactersList([]);
     localStorage.removeItem(CHAR_PROFILES_KEY);
+
+    // 전체 자동 실행: 렌더 완료 후 YouTube 모달 자동 오픈 여부 플래그
+    autoYoutubeAfterRenderRef.current = autoRender && isYoutubeConnected();
 
     // 자동 주제 모드(대본확인 단계)만 스토리보드 열지 않음, autoRun/autoRender 시에는 즉시 열기
     const isAutoTopicMode = !sourceText && topic !== 'Manual Script Input';
@@ -1407,6 +1412,11 @@ const App: React.FC = () => {
         await saveFileToDir(result.videoBlob, filename);
         lastVideoBlobRef.current = result.videoBlob;
         setProgressMessage(`✨ MP4 렌더링 완료! (${enableSubtitles ? '자막 O' : '자막 X'})`);
+        // 전체 자동 실행 + YouTube 연결된 경우 → 업로드 모달 자동 오픈
+        if (autoYoutubeAfterRenderRef.current) {
+          autoYoutubeAfterRenderRef.current = false;
+          setTimeout(() => setShowYoutubeModal(true), 800);
+        }
       }
     } catch (error: any) {
       const msg = `렌더링 실패: ${error.message}`;
@@ -1574,6 +1584,17 @@ const App: React.FC = () => {
             이미지 배치
           </button>
           <button
+            onClick={() => setViewMode('grokbatch')}
+            className={`px-5 py-2.5 text-base font-black rounded-xl transition-all border flex items-center gap-2 ${
+              viewMode === 'grokbatch'
+                ? 'text-violet-200 bg-violet-600/20 border-violet-400/70 shadow-[0_0_18px_rgba(139,92,246,0.45)]'
+                : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-violet-500/40 hover:bg-violet-600/10'
+            }`}
+          >
+            <span className="text-base">⚡</span>
+            Grok 배치
+          </button>
+          <button
             onClick={() => { setStoryboardTab('subtitle'); setShowStoryboard(true); }}
             className="px-5 py-2.5 text-base font-black rounded-xl transition-all border text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:border-purple-500/40 hover:bg-purple-600/10 flex items-center gap-2"
           >
@@ -1632,6 +1653,7 @@ const App: React.FC = () => {
 
       {/* 이미지 배치 뷰 */}
       {viewMode === 'imagebatch' && <ImageBatchPanel />}
+      {viewMode === 'grokbatch' && <GrokBatchPanel />}
 
       {/* 갤러리 뷰 */}
       {viewMode === 'gallery' && (
@@ -1958,6 +1980,9 @@ const App: React.FC = () => {
         <YouTubeUploadModal
           videoBlob={lastVideoBlobRef.current}
           defaultTitle={currentTopic || 'Heaven AI 생성 영상'}
+          topic={currentTopic || undefined}
+          narrations={generatedData.map(a => a.narration).filter(Boolean)}
+          aspectRatio={aspectRatio}
           onClose={() => setShowYoutubeModal(false)}
           onDone={(url, scheduledAt) => {
             setShowYoutubeModal(false);
