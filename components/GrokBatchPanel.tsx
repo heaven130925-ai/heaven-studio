@@ -22,26 +22,22 @@ interface GrokResult {
   completedAt: number;
 }
 
-// ── 확장앱 ID (chrome://extensions 에서 확인한 고정 ID) ──────────────────────
-const EXT_ID = 'dbmipcphcgbeggppjhfefhkaacoahmcb';
-
-// ── 확장앱 통신 유틸 (externally_connectable 방식) ────────────────────────────
+// ── 확장앱 통신 유틸 (content-heaven.js postMessage 릴레이 방식) ──────────────
 function sendToExtension(type: string, payload: Record<string, any> = {}): Promise<any> {
   return new Promise((resolve) => {
-    const cr = (window as any).chrome;
-    if (!cr?.runtime?.sendMessage) { resolve(null); return; }
-    try {
-      cr.runtime.sendMessage(EXT_ID, { type, ...payload }, (response: any) => {
-        if ((window as any).chrome?.runtime?.lastError) {
-          resolve(null);
-        } else {
-          resolve(response);
-        }
-      });
-    } catch {
-      resolve(null);
-    }
-    setTimeout(() => resolve(null), 5000);
+    const ACK_TYPES = [
+      'HEAVEN_GROK_ADD_JOBS_ACK', 'HEAVEN_GROK_RESULTS',
+      'HEAVEN_GROK_STATUS', 'HEAVEN_GROK_CLEAR_ACK',
+    ];
+    const handler = (e: MessageEvent) => {
+      if (ACK_TYPES.includes(e.data?.type)) {
+        window.removeEventListener('message', handler);
+        resolve(e.data);
+      }
+    };
+    window.addEventListener('message', handler);
+    window.postMessage({ type, ...payload }, '*');
+    setTimeout(() => { window.removeEventListener('message', handler); resolve(null); }, 5000);
   });
 }
 
@@ -60,28 +56,35 @@ const GrokBatchPanel: React.FC = () => {
 
   // ── 확장앱 감지 (DOM 폴링 + postMessage 병행) ─────────────────────────────
   useEffect(() => {
-    // chrome.runtime.sendMessage 직접 PING (externally_connectable 방식)
-    const tryPing = () => {
-      const cr = (window as any).chrome;
-      console.log('[HeavenGrok] chrome 객체:', !!cr, '/ runtime:', !!cr?.runtime, '/ sendMessage:', !!cr?.runtime?.sendMessage);
-      if (!cr?.runtime?.sendMessage) return;
-      try {
-        cr.runtime.sendMessage(EXT_ID, { type: 'HEAVEN_GROK_PING' }, (resp: any) => {
-          const err = cr.runtime.lastError;
-          console.log('[HeavenGrok] PING 응답:', resp, '/ 오류:', err?.message);
-          if (!err && resp?.ok) {
-            setExtensionReady(true);
-          }
-        });
-      } catch(e: any) {
-        console.log('[HeavenGrok] sendMessage 예외:', e?.message);
+    const markReady = () => setExtensionReady(true);
+
+    // 방법 1: DOM 마커 폴링 (popup이 content-heaven.js 주입 시 삽입)
+    // 방법 2: window 변수 폴링
+    const checkAll = () => {
+      if (document.getElementById('__heaven_grok_ext__') || (window as any).__heavenGrokReady) {
+        markReady();
+        clearInterval(poll);
       }
     };
+    const poll = setInterval(checkAll, 300);
+    checkAll();
 
-    tryPing();
-    const poll = setInterval(tryPing, 1500);
+    // 방법 3: CustomEvent
+    window.addEventListener('HEAVEN_GROK_READY', markReady);
 
-    return () => clearInterval(poll);
+    // 방법 4: postMessage
+    const msgHandler = (e: MessageEvent) => {
+      if (e.data?.type === 'HEAVEN_GROK_EXTENSION_READY') markReady();
+    };
+    window.addEventListener('message', msgHandler);
+
+    window.postMessage({ type: 'HEAVEN_GROK_PING' }, '*');
+
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener('HEAVEN_GROK_READY', markReady);
+      window.removeEventListener('message', msgHandler);
+    };
   }, []);
 
   // ── 폴링: 상태 & 결과 ─────────────────────────────────────────────────────
