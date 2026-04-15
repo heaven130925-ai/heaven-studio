@@ -65,6 +65,8 @@ const ImageBatchPanel: React.FC = () => {
   const charInputRef  = useRef<HTMLInputElement>(null);
   const styleInputRef = useRef<HTMLInputElement>(null);
 
+  const [inputMode, setInputMode] = useState<'script' | 'direct'>('script');
+  const [directPrompts, setDirectPrompts]   = useState('');
   const [originalScript, setOriginalScript] = useState('');
   const [rewrittenScript, setRewrittenScript] = useState('');
   const [imagePrompts, setImagePrompts]     = useState<string[]>([]);
@@ -211,11 +213,54 @@ const ImageBatchPanel: React.FC = () => {
   const isGenerating = loading !== null;
   const doneImages = generatedImages.filter(Boolean).length;
 
+  // 직접 입력 모드에서 이미지 생성 시작
+  const handleDirectStart = () => {
+    const prompts = directPrompts.split('\n').map(l => l.trim()).filter(Boolean);
+    if (prompts.length === 0) { alert('프롬프트를 입력해주세요. (한 줄에 1개)'); return; }
+    setImagePrompts(prompts);
+    setGeneratedImages([]);
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
 
-      {/* ── Step 1: 원문 대본 입력 (최상단) ── */}
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
+      {/* ── 모드 전환 탭 ── */}
+      <div className="flex gap-1 bg-slate-900 border border-slate-700 rounded-xl p-1">
+        <button
+          onClick={() => setInputMode('script')}
+          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${inputMode === 'script' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+        >📄 대본 → 이미지</button>
+        <button
+          onClick={() => setInputMode('direct')}
+          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${inputMode === 'direct' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+        >✏️ 프롬프트 직접 입력</button>
+      </div>
+
+      {/* ── 직접 입력 모드 ── */}
+      {inputMode === 'direct' && (
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-white">프롬프트 입력</span>
+            <span className="text-xs text-slate-500">한 줄에 1개 — {directPrompts.split('\n').filter(l => l.trim()).length}개</span>
+          </div>
+          <textarea
+            value={directPrompts}
+            onChange={e => setDirectPrompts(e.target.value)}
+            placeholder={"A futuristic city at night with neon lights\nA peaceful forest with morning fog\nAn ocean wave crashing on rocks"}
+            rows={8}
+            disabled={isGenerating}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none resize-y placeholder-slate-600 font-mono"
+          />
+          <button
+            onClick={handleDirectStart}
+            disabled={isGenerating || !directPrompts.trim()}
+            className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black rounded-xl text-sm transition-colors"
+          >이미지 생성 준비</button>
+        </div>
+      )}
+
+      {/* ── Step 1: 원문 대본 입력 (대본 모드만) ── */}
+      {inputMode === 'script' && <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-black text-white flex-shrink-0">1</span>
@@ -249,10 +294,10 @@ const ImageBatchPanel: React.FC = () => {
             <><svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>각색 중...</>
           ) : '각색하기'}
         </button>
-      </div>
+      </div>}
 
       {/* 지침 설정 패널 */}
-      {showSettings && (
+      {inputMode === 'script' && showSettings && (
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-4">
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">각색 프롬프트 (시스템 지침)</label>
@@ -346,7 +391,7 @@ const ImageBatchPanel: React.FC = () => {
       </div>
 
       {/* 각색 결과 */}
-      {rewrittenScript && (
+      {inputMode === 'script' && rewrittenScript && (
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-green-400 uppercase tracking-wider">각색 결과</span>
@@ -364,8 +409,8 @@ const ImageBatchPanel: React.FC = () => {
         </div>
       )}
 
-      {/* ── Step 2: 이미지 프롬프트 생성 ── */}
-      {(rewrittenScript || originalScript) && (
+      {/* ── Step 2: 이미지 프롬프트 생성 (대본 모드만) ── */}
+      {inputMode === 'script' && (rewrittenScript || originalScript) && (
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-xs font-black text-white flex-shrink-0">2</span>
