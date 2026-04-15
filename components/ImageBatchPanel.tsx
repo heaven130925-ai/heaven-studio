@@ -62,6 +62,8 @@ const ImageBatchPanel: React.FC = () => {
   const [showSettings, setShowSettings]     = useState(false);
 
   const [refImages, setRefImages] = useState<ReferenceImages>({ ...DEFAULT_REFERENCE_IMAGES });
+  const [charDrag, setCharDrag]   = useState(false);
+  const [styleDrag, setStyleDrag] = useState(false);
   const charInputRef  = useRef<HTMLInputElement>(null);
   const styleInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,6 +96,17 @@ const ImageBatchPanel: React.FC = () => {
   const handleRefUpload = async (type: 'character' | 'style', files: FileList | null) => {
     if (!files || files.length === 0) return;
     const b64list = await Promise.all(Array.from(files).slice(0, 2).map(readFileAsBase64));
+    setRefImages(prev => ({ ...prev, [type]: b64list }));
+  };
+
+  const handleDrop = async (type: 'character' | 'style', e: React.DragEvent) => {
+    e.preventDefault();
+    if (type === 'character') setCharDrag(false); else setStyleDrag(false);
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    const b64list = await Promise.all(imageFiles.slice(0, 2).map(readFileAsBase64));
     setRefImages(prev => ({ ...prev, [type]: b64list }));
   };
 
@@ -161,7 +174,9 @@ const ImageBatchPanel: React.FC = () => {
       setPreviewImage(b64);
       setStatus('');
     } catch (e: any) {
-      setStatus(`미리보기 오류: ${e.message}`);
+      const msg = e?.message || String(e);
+      setStatus(`❌ 미리보기 오류: ${msg}`);
+      alert(`이미지 생성 오류:\n${msg}`);
     } finally {
       setLoading(null);
     }
@@ -344,7 +359,10 @@ const ImageBatchPanel: React.FC = () => {
               onChange={e => handleRefUpload('character', e.target.files)} />
             <div
               onClick={() => charInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2 h-24 border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-xl cursor-pointer transition-colors bg-slate-800/40"
+              onDragOver={e => { e.preventDefault(); setCharDrag(true); }}
+              onDragLeave={() => setCharDrag(false)}
+              onDrop={e => handleDrop('character', e)}
+              className={`flex flex-col items-center justify-center gap-2 h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors bg-slate-800/40 ${charDrag ? 'border-blue-400 bg-blue-500/10' : 'border-slate-700 hover:border-blue-500/50'}`}
             >
               {refImages.character.length > 0 ? (
                 <div className="flex gap-1.5">
@@ -369,7 +387,10 @@ const ImageBatchPanel: React.FC = () => {
               onChange={e => handleRefUpload('style', e.target.files)} />
             <div
               onClick={() => styleInputRef.current?.click()}
-              className="flex flex-col items-center justify-center gap-2 h-24 border-2 border-dashed border-slate-700 hover:border-purple-500/50 rounded-xl cursor-pointer transition-colors bg-slate-800/40"
+              onDragOver={e => { e.preventDefault(); setStyleDrag(true); }}
+              onDragLeave={() => setStyleDrag(false)}
+              onDrop={e => handleDrop('style', e)}
+              className={`flex flex-col items-center justify-center gap-2 h-24 border-2 border-dashed rounded-xl cursor-pointer transition-colors bg-slate-800/40 ${styleDrag ? 'border-purple-400 bg-purple-500/10' : 'border-slate-700 hover:border-purple-500/50'}`}
             >
               {refImages.style.length > 0 ? (
                 <div className="flex gap-1.5">
