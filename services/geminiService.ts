@@ -249,10 +249,7 @@ function getTtsConfig() {
  */
 async function generateTtsChunk(text: string): Promise<string> {
   const { voiceName, systemInstruction } = getTtsConfig();
-  const models = [
-    GEMINI_MODELS.TTS,
-    'gemini-2.5-pro-preview-tts',
-  ];
+  const models = [...GEMINI_MODELS.TTS_FALLBACKS];
   let lastError: any;
   for (const model of models) {
     try {

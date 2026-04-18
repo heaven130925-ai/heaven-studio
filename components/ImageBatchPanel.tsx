@@ -100,7 +100,7 @@ const ImageBatchPanel: React.FC = () => {
     if (type === 'character') setCharDrag(false); else setStyleDrag(false);
     const files = e.dataTransfer.files;
     if (!files || files.length === 0) return;
-    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const imageFiles = Array.from(files as FileList).filter(f => f.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
     const b64list = await Promise.all(imageFiles.slice(0, 2).map(readFileAsBase64));
     setRefImages(prev => ({ ...prev, [type]: b64list }));

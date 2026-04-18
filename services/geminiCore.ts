@@ -17,6 +17,7 @@ export const GEMINI_MODELS = {
   IMAGE_GEN: 'gemini-2.5-flash-image',
   IMAGE_GEN_FALLBACKS: ['gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
   TTS: 'gemini-2.5-flash-preview-tts',
+  TTS_FALLBACKS: ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'],
 } as const;
 
 export async function callGeminiWithFallback(

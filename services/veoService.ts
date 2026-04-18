@@ -1,13 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-
-const getGeminiApiKey = () => {
-  const raw = localStorage.getItem('heaven_gemini_key') || '';
-  return raw.replace(/[^\x20-\x7E]/g, '').trim();
-};
-
-const getAI = () => new GoogleGenAI({ apiKey: getGeminiApiKey() });
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+import { getGeminiApiKey, getAI, wait } from './geminiCore';
 
 /** blob → data:video/mp4;base64,... (페이지 새로고침 후에도 유효) */
 function blobToDataUrl(blob: Blob): Promise<string> {

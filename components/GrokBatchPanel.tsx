@@ -133,7 +133,7 @@ const GrokBatchPanel: React.FC = () => {
   const handleRefUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    Promise.all(Array.from(files).slice(0, 5).map(f => new Promise<string>((res, rej) => {
+    Promise.all(Array.from(files as FileList).slice(0, 5).map((f: File) => new Promise<string>((res, rej) => {
       const reader = new FileReader();
       reader.onload = ev => res(ev.target?.result as string);
       reader.onerror = rej;
