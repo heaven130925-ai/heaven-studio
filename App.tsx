@@ -15,6 +15,7 @@ import { generateVideoFromImage, getFalApiKey } from './services/falService';
 import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage, saveDraft, loadDraft, clearDraft } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
+import { GEMINI_MODELS } from './services/geminiCore';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
@@ -1099,7 +1100,7 @@ const App: React.FC = () => {
           const bestIndices = await pickBestThumbnailScene(targetTopic, assetsRef.current, thumbCount);
 
           // 나노바나나2(gemini-3.1-flash-image-preview)로 썸네일 생성 — 한국어 텍스트 직접 렌더링
-          const thumbModel = getSelectedImageModel().startsWith('gemini-3') ? getSelectedImageModel() : 'gemini-3.1-flash-image-preview';
+          const thumbModel = getSelectedImageModel().startsWith('gemini-3') ? getSelectedImageModel() : GEMINI_MODELS.IMAGE_GEN_FALLBACKS[0];
           const ts = Date.now();
           for (let t = 0; t < bestIndices.length; t++) {
             const sceneIdx = bestIndices[t];

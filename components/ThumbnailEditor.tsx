@@ -7,6 +7,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { GeneratedAsset } from '../types';
 import type { ThumbnailVariantStrategy } from '../services/geminiService';
+import { GEMINI_MODELS } from '../services/geminiCore';
 
 interface Props {
   scenes: GeneratedAsset[];
@@ -326,7 +327,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
 
   const runGenerate = async (strategy: ThumbnailVariantStrategy | null, editReq?: string): Promise<string | null> => {
     try {
-      const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
+      const selectedModel = localStorage.getItem('heaven_image_model') || GEMINI_MODELS.IMAGE_GEN;
       const isNanoBanana = selectedModel.startsWith('gemini-3');
       const imagePrompt = strategy?.imagePrompt || '';
 
@@ -380,7 +381,7 @@ const ThumbnailEditor: React.FC<Props> = ({ scenes: _scenes, topic: propTopic, s
     setSelectedThumbIdx(0);
     setStep(6);
 
-    const selectedModel = localStorage.getItem('heaven_image_model') || 'gemini-2.5-flash-image';
+    const selectedModel = localStorage.getItem('heaven_image_model') || GEMINI_MODELS.IMAGE_GEN;
     const isNano = selectedModel.startsWith('gemini-3');
 
     const results = await Promise.all(strategies.map(s => runGenerate(s)));

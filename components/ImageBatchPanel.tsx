@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import JSZip from 'jszip';
 import { generateImage } from '../services/imageService';
 import { DEFAULT_REFERENCE_IMAGES, ReferenceImages } from '../types';
+import { getAI, callGeminiWithFallback } from '../services/geminiCore';
 
 // ── localStorage 키 ───────────────────────────────────────────────────────────
 const KEY_REWRITE_PROMPT  = 'heaven_imgbatch_rewrite_prompt';
@@ -36,23 +37,18 @@ async function generateBatchImage(prompt: string, refImages: ReferenceImages): P
   return result;
 }
 
-// ── Claude/Gemini 텍스트 생성 ──────────────────────────────────────────────────
-async function callGeminiText(systemPrompt: string, userText: string, apiKey: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: userText }] }],
-        generationConfig: { temperature: 0.8, maxOutputTokens: 8192 },
-      }),
-    }
-  );
-  if (!res.ok) throw new Error(`Gemini 오류 (${res.status})`);
-  const json = await res.json();
-  return json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+// ── Gemini 텍스트 생성 (SDK + 모델 자동 폴백) ─────────────────────────────────
+async function callGeminiText(systemPrompt: string, userText: string, _apiKey?: string): Promise<string> {
+  const ai = getAI();
+  const response = await callGeminiWithFallback(ai, {
+    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    config: {
+      systemInstruction: systemPrompt,
+      temperature: 0.8,
+      maxOutputTokens: 8192,
+    },
+  });
+  return response.text || '';
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────

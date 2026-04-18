@@ -73,7 +73,7 @@ const InputSection: React.FC<InputSectionProps> = ({ onGenerate, onCharacterAnal
   }, [resetKey]);
 
   // 이미지 설정
-  const [imageModelId, setImageModelId] = useState<ImageModelId>('gemini-2.5-flash-image');
+  const [imageModelId, setImageModelId] = useState<ImageModelId>(CONFIG.DEFAULT_IMAGE_MODEL);
   const [videoModelId, setVideoModelId] = useState<VideoModelId>(
     () => (localStorage.getItem('heaven_video_model') as VideoModelId) || DEFAULT_VIDEO_MODEL
   );

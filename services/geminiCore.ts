@@ -10,6 +10,38 @@ export const getAI = () => new GoogleGenAI({ apiKey: getGeminiApiKey() });
 
 export const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ── 모델 중앙 관리 (Google이 모델 폐기해도 여기만 수정하면 됨) ──────────────────
+export const GEMINI_MODELS = {
+  TEXT: 'gemini-2.5-flash',
+  TEXT_FALLBACKS: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+  IMAGE_GEN: 'gemini-2.5-flash-image',
+  IMAGE_GEN_FALLBACKS: ['gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
+  TTS: 'gemini-2.5-flash-preview-tts',
+} as const;
+
+export async function callGeminiWithFallback(
+  ai: GoogleGenAI,
+  params: { contents: any; config?: any },
+  models?: string[]
+): Promise<any> {
+  const modelList = models || [GEMINI_MODELS.TEXT, ...GEMINI_MODELS.TEXT_FALLBACKS.filter(m => m !== GEMINI_MODELS.TEXT)];
+  let lastError: any;
+  for (const model of modelList) {
+    try {
+      return await ai.models.generateContent({ model, ...params });
+    } catch (e: any) {
+      lastError = e;
+      const msg = e?.message || '';
+      if (msg.includes('not found') || msg.includes('deprecated') || msg.includes('does not exist') || msg.includes('is not available')) {
+        console.warn(`[Gemini] 모델 ${model} 사용 불가 — 다음 모델로 폴백`);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+}
+
 // ── 안전 필터 우회 키워드 대체 맵 ──────────────────────────────────────────────
 export const KEYWORD_ALTERNATIVES: Record<string, string[]> = {
   'x-ray': ['transparent cutaway', 'see-through', 'translucent'],

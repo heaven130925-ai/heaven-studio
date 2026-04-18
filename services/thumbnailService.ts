@@ -1,6 +1,6 @@
 import { Modality } from '@google/genai';
 import { CONFIG } from '../config';
-import { getAI } from './geminiCore';
+import { getAI, GEMINI_MODELS } from './geminiCore';
 
 export const generateThumbnailWithText = async (
   imageBase64: string,
@@ -9,12 +9,7 @@ export const generateThumbnailWithText = async (
 ): Promise<string | null> => {
   const ai = getAI();
   const rawBase64 = imageBase64.startsWith('data:') ? imageBase64.split(',')[1] : imageBase64;
-  const models = [
-    'gemini-3.1-flash-image-preview',
-    'gemini-2.5-flash-image',
-    'gemini-3-pro-image-preview',
-    'gemini-2.0-flash-exp-image-generation',
-  ];
+  const models = [...GEMINI_MODELS.IMAGE_GEN_FALLBACKS];
   const orientation = ratio === '9:16' ? 'vertical YouTube Shorts thumbnail' : 'horizontal YouTube thumbnail';
   const prompt = `You are a professional YouTube thumbnail designer.
 
@@ -80,7 +75,7 @@ export const pickBestThumbnailScene = async (
       parts.push({ text: `[씬 ${i}] ${narration}` });
       parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageData! } });
     });
-    const res = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [{ role: 'user', parts }] });
+    const res = await ai.models.generateContent({ model: GEMINI_MODELS.TEXT, contents: [{ role: 'user', parts }] });
     const text = (res.text || '').trim();
     const parsed = text.split(/[,\s]+/).map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
     const valid = parsed.filter(n => imagesWithIdx.some(s => s.i === n));
@@ -118,7 +113,7 @@ ${textInstruction}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: GEMINI_MODELS.IMAGE_GEN,
       contents: prompt,
       config: {
         responseModalities: [Modality.IMAGE],
@@ -188,7 +183,7 @@ ${charDesc}
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -259,7 +254,7 @@ export const generateThumbnailV2 = async (params: {
   const sizeDesc = ratio === '9:16' ? '9:16 비율 (1080×1920) 세로형 숏츠' : '16:9 비율 (1280×720) 가로형';
 
   // 선택된 모델이 Gemini 계열이면 그대로, 아니면 기본 이미지 모델 사용
-  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : 'gemini-2.5-flash-image';
+  const thumbnailModel = (params.model && params.model.startsWith('gemini')) ? params.model : GEMINI_MODELS.IMAGE_GEN;
   const isNanoBanana = thumbnailModel.startsWith('gemini-3');
 
   // Nano Banana 2: 텍스트 포함 완성 썸네일 생성 (이미지 안에 텍스트 직접 렌더링)
@@ -311,7 +306,7 @@ Visual direction: ${params.imagePrompt}
   // 시도할 모델 목록 — Nano는 단일 모델, 일반은 fallback 순서
   const modelsToTry = isNanoBanana
     ? [thumbnailModel]
-    : [thumbnailModel, 'gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview'];
+    : [thumbnailModel, ...GEMINI_MODELS.IMAGE_GEN_FALLBACKS.filter(m => m !== thumbnailModel)];
 
   for (const model of modelsToTry) {
     const modelIsNano = model.startsWith('gemini-3');

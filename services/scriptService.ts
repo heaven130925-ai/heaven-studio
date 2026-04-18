@@ -1,7 +1,7 @@
 import { ScriptScene } from '../types';
 import { SYSTEM_INSTRUCTIONS, getTrendSearchPrompt, getScriptGenerationPrompt, getFinalVisualPrompt, getScriptReviewPrompt, getTitleSuggestionPrompt } from './prompts';
 import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from '../config';
-import { getAI, wait, cleanJsonResponse, cleanNarration, retryGeminiRequest } from './geminiCore';
+import { getAI, wait, cleanJsonResponse, cleanNarration, retryGeminiRequest, GEMINI_MODELS } from './geminiCore';
 
 // YouTube Data API로 바이럴 영상 기반 주제 추출
 // - timeRange: 기간 필터 (3months/6months/1year/all)
@@ -201,7 +201,7 @@ JSON 배열로만:
 [{"rank":1,"topic":"주제 제목","reason":"바이럴 패턴 분석 포함한 이유"},...]`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: prompt,
     config: { responseMimeType: 'application/json' },
   });
@@ -213,7 +213,7 @@ export const findTrendingTopics = async (category: string, usedTopics: string[])
     const ai = getAI();
     const prompt = getTrendSearchPrompt(category, usedTopics.join(", "));
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS.TREND_RESEARCHER,
@@ -404,7 +404,7 @@ ${narrations.map((n, i) => `[${i + 1}] ${n}`).join('\n')}
 
   if (responseText === '[]') {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: {
         thinkingConfig: { thinkingBudget: 8192 },
@@ -549,7 +549,7 @@ const generateScriptSingle = async (
       console.log(`${chunkLabel}[Script] Gemini 2.5 Flash 사용${anthropicKey ? ' (Claude fallback)' : ' (Claude 키 없음)'}`);
       const ai = getAI();
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: GEMINI_MODELS.TEXT,
         contents: promptText,
         config: {
           thinkingConfig: { thinkingBudget: 24576 },
@@ -630,7 +630,7 @@ const generateScriptSingle = async (
         }
         if (retryText === '[]') {
           const r2 = await getAI().models.generateContent({
-            model: 'gemini-2.5-flash', contents: retryPrompt,
+            model: GEMINI_MODELS.TEXT, contents: retryPrompt,
             config: { thinkingConfig: { thinkingBudget: 0 }, responseMimeType: 'application/json', maxOutputTokens, responseSchema: { type: 'array' as any, items: { type: 'object' as any } } },
           });
           retryText = r2.text || '[]';
@@ -688,7 +688,7 @@ Output ONLY the style keywords, nothing else. Max 20 words.`;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
     const result = response.text?.trim() || '';
@@ -776,7 +776,7 @@ JSON 배열만, 설명 없음.`;
       }
     } catch {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: GEMINI_MODELS.TEXT,
         contents: prompt,
         config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(16000, chunk.length * 200) },
       });
@@ -784,7 +784,7 @@ JSON 배열만, 설명 없음.`;
     }
   } else {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: { responseMimeType: 'application/json', maxOutputTokens: Math.min(16000, chunk.length * 200) },
     });
@@ -938,7 +938,7 @@ export const reviewScript = async (
   let raw = '';
   try {
     const resp = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: { responseMimeType: 'application/json', maxOutputTokens: 8192 },
     });
@@ -979,7 +979,7 @@ export const generateTitleSuggestions = async (
   let raw = '';
   try {
     const resp = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
       config: { responseMimeType: 'application/json', maxOutputTokens: 4096 },
     });

@@ -6,7 +6,7 @@ import { CONFIG, GEMINI_STYLE_CATEGORIES, GeminiStyleId, VISUAL_STYLES } from ".
 import { faceSwapCharacter } from "./falService";
 import { getVoiceSetting } from "../utils/voiceStorage";
 import { generateGCloudTTS } from "./googleCloudTTSService";
-import { getAI, getGeminiApiKey, wait, cleanJsonResponse, cleanNarration, sanitizePrompt, retryGeminiRequest, KEYWORD_ALTERNATIVES } from "./geminiCore";
+import { getAI, getGeminiApiKey, wait, cleanJsonResponse, cleanNarration, sanitizePrompt, retryGeminiRequest, KEYWORD_ALTERNATIVES, GEMINI_MODELS } from "./geminiCore";
 
 
 // ── Image generation internal helpers ──
@@ -250,7 +250,7 @@ function getTtsConfig() {
 async function generateTtsChunk(text: string): Promise<string> {
   const { voiceName, systemInstruction } = getTtsConfig();
   const models = [
-    'gemini-2.5-flash-preview-tts',
+    GEMINI_MODELS.TTS,
     'gemini-2.5-pro-preview-tts',
   ];
   let lastError: any;
@@ -324,7 +324,7 @@ export const analyzeCharacterReference = async (imageBase64: string): Promise<st
     const imageData = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: {
         parts: [
           {
@@ -383,7 +383,7 @@ export const generateImageForScene = async (
   // Nano Banana 모델 (gemini-3-pro-image-preview, gemini-3.1-flash-image-preview)은 Gemini 경로 사용
   const isNanoBanana = selectedModel.startsWith('gemini-3');
   // 실제 Gemini 이미지 모델 ID 결정 (Nano Banana 선택 시 해당 모델 직접 사용)
-  const geminiImageModel = isNanoBanana ? selectedModel : 'gemini-2.5-flash-image';
+  const geminiImageModel = isNanoBanana ? selectedModel : GEMINI_MODELS.IMAGE_GEN;
 
   const ar = localStorage.getItem(CONFIG.STORAGE_KEYS.ASPECT_RATIO) || '16:9';
 
@@ -701,11 +701,7 @@ export const editImageWithGemini = async (imageBase64: string, command: string):
   const ai = getAI();
   // 이미지 편집: image input + image output 지원 모델 순서대로 시도
   // gemini-2.0-flash-exp는 2026년 삭제됨 → 대체 모델 사용
-  const editModels = [
-    'gemini-3.1-flash-image-preview',
-    'gemini-2.5-flash-image',
-    'gemini-3-pro-image-preview',
-  ];
+  const editModels = [...GEMINI_MODELS.IMAGE_GEN_FALLBACKS];
   let lastError: any;
 
   // base64에 data: prefix가 있으면 제거
@@ -757,7 +753,7 @@ export const generateGeminiTtsPreview = async (text: string, voiceName: string):
   return retryGeminiRequest("TTS Preview", async () => {
     const ai = getAI();
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+      model: GEMINI_MODELS.TTS,
       contents: { parts: [{ text }] },
       config: {
         responseModalities: [Modality.AUDIO],
@@ -1004,7 +1000,7 @@ Return ONLY the motion prompt, no explanation. Example:
 "Slow gentle zoom in. A figure sits quietly, head bowing gently, subtle breathing motion. Background remains static. Maintain original art style consistency."`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: GEMINI_MODELS.TEXT,
       contents: prompt,
     });
 
@@ -1072,7 +1068,7 @@ ${script}
 실제 등장인물이 없으면 빈 배열만 반환: []`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: { temperature: 0.3 }
   });
@@ -1117,7 +1113,7 @@ export const generateCharacterImage = async (character: CharacterInfo): Promise<
     const parts: any[] = [{ text: fullPrompt }];
 
     const response = await genAI.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: GEMINI_MODELS.IMAGE_GEN,
       contents: { parts },
       config: {
         responseModalities: [Modality.IMAGE],
@@ -1150,7 +1146,7 @@ export const analyzeReferenceVideo = async (frames: string[]): Promise<string> =
 분석 결과만 출력하라. 불필요한 서두/맺음말 없이 항목별로 출력.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: [{ role: 'user', parts: [...imageParts, { text: prompt }] }],
   });
 
@@ -1242,7 +1238,7 @@ ${channelDataContext}
 분석 결과만 출력하라. 불필요한 서두/맺음말 없이 항목별로 출력.`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: GEMINI_MODELS.TEXT,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
         });
         return response.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '분석 결과 없음';
@@ -1254,7 +1250,7 @@ ${channelDataContext}
 
   // YouTube API 없거나 실패 시 → Gemini 학습 지식 기반 분석
   const fallbackResponse = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: [{ role: 'user', parts: [{ text: `YouTube 채널 "${channelUrl}"에 대해 알고 있다면 아래 항목을 한국어로 분석하라. 채널을 모르면 URL이나 채널명으로 유추 가능한 스타일을 추정하라:
 
 1. **전체 스타일/분위기**
@@ -1300,7 +1296,7 @@ ${narrations.map((n, i) => `[${i}] ${n}`).join('\n')}
 - JSON 배열만 출력`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: {
       parts: [
         { text: prompt },
@@ -1390,7 +1386,7 @@ export const processChatCommand = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: prompt
     });
     const raw = response.text || '{}';
@@ -1522,7 +1518,7 @@ ${distributionRules}
 - narration: 발화된 내용을 그대로 전사. ${commonRules.trimStart()}`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODELS.TEXT,
     contents: {
       parts: [
         { text: prompt },
@@ -1661,7 +1657,7 @@ ${formatGuide}
 
   const response = await retryGeminiRequest('generateYouTubeMeta', () =>
     ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODELS.TEXT,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseMimeType: 'application/json', temperature: 0.9 },
     })
