@@ -440,63 +440,10 @@ const App: React.FC = () => {
 
       if (audioScenes.length === 0) throw new Error('씬 분리 결과가 없습니다. 오디오 파일을 확인해주세요.');
 
-      // 3) Web Audio API로 씬별 오디오 분리 (FFmpeg WASM 대신 — 브라우저 네이티브, 즉시 완료)
-      setProgressMessage(`${audioScenes.length}개 씬 오디오 분리 중...`);
+      // 3) 씬별 타임스탬프는 audioScenes에 있으므로 별도 오디오 분리 불필요
+      // 대용량 파일(75씬+)에서 브라우저 메모리 한계로 hang 발생 → perSceneAudio는 null 유지
+      // 영상 렌더링 시 전체 오디오 + startSec/endSec 타임스탬프로 처리
       const perSceneAudio: (string | null)[] = Array(audioScenes.length).fill(null);
-      try {
-        const audioCtx = new AudioContext({ sampleRate: 24000 });
-        const arrayBuf = await audioFile.arrayBuffer();
-        const decoded = await audioCtx.decodeAudioData(arrayBuf);
-        for (let i = 0; i < audioScenes.length; i++) {
-          if (isAbortedRef.current) break;
-          const s = audioScenes[i];
-          const clipStart = Math.max(0, s.startSec - 0.05);
-          const clipEnd = Math.min(decoded.duration, s.endSec + 0.1);
-          const startSample = Math.floor(clipStart * decoded.sampleRate);
-          const endSample = Math.floor(clipEnd * decoded.sampleRate);
-          const length = Math.max(1, endSample - startSample);
-          const clipBuf = audioCtx.createBuffer(1, length, decoded.sampleRate);
-          const srcData = decoded.getChannelData(0);
-          const dstData = clipBuf.getChannelData(0);
-          for (let j = 0; j < length; j++) dstData[j] = srcData[startSample + j] || 0;
-          // fade in/out (0.02s)
-          const fadeSamples = Math.min(Math.floor(0.02 * decoded.sampleRate), length);
-          for (let j = 0; j < fadeSamples; j++) {
-            const gain = j / fadeSamples;
-            dstData[j] *= gain;
-            dstData[length - 1 - j] *= gain;
-          }
-          // WAV 인코딩
-          const wavHeader = new ArrayBuffer(44);
-          const view = new DataView(wavHeader);
-          const pcmLen = length * 2;
-          view.setUint32(0, 0x52494646, false); // RIFF
-          view.setUint32(4, 36 + pcmLen, true);
-          view.setUint32(8, 0x57415645, false); // WAVE
-          view.setUint32(12, 0x666d7420, false); // fmt
-          view.setUint32(16, 16, true);
-          view.setUint16(20, 1, true); // PCM
-          view.setUint16(22, 1, true); // mono
-          view.setUint32(24, decoded.sampleRate, true);
-          view.setUint32(28, decoded.sampleRate * 2, true);
-          view.setUint16(32, 2, true);
-          view.setUint16(34, 16, true);
-          view.setUint32(36, 0x64617461, false); // data
-          view.setUint32(40, pcmLen, true);
-          const pcm = new Int16Array(length);
-          for (let j = 0; j < length; j++) pcm[j] = Math.max(-32768, Math.min(32767, Math.round(dstData[j] * 32767)));
-          const wavBytes = new Uint8Array(44 + pcmLen);
-          wavBytes.set(new Uint8Array(wavHeader), 0);
-          wavBytes.set(new Uint8Array(pcm.buffer), 44);
-          let b = '';
-          for (let j = 0; j < wavBytes.length; j += 65536) b += String.fromCharCode(...wavBytes.subarray(j, j + 65536));
-          perSceneAudio[i] = btoa(b);
-          if (i % 10 === 0) setProgressMessage(`씬 ${i + 1}/${audioScenes.length} 오디오 분리 중...`);
-        }
-        audioCtx.close();
-      } catch (e: any) {
-        console.warn('[AudioFirst] 오디오 분리 실패 — audioData 없이 진행:', e.message);
-      }
 
       setProgressMessage(`${audioScenes.length}개 씬 감지됨 — 이미지 생성 시작...`);
 
