@@ -1443,7 +1443,8 @@ export const transcribeAudioToScenes = async (
   onProgress?: (msg: string) => void,
   targetSceneCount: number = 0,
   scriptText?: string,
-  characterDescription?: string
+  characterDescription?: string,
+  isFileUri: boolean = false
 ): Promise<AudioFirstScene[]> => {
   const ai = getAI();
   onProgress?.('Gemini 2.5 Flash로 오디오 분석 중...');
@@ -1514,18 +1515,22 @@ ${distributionRules}
 ## 규칙
 - narration: 발화된 내용을 그대로 전사. ${commonRules.trimStart()}`;
 
+  const audioPart = isFileUri
+    ? { fileData: { fileUri: audioBase64, mimeType } }
+    : { inlineData: { data: audioBase64, mimeType } };
+
   const response = await ai.models.generateContent({
     model: GEMINI_MODELS.TEXT,
     contents: {
       parts: [
         { text: prompt },
-        { inlineData: { data: audioBase64, mimeType } }
+        audioPart
       ]
     },
     config: {
       responseMimeType: 'application/json',
-      maxOutputTokens: 65536,         // 최대 허용치 (오디오+씬 많아도 잘리지 않도록)
-      thinkingConfig: { thinkingBudget: 0 }, // 오디오 전사는 thinking 불필요 → 출력 토큰 절약
+      maxOutputTokens: 65536,
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 

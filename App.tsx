@@ -15,7 +15,8 @@ import { generateVideoFromImage, getFalApiKey } from './services/falService';
 import { saveProject, updateProjectAssets, getSavedProjects, deleteProject, migrateFromLocalStorage, saveDraft, loadDraft, clearDraft } from './services/projectService';
 import { SavedProject } from './types';
 import { CONFIG, PRICING, formatKRW } from './config';
-import { GEMINI_MODELS } from './services/geminiCore';
+import { GEMINI_MODELS, getAI } from './services/geminiCore';
+import { FileState } from '@google/genai';
 import ProjectGallery from './components/ProjectGallery';
 import SubtitleEditor from './components/SubtitleEditor';
 import ThumbnailEditor from './components/ThumbnailEditor';
@@ -424,19 +425,58 @@ const App: React.FC = () => {
     resetCost();
 
     try {
-      // 1) 오디오 파일 → base64
-      const arrayBuffer = await audioFile.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < uint8.length; i += 65536) binary += String.fromCharCode(...uint8.subarray(i, i + 65536));
-      const audioBase64 = btoa(binary);
+      // 1) Gemini File API로 오디오 업로드 (인라인 base64 불필요 — 대용량 파일 안정 처리)
       const mimeType = audioFile.type || 'audio/mpeg';
+      let audioParam: string;
+      let isFileUri = false;
+
+      try {
+        setProgressMessage('오디오 파일 업로드 중...');
+        console.log('[AudioFirst] File API 업로드 시작:', audioFile.name, Math.round(audioFile.size / 1024) + 'KB');
+        const ai = getAI();
+        const uploadResult = await ai.files.upload({ file: audioFile, config: { mimeType } });
+        console.log('[AudioFirst] 업로드 완료, state:', uploadResult.state);
+
+        // ACTIVE 상태까지 대기 (최대 2분)
+        let fileObj = uploadResult;
+        let polls = 0;
+        while (fileObj.state === FileState.PROCESSING && polls++ < 40) {
+          setProgressMessage('Gemini 파일 처리 중...');
+          await wait(3000);
+          fileObj = await ai.files.get({ name: uploadResult.name! });
+          console.log('[AudioFirst] 파일 상태 확인:', fileObj.state);
+        }
+
+        if (fileObj.state === FileState.ACTIVE) {
+          audioParam = fileObj.uri!;
+          isFileUri = true;
+          console.log('[AudioFirst] File API 완료, URI:', audioParam);
+        } else {
+          throw new Error(`파일 처리 실패: ${fileObj.state}`);
+        }
+      } catch (uploadErr: any) {
+        // File API 실패 → base64 폴백 (소용량 파일 또는 API 오류)
+        console.warn('[AudioFirst] File API 실패, base64 폴백:', uploadErr.message);
+        setProgressMessage('오디오 읽는 중...');
+        const arrayBuffer = await audioFile.arrayBuffer();
+        const uint8 = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < uint8.length; i += 65536) binary += String.fromCharCode(...uint8.subarray(i, i + 65536));
+        audioParam = btoa(binary);
+        isFileUri = false;
+        console.log('[AudioFirst] base64 변환 완료, 크기:', Math.round(audioParam.length / 1024) + 'KB');
+      }
 
       // 2) Gemini가 오디오 분석 → 씬 분리 + 타임스탬프 + 자막 청크
       setProgressMessage('Gemini AI가 오디오를 분석하고 씬을 분리하는 중...');
       const charDesc = (passedRefImgs ?? currentReferenceImages)?.characterDescription?.trim() || undefined;
-      const audioScenes = await transcribeAudioToScenes(audioBase64, mimeType, setProgressMessage, sceneCount, scriptText, charDesc);
-      if (isAbortedRef.current) return;
+      console.log('[AudioFirst] 전사 시작, isFileUri:', isFileUri, 'sceneCount:', sceneCount);
+      const audioScenes = await transcribeAudioToScenes(audioParam, mimeType, setProgressMessage, sceneCount, scriptText, charDesc, isFileUri);
+      console.log('[AudioFirst] 전사 완료:', audioScenes.length, '개 씬, isAborted:', isAbortedRef.current);
+      if (isAbortedRef.current) {
+        console.log('[AudioFirst] 중단 감지 — 이미지 생성 건너뜀');
+        return;
+      }
 
       if (audioScenes.length === 0) throw new Error('씬 분리 결과가 없습니다. 오디오 파일을 확인해주세요.');
 
@@ -487,8 +527,9 @@ const App: React.FC = () => {
 
       const imageModel = getSelectedImageModel();
       const imagePrice = PRICING.IMAGE[imageModel as keyof typeof PRICING.IMAGE] || 0.01;
+      console.log('[AudioFirst] 이미지 생성 루프 시작, 총', initialAssets.length, '개 씬, 모델:', imageModel);
       for (let i = 0; i < initialAssets.length; i++) {
-        if (isAbortedRef.current) break;
+        if (isAbortedRef.current) { console.log('[AudioFirst] 루프 중단 (isAborted)'); break; }
         updateAssetAt(i, { status: 'generating' });
         setProgressMessage(`씬 ${i + 1}/${initialAssets.length} 이미지 생성 중...`);
         let success = false;
