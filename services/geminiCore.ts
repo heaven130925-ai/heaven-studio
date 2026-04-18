@@ -13,7 +13,7 @@ export const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, m
 // ── 모델 중앙 관리 (Google이 모델 폐기해도 여기만 수정하면 됨) ──────────────────
 export const GEMINI_MODELS = {
   TEXT: 'gemini-2.5-flash',
-  TEXT_FALLBACKS: ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+  TEXT_FALLBACKS: ['gemini-2.5-flash', 'gemini-2.5-pro'],
   IMAGE_GEN: 'gemini-2.5-flash-image',
   IMAGE_GEN_FALLBACKS: ['gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image', 'gemini-3-pro-image-preview'],
   TTS: 'gemini-2.5-flash-preview-tts',
