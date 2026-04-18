@@ -773,17 +773,17 @@ export const generateVideo = async (
     }
 
     let audioBuffer: AudioBuffer | null = null;
-    let duration = DEFAULT_DURATION;
+    let duration = (asset.audioDuration && asset.audioDuration > 0) ? asset.audioDuration : DEFAULT_DURATION;
 
     if (asset.audioData) {
       try {
         audioBuffer = await decodeAudio(asset.audioData, audioCtx);
         duration = audioBuffer.duration;
       } catch (e) {
-        console.warn(`[Video] 씬 ${i + 1} 오디오 디코딩 실패, 기본 ${DEFAULT_DURATION}초 사용`);
+        console.warn(`[Video] 씬 ${i + 1} 오디오 디코딩 실패, audioDuration 폴백 사용`);
       }
-    } else {
-      console.log(`[Video] 씬 ${i + 1} 오디오 없음, 기본 ${DEFAULT_DURATION}초 사용`);
+    } else if (asset.audioDuration && asset.audioDuration > 0) {
+      console.log(`[Video] 씬 ${i + 1} audioData 없음 — audioDuration ${asset.audioDuration.toFixed(2)}s 사용`);
     }
 
     // 자막 청크 미리 계산
